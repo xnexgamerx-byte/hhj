@@ -1,0 +1,522 @@
+// نموذج بيانات تطبيق حجز مواعيد الأطباء
+// كل التعليقات بالعربية لأن الفريق عربي؛ أسماء الحقول بالإنجليزية لأنها تظهر في الكود.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ═══════════════════════════════════════════════════════════
+//  المواقع الجغرافية
+//  الهرم: الدولة ← المحافظة ← القضاء ← الحي ← نقطة العيادة
+//  كلها بيانات قابلة للتعديل من لوحة الإدارة، لا ثوابت في الكود.
+// ═══════════════════════════════════════════════════════════
+
+model Country {
+  id       Int    @id @default(autoincrement())
+  code     String @unique /// رمز آيزو: IQ
+  nameAr   String
+  nameEn   String
+  dialCode String /// مفتاح الهاتف: +964
+  timezone String /// Asia/Baghdad
+
+  governorates Governorate[]
+
+  @@map("countries")
+}
+
+model Governorate {
+  id        Int     @id @default(autoincrement())
+  countryId Int
+  slug      String  @unique /// معرّف ثابت في الروابط: baghdad
+  nameAr    String
+  nameEn    String
+  centerLat Float? /// مركز تقريبي لتوسيط الخريطة
+  centerLng Float?
+  sortOrder Int     @default(0)
+  isActive  Boolean @default(true) /// محافظة لم نطلق فيها بعد تُخفى دون حذف
+
+  country   Country    @relation(fields: [countryId], references: [id])
+  districts District[]
+  clinics   Clinic[]
+
+  @@index([countryId, isActive])
+  @@map("governorates")
+}
+
+model District {
+  id            Int     @id @default(autoincrement())
+  governorateId Int
+  slug          String
+  nameAr        String
+  nameEn        String
+  isActive      Boolean @default(true)
+
+  governorate Governorate @relation(fields: [governorateId], references: [id])
+  areas       Area[]
+  clinics     Clinic[]
+
+  @@unique([governorateId, slug])
+  @@index([governorateId, isActive])
+  @@map("districts")
+}
+
+/// الحي أو المنطقة — اختياري، يُستخدم في المدن الكثيفة فقط (بغداد، الموصل، البصرة)
+model Area {
+  id         Int     @id @default(autoincrement())
+  districtId Int
+  nameAr     String
+  nameEn     String?
+  isActive   Boolean @default(true)
+
+  district District @relation(fields: [districtId], references: [id])
+  clinics  Clinic[]
+
+  @@index([districtId, isActive])
+  @@map("areas")
+}
+
+// ═══════════════════════════════════════════════════════════
+//  المستخدمون والحسابات
+// ═══════════════════════════════════════════════════════════
+
+enum UserRole {
+  PATIENT /// مريض
+  DOCTOR /// طبيب
+  STAFF /// سكرتير أو موظف استقبال
+  ADMIN /// إدارة المنصة
+}
+
+model User {
+  id         String    @id @default(uuid())
+  phone      String    @unique /// بصيغة E.164: ‎+9647XXXXXXXXX
+  fullName   String
+  role       UserRole  @default(PATIENT)
+  isActive   Boolean   @default(true)
+  lastSeenAt DateTime?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  doctor             Doctor?
+  staffMember        StaffMember?
+  patients           Patient[] /// نفسه + أفراد عائلته
+  bookedAppointments Appointment[]     @relation("BookedByUser")
+  devices            Device[]
+  notifications      NotificationLog[]
+  auditEntries       AuditLog[]
+
+  @@index([role, isActive])
+  @@map("users")
+}
+
+/// رموز التحقق المرسلة بالرسائل النصية. يُخزَّن التجزئة لا الرمز نفسه.
+model OtpCode {
+  id         String    @id @default(uuid())
+  phone      String
+  codeHash   String
+  expiresAt  DateTime
+  consumedAt DateTime?
+  attempts   Int       @default(0)
+  createdAt  DateTime  @default(now())
+
+  @@index([phone, expiresAt])
+  @@map("otp_codes")
+}
+
+/// أجهزة المستخدم لإرسال الإشعارات
+model Device {
+  id        String   @id @default(uuid())
+  userId    String
+  pushToken String   @unique
+  platform  String /// android | ios | web
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, isActive])
+  @@map("devices")
+}
+
+enum Gender {
+  MALE
+  FEMALE
+}
+
+/// الشخص الذي يُكشف عليه — قد يكون صاحب الحساب نفسه أو أحد أفراد عائلته.
+/// فصله عن User هو ما يسمح للأب بالحجز لأولاده ووالديه من حساب واحد.
+model Patient {
+  id        String   @id @default(uuid())
+  accountId String /// الحساب المالك
+  fullName  String
+  isSelf    Boolean  @default(false) /// هل هو صاحب الحساب نفسه
+  birthYear Int?
+  gender    Gender?
+  phone     String? /// رقم بديل للتواصل إن اختلف عن صاحب الحساب
+  createdAt DateTime @default(now())
+
+  account      User             @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  appointments Appointment[]
+  blocks       BlockedPatient[]
+  waitlist     WaitlistEntry[]
+
+  @@index([accountId])
+  @@map("patients")
+}
+
+// ═══════════════════════════════════════════════════════════
+//  الأطباء والتخصصات
+// ═══════════════════════════════════════════════════════════
+
+model Specialty {
+  id        Int      @id @default(autoincrement())
+  slug      String   @unique
+  nameAr    String
+  nameEn    String
+  aliases   String[] /// أسماء شائعة أخرى ليجدها المريض بأي صيغة كتبها
+  sortOrder Int      @default(0)
+  isActive  Boolean  @default(true)
+
+  doctors DoctorSpecialty[]
+
+  @@map("specialties")
+}
+
+enum VerificationStatus {
+  PENDING /// بانتظار مراجعة الإدارة — لا يظهر للمرضى
+  APPROVED /// موثّق
+  REJECTED
+}
+
+model Doctor {
+  id                String             @id @default(uuid())
+  userId            String             @unique
+  title             String             @default("د.") /// د. | أ.د. | أ.م.د.
+  bio               String?
+  yearsOfExperience Int?
+  gender            Gender?
+  photoUrl          String?
+  licenseNumber     String? /// رقم عضوية نقابة الأطباء
+  licenseDocUrl     String? /// صورة الوثيقة، تُراجع يدوياً
+  verification      VerificationStatus @default(PENDING)
+  verifiedAt        DateTime?
+  verifiedById      String?
+  rejectionReason   String?
+  isActive          Boolean            @default(true)
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+
+  user            User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  specialties     DoctorSpecialty[]
+  practices       DoctorClinic[]
+  blockedPatients BlockedPatient[]
+
+  @@index([verification, isActive])
+  @@map("doctors")
+}
+
+model DoctorSpecialty {
+  doctorId    String
+  specialtyId Int
+  isPrimary   Boolean @default(false)
+
+  doctor    Doctor    @relation(fields: [doctorId], references: [id], onDelete: Cascade)
+  specialty Specialty @relation(fields: [specialtyId], references: [id])
+
+  @@id([doctorId, specialtyId])
+  @@index([specialtyId])
+  @@map("doctor_specialties")
+}
+
+// ═══════════════════════════════════════════════════════════
+//  العيادات والممارسة
+// ═══════════════════════════════════════════════════════════
+
+model Clinic {
+  id            String   @id @default(uuid())
+  nameAr        String
+  governorateId Int
+  districtId    Int
+  areaId        Int?
+  /// العلامة المميزة: «مقابل مستشفى الجمهورية، فوق صيدلية النور».
+  /// يُستخدم عملياً أكثر من الخريطة لأن العناوين غير منتظمة.
+  landmark      String?
+  addressLine   String?
+  lat           Float?
+  lng           Float?
+  phone         String?
+  timezone      String   @default("Asia/Baghdad")
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+
+  governorate Governorate    @relation(fields: [governorateId], references: [id])
+  district    District       @relation(fields: [districtId], references: [id])
+  area        Area?          @relation(fields: [areaId], references: [id])
+  practices   DoctorClinic[]
+  staff       StaffMember[]
+
+  @@index([governorateId, isActive])
+  @@index([districtId, isActive])
+  @@map("clinics")
+}
+
+enum BookingMode {
+  SLOT /// موعد بوقت محدد: ٤:٠٠، ٤:٢٠، ٤:٤٠
+  QUEUE /// رقم دور ضمن فترة: «الدور ١٢ بين ٤ و٧ مساءً»
+}
+
+/// ممارسة طبيب في عيادة معيّنة.
+/// الفصل عن Doctor يسمح للطبيب بالعمل في أكثر من موقع، لكل موقع جدوله وسعره ونمط حجزه.
+model DoctorClinic {
+  id                  String      @id @default(uuid())
+  doctorId            String
+  clinicId            String
+  feeAmount           Int /// سعر الكشف
+  currency            String      @default("IQD")
+  bookingMode         BookingMode @default(QUEUE)
+  slotMinutes         Int         @default(15) /// مدة الكشف — لنمط SLOT
+  capacityPerSession  Int         @default(20) /// عدد المرضى في الفترة — لنمط QUEUE
+  autoConfirm         Boolean     @default(true) /// تأكيد فوري أم بانتظار موافقة العيادة
+  cancelCutoffMinutes Int         @default(120) /// آخر مهلة للإلغاء قبل الموعد
+  bookingHorizonDays  Int         @default(14) /// إلى أي مدى مستقبلاً يُسمح بالحجز
+  isActive            Boolean     @default(true)
+  createdAt           DateTime    @default(now())
+  updatedAt           DateTime    @updatedAt
+
+  doctor       Doctor              @relation(fields: [doctorId], references: [id], onDelete: Cascade)
+  clinic       Clinic              @relation(fields: [clinicId], references: [id])
+  schedules    ScheduleTemplate[]
+  exceptions   ScheduleException[]
+  appointments Appointment[]
+  staff        StaffMember[]
+  waitlist     WaitlistEntry[]
+
+  @@unique([doctorId, clinicId])
+  @@index([clinicId, isActive])
+  @@map("doctor_clinics")
+}
+
+/// السكرتير — المستخدم اليومي الحقيقي للوحة التحكم.
+/// صلاحياته أقل من الطبيب: يدير الحجوزات ولا يعدّل السعر أو الملف.
+model StaffMember {
+  id                String   @id @default(uuid())
+  userId            String   @unique
+  clinicId          String?
+  doctorClinicId    String?
+  canManageSchedule Boolean  @default(false)
+  canManageProfile  Boolean  @default(false)
+  isActive          Boolean  @default(true)
+  createdAt         DateTime @default(now())
+
+  user                User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  clinic              Clinic?       @relation(fields: [clinicId], references: [id])
+  doctorClinic        DoctorClinic? @relation(fields: [doctorClinicId], references: [id])
+  createdAppointments Appointment[] @relation("CreatedByStaff")
+
+  @@index([clinicId, isActive])
+  @@map("staff_members")
+}
+
+// ═══════════════════════════════════════════════════════════
+//  الجداول والدوام
+//  نخزّن القالب والاستثناءات فقط، ونحسب الفترات المتاحة لحظة العرض.
+//  توليد الفترات وتخزينها مسبقاً يعني إصلاح آلاف الصفوف عند كل تعديل دوام.
+// ═══════════════════════════════════════════════════════════
+
+/// قالب الدوام الأسبوعي المتكرر
+model ScheduleTemplate {
+  id             String  @id @default(uuid())
+  doctorClinicId String
+  weekday        Int /// ٠ = الأحد … ٦ = السبت
+  startTime      String /// "16:00" بتوقيت العيادة
+  endTime        String /// "19:00"
+  slotMinutes    Int? /// يتجاوز إعداد الممارسة إن حُدِّد
+  capacity       Int? /// يتجاوز إعداد الممارسة إن حُدِّد
+  isActive       Boolean @default(true)
+
+  doctorClinic DoctorClinic @relation(fields: [doctorClinicId], references: [id], onDelete: Cascade)
+
+  @@unique([doctorClinicId, weekday, startTime])
+  @@index([doctorClinicId, isActive])
+  @@map("schedule_templates")
+}
+
+enum ExceptionType {
+  CLOSED /// إجازة أو إغلاق — يُلغى ما فيه من حجوزات مع إشعار
+  CUSTOM /// دوام مختلف عن المعتاد في هذا اليوم
+}
+
+model ScheduleException {
+  id             String        @id @default(uuid())
+  doctorClinicId String
+  date           DateTime      @db.Date
+  type           ExceptionType
+  startTime      String?
+  endTime        String?
+  capacity       Int?
+  reason         String?
+  createdAt      DateTime      @default(now())
+
+  doctorClinic DoctorClinic @relation(fields: [doctorClinicId], references: [id], onDelete: Cascade)
+
+  @@index([doctorClinicId, date])
+  @@map("schedule_exceptions")
+}
+
+// ═══════════════════════════════════════════════════════════
+//  المواعيد — قلب النظام
+// ═══════════════════════════════════════════════════════════
+
+enum AppointmentStatus {
+  HELD /// محجوز مؤقتاً أثناء إتمام الدفع، يُحرَّر تلقائياً عند انتهاء المهلة
+  PENDING /// بانتظار موافقة العيادة
+  CONFIRMED /// مؤكَّد
+  CANCELLED_BY_PATIENT
+  CANCELLED_BY_CLINIC
+  NO_SHOW /// لم يحضر
+  COMPLETED /// انتهى الكشف
+}
+
+model Appointment {
+  id        String @id @default(uuid())
+  /// رقم مرجعي قصير يقرأه المريض للسكرتير
+  reference String @unique
+
+  doctorClinicId   String
+  patientId        String
+  bookedByUserId   String /// الحساب الذي أجرى الحجز
+  createdByStaffId String? /// موجود إن كان حجزاً يدوياً أضافه السكرتير
+
+  /// لقطة من نمط الحجز وقت إنشائه — تغيير إعداد الطبيب لاحقاً يجب ألا يغيّر حجوزات قائمة
+  bookingMode  BookingMode
+  sessionStart DateTime /// بداية فترة الدوام
+  sessionEnd   DateTime /// نهايتها
+  /// SLOT: وقت الموعد نفسه. QUEUE: يساوي sessionStart.
+  slotStart    DateTime
+  /// SLOT: صفر دائماً. QUEUE: رقم الدور.
+  queueNumber  Int         @default(0)
+
+  status AppointmentStatus @default(CONFIRMED)
+
+  /// مفتاح القفل: true ما دام الحجز يشغل المكان، وNULL بعد الإلغاء.
+  /// بوستغرس يعتبر قيم NULL مختلفة في القيود الفريدة، فيصبح المكان حراً لغيره
+  /// بينما يبقى صف الحجز الملغى محفوظاً في السجل. هذا هو خط الدفاع الحقيقي
+  /// ضد الحجز المزدوج — أي تحقق في الكود وحده ينكسر عند ضغطتين متزامنتين.
+  lockKey Boolean?
+
+  holdExpiresAt DateTime? /// لحالة HELD
+  patientNote   String?
+  clinicNote    String?
+
+  confirmedAt  DateTime?
+  arrivedAt    DateTime?
+  completedAt  DateTime?
+  cancelledAt  DateTime?
+  cancelReason String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  doctorClinic   DoctorClinic @relation(fields: [doctorClinicId], references: [id])
+  patient        Patient      @relation(fields: [patientId], references: [id])
+  bookedByUser   User         @relation("BookedByUser", fields: [bookedByUserId], references: [id])
+  createdByStaff StaffMember? @relation("CreatedByStaff", fields: [createdByStaffId], references: [id])
+  review         Review?
+
+  /// القيد الذي يمنع حجز نفس المكان مرتين
+  @@unique([doctorClinicId, slotStart, queueNumber, lockKey])
+  @@index([doctorClinicId, sessionStart, status])
+  @@index([patientId, sessionStart])
+  @@index([status, holdExpiresAt])
+  @@map("appointments")
+}
+
+/// لا يقيّم إلا من حضر فعلاً — الشرط الوحيد الذي يحمي التقييمات من التزوير
+model Review {
+  id            String   @id @default(uuid())
+  appointmentId String   @unique
+  rating        Int /// ١ إلى ٥
+  comment       String?
+  isPublished   Boolean  @default(false)
+  createdAt     DateTime @default(now())
+
+  appointment Appointment @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+
+  @@map("reviews")
+}
+
+/// اليوم ممتلئ؟ المريض ينتظر دوره، وإذا ألغى أحدهم يصله إشعار فوري
+model WaitlistEntry {
+  id             String    @id @default(uuid())
+  doctorClinicId String
+  patientId      String
+  date           DateTime  @db.Date
+  notifiedAt     DateTime?
+  createdAt      DateTime  @default(now())
+
+  doctorClinic DoctorClinic @relation(fields: [doctorClinicId], references: [id], onDelete: Cascade)
+  patient      Patient      @relation(fields: [patientId], references: [id], onDelete: Cascade)
+
+  @@unique([doctorClinicId, patientId, date])
+  @@index([doctorClinicId, date])
+  @@map("waitlist_entries")
+}
+
+/// حظر مريض بعد تكرار الغياب
+model BlockedPatient {
+  id        String   @id @default(uuid())
+  doctorId  String
+  patientId String
+  reason    String?
+  createdAt DateTime @default(now())
+
+  doctor  Doctor  @relation(fields: [doctorId], references: [id], onDelete: Cascade)
+  patient Patient @relation(fields: [patientId], references: [id], onDelete: Cascade)
+
+  @@unique([doctorId, patientId])
+  @@map("blocked_patients")
+}
+
+enum NotificationChannel {
+  PUSH
+  SMS
+}
+
+model NotificationLog {
+  id        String              @id @default(uuid())
+  userId    String
+  channel   NotificationChannel
+  template  String /// booking_confirmed | reminder_24h | reminder_2h | cancelled_by_clinic …
+  payload   Json?
+  status    String              @default("QUEUED") /// QUEUED | SENT | FAILED
+  error     String?
+  sentAt    DateTime?
+  createdAt DateTime            @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([status])
+  @@map("notification_logs")
+}
+
+/// من عدّل ماذا ومتى — ضروري عند أي نزاع بين مريض وعيادة
+model AuditLog {
+  id          String   @id @default(uuid())
+  actorUserId String?
+  action      String
+  entity      String
+  entityId    String
+  before      Json?
+  after       Json?
+  createdAt   DateTime @default(now())
+
+  actor User? @relation(fields: [actorUserId], references: [id])
+
+  @@index([entity, entityId])
+  @@index([actorUserId, createdAt])
+  @@map("audit_logs")
+}

@@ -1,0 +1,305 @@
+{
+  "country": {
+    "code": "IQ",
+    "nameAr": "العراق",
+    "nameEn": "Iraq",
+    "dialCode": "+964",
+    "timezone": "Asia/Baghdad"
+  },
+  "_note": "١٩ محافظة (١٨ + حلبجة التي استُحدثت عام ٢٠١٤). الأقضية هي التقسيم الإداري الرسمي. راجِع القوائم قبل الإطلاق فالتقسيمات تتغير، ويمكن تعديلها كلها من لوحة الإدارة دون لمس الكود.",
+  "governorates": [
+    {
+      "slug": "baghdad", "nameAr": "بغداد", "nameEn": "Baghdad",
+      "centerLat": 33.3152, "centerLng": 44.3661, "sortOrder": 1,
+      "districts": [
+        { "slug": "rusafa", "nameAr": "الرصافة", "nameEn": "Rusafa", "areas": [
+          { "nameAr": "الكرادة", "nameEn": "Karrada" },
+          { "nameAr": "الجادرية", "nameEn": "Jadriya" },
+          { "nameAr": "زيونة", "nameEn": "Zayouna" },
+          { "nameAr": "بغداد الجديدة", "nameEn": "New Baghdad" },
+          { "nameAr": "المشتل", "nameEn": "Mashtal" },
+          { "nameAr": "الغدير", "nameEn": "Ghadeer" },
+          { "nameAr": "الزعفرانية", "nameEn": "Zafaraniya" },
+          { "nameAr": "البتاويين", "nameEn": "Batawin" },
+          { "nameAr": "شارع السعدون", "nameEn": "Saadoun" },
+          { "nameAr": "الباب الشرقي", "nameEn": "Bab Al-Sharqi" }
+        ]},
+        { "slug": "karkh", "nameAr": "الكرخ", "nameEn": "Karkh", "areas": [
+          { "nameAr": "المنصور", "nameEn": "Mansour" },
+          { "nameAr": "اليرموك", "nameEn": "Yarmouk" },
+          { "nameAr": "الحارثية", "nameEn": "Harthiya" },
+          { "nameAr": "حي الجامعة", "nameEn": "Hay Al-Jamiaa" },
+          { "nameAr": "الدورة", "nameEn": "Dora" },
+          { "nameAr": "البياع", "nameEn": "Bayaa" },
+          { "nameAr": "السيدية", "nameEn": "Saidiya" },
+          { "nameAr": "العامرية", "nameEn": "Amiriya" },
+          { "nameAr": "الغزالية", "nameEn": "Ghazaliya" },
+          { "nameAr": "الخضراء", "nameEn": "Khadraa" },
+          { "nameAr": "القادسية", "nameEn": "Qadisiya" },
+          { "nameAr": "حي العامل", "nameEn": "Hay Al-Amil" },
+          { "nameAr": "العلاوي", "nameEn": "Alawi" }
+        ]},
+        { "slug": "adhamiyah", "nameAr": "الأعظمية", "nameEn": "Adhamiyah", "areas": [
+          { "nameAr": "الأعظمية", "nameEn": "Adhamiyah" },
+          { "nameAr": "الشعب", "nameEn": "Shaab" },
+          { "nameAr": "راغبة خاتون", "nameEn": "Raghiba Khatun" },
+          { "nameAr": "الصليخ", "nameEn": "Sulaikh" },
+          { "nameAr": "الوزيرية", "nameEn": "Waziriya" }
+        ]},
+        { "slug": "kadhimiya", "nameAr": "الكاظمية", "nameEn": "Kadhimiya", "areas": [
+          { "nameAr": "الكاظمية", "nameEn": "Kadhimiya" },
+          { "nameAr": "الشعلة", "nameEn": "Shula" },
+          { "nameAr": "الحرية", "nameEn": "Hurriya" },
+          { "nameAr": "العطيفية", "nameEn": "Atifiya" }
+        ]},
+        { "slug": "sadr-city", "nameAr": "مدينة الصدر", "nameEn": "Sadr City", "areas": [] },
+        { "slug": "mada-in", "nameAr": "المدائن", "nameEn": "Al-Madain", "areas": [] },
+        { "slug": "abu-ghraib", "nameAr": "أبو غريب", "nameEn": "Abu Ghraib", "areas": [] },
+        { "slug": "mahmudiyah", "nameAr": "المحمودية", "nameEn": "Mahmudiyah", "areas": [] },
+        { "slug": "tarmiyah", "nameAr": "الطارمية", "nameEn": "Tarmiyah", "areas": [] }
+      ]
+    },
+    {
+      "slug": "basra", "nameAr": "البصرة", "nameEn": "Basra",
+      "centerLat": 30.5085, "centerLng": 47.7804, "sortOrder": 2,
+      "districts": [
+        { "slug": "basra-center", "nameAr": "البصرة", "nameEn": "Basra", "areas": [
+          { "nameAr": "العشار", "nameEn": "Ashar" },
+          { "nameAr": "الجزائر", "nameEn": "Jazair" },
+          { "nameAr": "البراضعية", "nameEn": "Baradiya" },
+          { "nameAr": "الطويسة", "nameEn": "Tuwaisa" },
+          { "nameAr": "المعقل", "nameEn": "Maqal" }
+        ]},
+        { "slug": "zubair", "nameAr": "الزبير", "nameEn": "Zubair", "areas": [] },
+        { "slug": "abu-al-khasib", "nameAr": "أبو الخصيب", "nameEn": "Abu Al-Khasib", "areas": [] },
+        { "slug": "shatt-al-arab", "nameAr": "شط العرب", "nameEn": "Shatt Al-Arab", "areas": [] },
+        { "slug": "qurna", "nameAr": "القرنة", "nameEn": "Qurna", "areas": [] },
+        { "slug": "madina", "nameAr": "المدينة", "nameEn": "Al-Madina", "areas": [] },
+        { "slug": "faw", "nameAr": "الفاو", "nameEn": "Al-Faw", "areas": [] }
+      ]
+    },
+    {
+      "slug": "nineveh", "nameAr": "نينوى", "nameEn": "Nineveh",
+      "centerLat": 36.3350, "centerLng": 43.1189, "sortOrder": 3,
+      "districts": [
+        { "slug": "mosul", "nameAr": "الموصل", "nameEn": "Mosul", "areas": [
+          { "nameAr": "الجانب الأيمن", "nameEn": "Right Bank" },
+          { "nameAr": "الجانب الأيسر", "nameEn": "Left Bank" },
+          { "nameAr": "الدواسة", "nameEn": "Dawasa" },
+          { "nameAr": "المجموعة الثقافية", "nameEn": "Majmooa Thaqafiya" },
+          { "nameAr": "الزهور", "nameEn": "Zuhour" }
+        ]},
+        { "slug": "tal-afar", "nameAr": "تلعفر", "nameEn": "Tal Afar", "areas": [] },
+        { "slug": "sinjar", "nameAr": "سنجار", "nameEn": "Sinjar", "areas": [] },
+        { "slug": "hamdaniya", "nameAr": "الحمدانية", "nameEn": "Hamdaniya", "areas": [] },
+        { "slug": "tel-keppe", "nameAr": "تلكيف", "nameEn": "Tel Keppe", "areas": [] },
+        { "slug": "shekhan", "nameAr": "الشيخان", "nameEn": "Shekhan", "areas": [] },
+        { "slug": "baaj", "nameAr": "البعاج", "nameEn": "Baaj", "areas": [] },
+        { "slug": "hatra", "nameAr": "الحضر", "nameEn": "Hatra", "areas": [] },
+        { "slug": "makhmour", "nameAr": "مخمور", "nameEn": "Makhmour", "areas": [] }
+      ]
+    },
+    {
+      "slug": "erbil", "nameAr": "أربيل", "nameEn": "Erbil",
+      "centerLat": 36.1901, "centerLng": 44.0091, "sortOrder": 4,
+      "districts": [
+        { "slug": "erbil-center", "nameAr": "أربيل", "nameEn": "Erbil", "areas": [
+          { "nameAr": "عينكاوة", "nameEn": "Ainkawa" },
+          { "nameAr": "شارع ٦٠", "nameEn": "60m Street" },
+          { "nameAr": "شارع ١٠٠", "nameEn": "100m Street" },
+          { "nameAr": "برايتي", "nameEn": "Brayati" }
+        ]},
+        { "slug": "shaqlawa", "nameAr": "شقلاوة", "nameEn": "Shaqlawa", "areas": [] },
+        { "slug": "koya", "nameAr": "كويسنجق", "nameEn": "Koya", "areas": [] },
+        { "slug": "soran", "nameAr": "سوران", "nameEn": "Soran", "areas": [] },
+        { "slug": "choman", "nameAr": "جومان", "nameEn": "Choman", "areas": [] },
+        { "slug": "mergasur", "nameAr": "ميركةسور", "nameEn": "Mergasur", "areas": [] },
+        { "slug": "khabat", "nameAr": "خبات", "nameEn": "Khabat", "areas": [] },
+        { "slug": "rawanduz", "nameAr": "رواندز", "nameEn": "Rawanduz", "areas": [] }
+      ]
+    },
+    {
+      "slug": "sulaymaniyah", "nameAr": "السليمانية", "nameEn": "Sulaymaniyah",
+      "centerLat": 35.5556, "centerLng": 45.4351, "sortOrder": 5,
+      "districts": [
+        { "slug": "sulaymaniyah-center", "nameAr": "السليمانية", "nameEn": "Sulaymaniyah", "areas": [
+          { "nameAr": "سالم", "nameEn": "Salim" },
+          { "nameAr": "بختياري", "nameEn": "Bakhtiari" },
+          { "nameAr": "جوارباخ", "nameEn": "Chwarbakh" }
+        ]},
+        { "slug": "chamchamal", "nameAr": "جمجمال", "nameEn": "Chamchamal", "areas": [] },
+        { "slug": "kalar", "nameAr": "كلار", "nameEn": "Kalar", "areas": [] },
+        { "slug": "ranya", "nameAr": "رانية", "nameEn": "Ranya", "areas": [] },
+        { "slug": "dukan", "nameAr": "دوكان", "nameEn": "Dukan", "areas": [] },
+        { "slug": "darbandikhan", "nameAr": "دربنديخان", "nameEn": "Darbandikhan", "areas": [] },
+        { "slug": "pshdar", "nameAr": "بشدر", "nameEn": "Pshdar", "areas": [] },
+        { "slug": "penjwen", "nameAr": "بنجوين", "nameEn": "Penjwen", "areas": [] },
+        { "slug": "sharbazher", "nameAr": "شاربازير", "nameEn": "Sharbazher", "areas": [] },
+        { "slug": "mawat", "nameAr": "ماوت", "nameEn": "Mawat", "areas": [] }
+      ]
+    },
+    {
+      "slug": "duhok", "nameAr": "دهوك", "nameEn": "Duhok",
+      "centerLat": 36.8670, "centerLng": 42.9880, "sortOrder": 6,
+      "districts": [
+        { "slug": "duhok-center", "nameAr": "دهوك", "nameEn": "Duhok", "areas": [] },
+        { "slug": "zakho", "nameAr": "زاخو", "nameEn": "Zakho", "areas": [] },
+        { "slug": "akre", "nameAr": "عقرة", "nameEn": "Akre", "areas": [] },
+        { "slug": "semel", "nameAr": "سميل", "nameEn": "Semel", "areas": [] },
+        { "slug": "amedi", "nameAr": "العمادية", "nameEn": "Amedi", "areas": [] },
+        { "slug": "bardarash", "nameAr": "بردرش", "nameEn": "Bardarash", "areas": [] }
+      ]
+    },
+    {
+      "slug": "halabja", "nameAr": "حلبجة", "nameEn": "Halabja",
+      "centerLat": 35.1778, "centerLng": 45.9864, "sortOrder": 7,
+      "districts": [
+        { "slug": "halabja-center", "nameAr": "حلبجة", "nameEn": "Halabja", "areas": [] },
+        { "slug": "khurmal", "nameAr": "خورمال", "nameEn": "Khurmal", "areas": [] },
+        { "slug": "byara", "nameAr": "بيارة", "nameEn": "Byara", "areas": [] },
+        { "slug": "sayid-sadiq", "nameAr": "سيد صادق", "nameEn": "Sayid Sadiq", "areas": [] }
+      ]
+    },
+    {
+      "slug": "kirkuk", "nameAr": "كركوك", "nameEn": "Kirkuk",
+      "centerLat": 35.4681, "centerLng": 44.3922, "sortOrder": 8,
+      "districts": [
+        { "slug": "kirkuk-center", "nameAr": "كركوك", "nameEn": "Kirkuk", "areas": [
+          { "nameAr": "شورجة", "nameEn": "Shorja" },
+          { "nameAr": "رحيم آوا", "nameEn": "Rahimawa" },
+          { "nameAr": "عرفة", "nameEn": "Arafa" }
+        ]},
+        { "slug": "hawija", "nameAr": "الحويجة", "nameEn": "Hawija", "areas": [] },
+        { "slug": "daquq", "nameAr": "داقوق", "nameEn": "Daquq", "areas": [] },
+        { "slug": "dibis", "nameAr": "دبس", "nameEn": "Dibis", "areas": [] }
+      ]
+    },
+    {
+      "slug": "anbar", "nameAr": "الأنبار", "nameEn": "Anbar",
+      "centerLat": 33.4258, "centerLng": 43.3089, "sortOrder": 9,
+      "districts": [
+        { "slug": "ramadi", "nameAr": "الرمادي", "nameEn": "Ramadi", "areas": [] },
+        { "slug": "fallujah", "nameAr": "الفلوجة", "nameEn": "Fallujah", "areas": [] },
+        { "slug": "hit", "nameAr": "هيت", "nameEn": "Hit", "areas": [] },
+        { "slug": "haditha", "nameAr": "حديثة", "nameEn": "Haditha", "areas": [] },
+        { "slug": "anah", "nameAr": "عانة", "nameEn": "Anah", "areas": [] },
+        { "slug": "rawa", "nameAr": "راوة", "nameEn": "Rawa", "areas": [] },
+        { "slug": "qaim", "nameAr": "القائم", "nameEn": "Al-Qaim", "areas": [] },
+        { "slug": "rutba", "nameAr": "الرطبة", "nameEn": "Rutba", "areas": [] },
+        { "slug": "khalidiya", "nameAr": "الخالدية", "nameEn": "Khalidiya", "areas": [] },
+        { "slug": "karma", "nameAr": "الكرمة", "nameEn": "Karma", "areas": [] }
+      ]
+    },
+    {
+      "slug": "babil", "nameAr": "بابل", "nameEn": "Babil",
+      "centerLat": 32.4637, "centerLng": 44.4197, "sortOrder": 10,
+      "districts": [
+        { "slug": "hilla", "nameAr": "الحلة", "nameEn": "Hilla", "areas": [] },
+        { "slug": "mahawil", "nameAr": "المحاويل", "nameEn": "Mahawil", "areas": [] },
+        { "slug": "hashimiya", "nameAr": "الهاشمية", "nameEn": "Hashimiya", "areas": [] },
+        { "slug": "musayyib", "nameAr": "المسيب", "nameEn": "Musayyib", "areas": [] }
+      ]
+    },
+    {
+      "slug": "karbala", "nameAr": "كربلاء", "nameEn": "Karbala",
+      "centerLat": 32.6160, "centerLng": 44.0249, "sortOrder": 11,
+      "districts": [
+        { "slug": "karbala-center", "nameAr": "كربلاء", "nameEn": "Karbala", "areas": [] },
+        { "slug": "hindiya", "nameAr": "الهندية", "nameEn": "Hindiya", "areas": [] },
+        { "slug": "ain-al-tamr", "nameAr": "عين التمر", "nameEn": "Ain Al-Tamr", "areas": [] }
+      ]
+    },
+    {
+      "slug": "najaf", "nameAr": "النجف", "nameEn": "Najaf",
+      "centerLat": 32.0000, "centerLng": 44.3300, "sortOrder": 12,
+      "districts": [
+        { "slug": "najaf-center", "nameAr": "النجف", "nameEn": "Najaf", "areas": [] },
+        { "slug": "kufa", "nameAr": "الكوفة", "nameEn": "Kufa", "areas": [] },
+        { "slug": "manathira", "nameAr": "المناذرة", "nameEn": "Manathira", "areas": [] }
+      ]
+    },
+    {
+      "slug": "qadisiyyah", "nameAr": "القادسية", "nameEn": "Qadisiyyah",
+      "centerLat": 31.9890, "centerLng": 44.9250, "sortOrder": 13,
+      "districts": [
+        { "slug": "diwaniyah", "nameAr": "الديوانية", "nameEn": "Diwaniyah", "areas": [] },
+        { "slug": "afak", "nameAr": "عفك", "nameEn": "Afak", "areas": [] },
+        { "slug": "shamiya", "nameAr": "الشامية", "nameEn": "Shamiya", "areas": [] },
+        { "slug": "hamza", "nameAr": "الحمزة", "nameEn": "Hamza", "areas": [] }
+      ]
+    },
+    {
+      "slug": "muthanna", "nameAr": "المثنى", "nameEn": "Muthanna",
+      "centerLat": 31.3160, "centerLng": 45.2810, "sortOrder": 14,
+      "districts": [
+        { "slug": "samawah", "nameAr": "السماوة", "nameEn": "Samawah", "areas": [] },
+        { "slug": "rumaitha", "nameAr": "الرميثة", "nameEn": "Rumaitha", "areas": [] },
+        { "slug": "khidhir", "nameAr": "الخضر", "nameEn": "Khidhir", "areas": [] },
+        { "slug": "salman", "nameAr": "السلمان", "nameEn": "Salman", "areas": [] }
+      ]
+    },
+    {
+      "slug": "dhi-qar", "nameAr": "ذي قار", "nameEn": "Dhi Qar",
+      "centerLat": 31.0540, "centerLng": 46.2570, "sortOrder": 15,
+      "districts": [
+        { "slug": "nasiriyah", "nameAr": "الناصرية", "nameEn": "Nasiriyah", "areas": [] },
+        { "slug": "shatra", "nameAr": "الشطرة", "nameEn": "Shatra", "areas": [] },
+        { "slug": "rifai", "nameAr": "الرفاعي", "nameEn": "Rifai", "areas": [] },
+        { "slug": "suq-al-shuyukh", "nameAr": "سوق الشيوخ", "nameEn": "Suq Al-Shuyukh", "areas": [] },
+        { "slug": "chibayish", "nameAr": "الجبايش", "nameEn": "Chibayish", "areas": [] },
+        { "slug": "nasr", "nameAr": "النصر", "nameEn": "Nasr", "areas": [] },
+        { "slug": "fajr", "nameAr": "الفجر", "nameEn": "Fajr", "areas": [] }
+      ]
+    },
+    {
+      "slug": "maysan", "nameAr": "ميسان", "nameEn": "Maysan",
+      "centerLat": 31.8390, "centerLng": 47.1450, "sortOrder": 16,
+      "districts": [
+        { "slug": "amarah", "nameAr": "العمارة", "nameEn": "Amarah", "areas": [] },
+        { "slug": "majar-al-kabir", "nameAr": "المجر الكبير", "nameEn": "Majar Al-Kabir", "areas": [] },
+        { "slug": "qalat-saleh", "nameAr": "قلعة صالح", "nameEn": "Qalat Saleh", "areas": [] },
+        { "slug": "maimouna", "nameAr": "الميمونة", "nameEn": "Maimouna", "areas": [] },
+        { "slug": "ali-al-gharbi", "nameAr": "علي الغربي", "nameEn": "Ali Al-Gharbi", "areas": [] },
+        { "slug": "kahla", "nameAr": "الكحلاء", "nameEn": "Kahla", "areas": [] }
+      ]
+    },
+    {
+      "slug": "wasit", "nameAr": "واسط", "nameEn": "Wasit",
+      "centerLat": 32.5120, "centerLng": 45.8180, "sortOrder": 17,
+      "districts": [
+        { "slug": "kut", "nameAr": "الكوت", "nameEn": "Kut", "areas": [] },
+        { "slug": "suwaira", "nameAr": "الصويرة", "nameEn": "Suwaira", "areas": [] },
+        { "slug": "numaniyah", "nameAr": "النعمانية", "nameEn": "Numaniyah", "areas": [] },
+        { "slug": "hai", "nameAr": "الحي", "nameEn": "Hai", "areas": [] },
+        { "slug": "badra", "nameAr": "بدرة", "nameEn": "Badra", "areas": [] },
+        { "slug": "aziziyah", "nameAr": "العزيزية", "nameEn": "Aziziyah", "areas": [] }
+      ]
+    },
+    {
+      "slug": "salah-al-din", "nameAr": "صلاح الدين", "nameEn": "Salah Al-Din",
+      "centerLat": 34.6000, "centerLng": 43.6800, "sortOrder": 18,
+      "districts": [
+        { "slug": "tikrit", "nameAr": "تكريت", "nameEn": "Tikrit", "areas": [] },
+        { "slug": "samarra", "nameAr": "سامراء", "nameEn": "Samarra", "areas": [] },
+        { "slug": "baiji", "nameAr": "بيجي", "nameEn": "Baiji", "areas": [] },
+        { "slug": "balad", "nameAr": "بلد", "nameEn": "Balad", "areas": [] },
+        { "slug": "dujail", "nameAr": "الدجيل", "nameEn": "Dujail", "areas": [] },
+        { "slug": "shirqat", "nameAr": "الشرقاط", "nameEn": "Shirqat", "areas": [] },
+        { "slug": "tuz-khurmatu", "nameAr": "طوزخورماتو", "nameEn": "Tuz Khurmatu", "areas": [] },
+        { "slug": "dour", "nameAr": "الدور", "nameEn": "Dour", "areas": [] }
+      ]
+    },
+    {
+      "slug": "diyala", "nameAr": "ديالى", "nameEn": "Diyala",
+      "centerLat": 33.7500, "centerLng": 44.6400, "sortOrder": 19,
+      "districts": [
+        { "slug": "baqubah", "nameAr": "بعقوبة", "nameEn": "Baqubah", "areas": [] },
+        { "slug": "muqdadiyah", "nameAr": "المقدادية", "nameEn": "Muqdadiyah", "areas": [] },
+        { "slug": "khanaqin", "nameAr": "خانقين", "nameEn": "Khanaqin", "areas": [] },
+        { "slug": "baladrooz", "nameAr": "بلدروز", "nameEn": "Baladrooz", "areas": [] },
+        { "slug": "khalis", "nameAr": "الخالص", "nameEn": "Khalis", "areas": [] },
+        { "slug": "kifri", "nameAr": "كفري", "nameEn": "Kifri", "areas": [] }
+      ]
+    }
+  ]
+}
