@@ -3,7 +3,29 @@
  */
 import type { PrismaClient } from "@prisma/client";
 import { prisma as defaultPrisma } from "../../lib/prisma.js";
-import { WEEKDAY_NAMES_AR } from "../../lib/timezone.js";
+import { WEEKDAY_NAMES_AR, WEEKDAY_SHORT_AR } from "../../lib/timezone.js";
+
+/**
+ * يكمل الأيام التي لا حجوزات فيها بصفر.
+ * بدونها يرسم المنحنى عموداً واحداً يملأ العرض عند وجود يوم واحد فقط،
+ * ويختفي معنى «المقارنة عبر الزمن» الذي وُجد المنحنى من أجله.
+ */
+function fillMissingDays(rows: { day: Date; count: bigint }[], days: number) {
+  const counts = new Map(rows.map((row) => [row.day.toISOString().slice(0, 10), Number(row.count)]));
+  const series: { date: string; weekdayName: string; shortName: string; count: number }[] = [];
+
+  for (let offset = days - 1; offset >= 0; offset--) {
+    const date = new Date(Date.now() - offset * 86_400_000);
+    const iso = date.toISOString().slice(0, 10);
+    series.push({
+      date: iso,
+      weekdayName: WEEKDAY_NAMES_AR[date.getUTCDay()],
+      shortName: WEEKDAY_SHORT_AR[date.getUTCDay()],
+      count: counts.get(iso) ?? 0,
+    });
+  }
+  return series;
+}
 
 export async function getOwnerSummary(client: PrismaClient = defaultPrisma) {
   const now = new Date();
@@ -114,11 +136,7 @@ export async function getOwnerSummary(client: PrismaClient = defaultPrisma) {
       name: governorateName.get(g.governorateId) ?? "—",
       clinics: g._count._all,
     })),
-    dailyBookings: dailySeries.map((row) => ({
-      date: row.day.toISOString().slice(0, 10),
-      weekdayName: WEEKDAY_NAMES_AR[row.day.getUTCDay()],
-      count: Number(row.count),
-    })),
+    dailyBookings: fillMissingDays(dailySeries, 14),
     recentBookings: recentBookings.map((b) => ({
       id: b.id,
       reference: b.reference,

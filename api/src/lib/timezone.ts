@@ -91,6 +91,9 @@ export function minutesToTime(total: number): string {
   return `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
 }
 
+/** اختصارات صحيحة — قصّ «الثلاثاء» إلى ثلاثة أحرف يعطي شظية بلا معنى */
+export const WEEKDAY_SHORT_AR = ["أحد", "إثنين", "ثلاثاء", "أربعاء", "خميس", "جمعة", "سبت"] as const;
+
 export const WEEKDAY_NAMES_AR = [
   "الأحد",
   "الإثنين",

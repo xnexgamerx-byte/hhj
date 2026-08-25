@@ -1,4 +1,5 @@
 import Fastify from "fastify";
+import cors from "@fastify/cors";
 import { registerRoutes } from "./http/routes.js";
 import { errorHandler } from "./http/guard.js";
 import { prisma } from "./lib/prisma.js";
@@ -9,6 +10,15 @@ export async function buildServer() {
     logger: { level: process.env.LOG_LEVEL ?? "info" },
     // الأسماء والعناوين العربية تجعل الأجسام أطول من المعتاد
     bodyLimit: 1_048_576,
+  });
+
+  // الواجهة تعمل على أصل مختلف عن الخادم، فبدون CORS لا يصلها شيء.
+  // في الإنتاج تُحصر القائمة بنطاق الموقع الحقيقي عبر WEB_ORIGIN.
+  const allowed = (process.env.WEB_ORIGIN ?? "http://localhost:3001").split(",").map((o) => o.trim());
+  await app.register(cors, {
+    origin: allowed.includes("*") ? true : allowed,
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE"],
+    credentials: false,
   });
 
   app.setErrorHandler(errorHandler);

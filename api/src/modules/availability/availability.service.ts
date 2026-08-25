@@ -49,6 +49,12 @@ export type DayAvailability = {
   weekdayName: string;
   isClosed: boolean;
   closedReason: string | null;
+  /**
+   * هل للطبيب دوام في هذا اليوم أصلاً.
+   * يفرّق بين «لا دوام» و«اكتملت الحجوزات» — وهما مختلفان تماماً عند المريض،
+   * وبدونه يظهر «ممتلئ» على يوم لا يداوم فيه الطبيب إطلاقاً.
+   */
+  hasSchedule: boolean;
   sessions: DaySession[];
   /** عدد الأماكن الشاغرة في اليوم كله — لتلوين التقويم بنظرة واحدة */
   freeCount: number;
@@ -150,6 +156,7 @@ export async function getAvailability(
         weekdayName: WEEKDAY_NAMES_AR[weekday],
         isClosed: true,
         closedReason: fullClosure.reason ?? "إجازة",
+        hasSchedule: false,
         sessions: [],
         freeCount: 0,
       });
@@ -248,6 +255,7 @@ export async function getAvailability(
       weekdayName: WEEKDAY_NAMES_AR[weekday],
       isClosed: false,
       closedReason: null,
+      hasSchedule: sources.length > 0,
       sessions,
       freeCount: sessions.reduce((sum, s) => sum + s.remaining, 0),
     });
