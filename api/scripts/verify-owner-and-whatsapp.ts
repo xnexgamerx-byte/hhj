@@ -19,6 +19,16 @@ import type { WhatsAppMessage } from "../src/notifications/whatsapp/templates.js
 process.env.JWT_SECRET ??= "test-secret-that-is-long-enough-for-hs256!!";
 
 const prisma = new PrismaClient();
+
+/** أقرب أحد قادم الساعة ٤ عصراً بتوقيت بغداد (13:00Z) */
+function nextSunday16(): Date {
+  const date = new Date();
+  date.setUTCHours(13, 0, 0, 0);
+  do {
+    date.setUTCDate(date.getUTCDate() + 1);
+  } while (date.getUTCDay() !== 0);
+  return date;
+}
 const results: { name: string; passed: boolean; detail: string }[] = [];
 
 function check(name: string, passed: boolean, detail: string) {
@@ -161,6 +171,9 @@ async function main() {
       feeAmount: 25000,
       bookingMode: "QUEUE",
       capacityPerSession: 20,
+      bookingHorizonDays: 400,
+      // الحجز صار يتحقق من جدول الطبيب، فلا بد من قالب دوام
+      schedules: { create: [{ weekday: 0, startTime: "16:00", endTime: "19:00" }] },
     },
   });
 
@@ -173,16 +186,15 @@ async function main() {
     data: { accountId: account.id, fullName: "علي حسن", isSelf: true },
   });
 
-  const sessionStart = new Date("2026-09-06T13:00:00.000Z"); // ٤ عصراً بغداد
-  const sessionEnd = new Date("2026-09-06T16:00:00.000Z"); // ٧ مساءً
+  // أقرب يوم أحد قادم، ٤ عصراً بتوقيت بغداد = 13:00Z
+  const sessionStart = nextSunday16();
 
   const booking = await createBooking(
     {
       doctorClinicId: practice.id,
       patientId: patient.id,
       bookedByUserId: account.id,
-      sessionStart,
-      sessionEnd,
+      startAt: sessionStart,
       patientNote: "الطفل عنده حرارة منذ يومين",
     },
     prisma,
@@ -215,7 +227,7 @@ async function main() {
   // ── ٦. تعطّل واتساب لا يُفشل الحجز ─────────────────────────────
   provider.failNext = true;
   const secondBooking = await createBooking(
-    { doctorClinicId: practice.id, patientId: patient.id, bookedByUserId: account.id, sessionStart, sessionEnd },
+    { doctorClinicId: practice.id, patientId: patient.id, bookedByUserId: account.id, startAt: sessionStart },
     prisma,
   );
   const queuedLog = await prisma.notificationLog.findFirstOrThrow({
@@ -240,7 +252,7 @@ async function main() {
   // ── ٨. الطبيب المعطَّل واتسابه لا تُرسل له ──────────────────────
   await prisma.doctor.update({ where: { id: created.doctorId }, data: { whatsappEnabled: false } });
   const thirdBooking = await createBooking(
-    { doctorClinicId: practice.id, patientId: patient.id, bookedByUserId: account.id, sessionStart, sessionEnd },
+    { doctorClinicId: practice.id, patientId: patient.id, bookedByUserId: account.id, startAt: sessionStart },
     prisma,
   );
   check(

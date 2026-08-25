@@ -10,6 +10,8 @@ import { Prisma, type PrismaClient } from "@prisma/client";
 import { prisma as defaultPrisma } from "../../lib/prisma.js";
 import { badRequest, conflict, forbidden, notFound } from "../../lib/errors.js";
 import { notifyDoctorOfCancellation, notifyDoctorOfNewBooking } from "../../notifications/dispatch.js";
+import { getAvailability } from "../availability/availability.service.js";
+import { addDaysISO } from "../../lib/timezone.js";
 
 /** رقم مرجعي قصير يقرأه المريض للسكرتير — بلا أحرف متشابهة. */
 function generateReference(): string {
@@ -24,11 +26,13 @@ export type CreateBookingInput = {
   doctorClinicId: string;
   patientId: string;
   bookedByUserId: string;
-  /** بداية فترة الدوام */
-  sessionStart: Date;
-  sessionEnd: Date;
-  /** لنمط الوقت المحدد فقط — الفترة التي اختارها المريض */
-  slotStart?: Date;
+  /**
+   * نمط الوقت المحدد: الفترة التي اختارها المريض.
+   * نمط رقم الدور: بداية فترة الدوام.
+   * فترة الدوام تُشتق من جدول الطبيب لا من طلب العميل — وإلا اخترع المريض
+   * فترة دوام غير موجودة وحجز خارج أوقات الطبيب.
+   */
+  startAt: Date;
   patientNote?: string | null;
   /** موجود إن أضاف السكرتير الحجز يدوياً لمريض حضر بلا تطبيق */
   createdByStaffId?: string | null;
@@ -74,20 +78,15 @@ export async function createBooking(
   });
   if (blocked) throw forbidden("PATIENT_BLOCKED", "لا يمكن الحجز عند هذا الطبيب");
 
-  if (input.sessionEnd <= input.sessionStart) {
-    throw badRequest("INVALID_SESSION", "فترة الدوام غير صحيحة");
-  }
-  const horizon = new Date(Date.now() + practice.bookingHorizonDays * 24 * 60 * 60 * 1000);
-  if (input.sessionStart > horizon) {
-    throw badRequest("BEYOND_HORIZON", "لا يمكن الحجز إلى هذا التاريخ البعيد");
-  }
+  // مصدر الحقيقة لفترة الدوام هو جدول الطبيب، لا ما أرسله العميل
+  const resolved = await resolveSession(input.doctorClinicId, input.startAt, practice.bookingMode, client);
 
   const status = practice.autoConfirm ? "CONFIRMED" : "PENDING";
 
   const appointment =
     practice.bookingMode === "SLOT"
-      ? await createSlotBooking(input, status, client)
-      : await createQueueBooking(input, practice.capacityPerSession, status, client);
+      ? await createSlotBooking(input, resolved, status, client)
+      : await createQueueBooking(input, resolved, practice.capacityPerSession, status, client);
 
   // بعد نجاح الحجز فقط: تحويل التفاصيل لواتساب الطبيب.
   // أي فشل هنا لا يمس الحجز — يبقى في الطابور لإعادة المحاولة.
@@ -108,16 +107,64 @@ export async function createBooking(
   };
 }
 
+type ResolvedSession = { sessionStart: Date; sessionEnd: Date; capacity: number };
+
+/**
+ * يجد فترة الدوام التي يقع فيها الوقت المطلوب، ويتحقق أنها ما زالت مفتوحة.
+ * يمنع ثلاث حالات دفعة واحدة: الحجز خارج دوام الطبيب، والحجز في يوم عطّله،
+ * والحجز في وقت لا يقع على شبكة الفترات (٤:٠٧ بدل ٤:٠٠).
+ */
+async function resolveSession(
+  practiceId: string,
+  startAt: Date,
+  mode: "SLOT" | "QUEUE",
+  client: PrismaClient,
+): Promise<ResolvedSession> {
+  const dateISO = startAt.toISOString().slice(0, 10);
+  const days = await getAvailability(
+    practiceId,
+    addDaysISO(dateISO, -1),
+    addDaysISO(dateISO, 1),
+    { includeTaken: true },
+    client,
+  );
+
+  const target = startAt.toISOString();
+
+  for (const day of days) {
+    for (const session of day.sessions) {
+      if (mode === "SLOT") {
+        const slot = session.slots.find((s) => s.start === target);
+        if (!slot) continue;
+        if (slot.taken) throw conflict("SLOT_TAKEN", "هذا الوقت محجوز. اختر وقتاً آخر");
+        return {
+          sessionStart: new Date(session.sessionStart),
+          sessionEnd: new Date(session.sessionEnd),
+          capacity: session.capacity,
+        };
+      }
+      if (session.sessionStart === target) {
+        if (session.remaining <= 0) {
+          throw conflict("SESSION_FULL", "اكتمل عدد المرضى في هذه الفترة. اختر يوماً آخر");
+        }
+        return {
+          sessionStart: new Date(session.sessionStart),
+          sessionEnd: new Date(session.sessionEnd),
+          capacity: session.capacity,
+        };
+      }
+    }
+  }
+
+  throw badRequest("NOT_AVAILABLE", "هذا الوقت غير متاح في جدول الطبيب");
+}
+
 async function createSlotBooking(
   input: CreateBookingInput,
+  resolved: ResolvedSession,
   status: "CONFIRMED" | "PENDING",
   client: PrismaClient,
 ) {
-  if (!input.slotStart) throw badRequest("SLOT_REQUIRED", "اختر وقت الموعد");
-  if (input.slotStart < input.sessionStart || input.slotStart >= input.sessionEnd) {
-    throw badRequest("SLOT_OUT_OF_SESSION", "الوقت المختار خارج دوام الطبيب");
-  }
-
   try {
     return await client.appointment.create({
       data: {
@@ -127,9 +174,9 @@ async function createSlotBooking(
         bookedByUserId: input.bookedByUserId,
         createdByStaffId: input.createdByStaffId ?? null,
         bookingMode: "SLOT",
-        sessionStart: input.sessionStart,
-        sessionEnd: input.sessionEnd,
-        slotStart: input.slotStart,
+        sessionStart: resolved.sessionStart,
+        sessionEnd: resolved.sessionEnd,
+        slotStart: input.startAt,
         queueNumber: 0,
         status,
         lockKey: true,
@@ -152,17 +199,19 @@ async function createSlotBooking(
  */
 async function createQueueBooking(
   input: CreateBookingInput,
-  capacity: number,
+  resolved: ResolvedSession,
+  fallbackCapacity: number,
   status: "CONFIRMED" | "PENDING",
   client: PrismaClient,
 ) {
+  const capacity = resolved.capacity || fallbackCapacity;
   const MAX_RETRIES = 10;
 
   for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
     const highest = await client.appointment.aggregate({
       where: {
         doctorClinicId: input.doctorClinicId,
-        slotStart: input.sessionStart,
+        slotStart: resolved.sessionStart,
         lockKey: true,
       },
       _max: { queueNumber: true },
@@ -182,9 +231,9 @@ async function createQueueBooking(
           bookedByUserId: input.bookedByUserId,
           createdByStaffId: input.createdByStaffId ?? null,
           bookingMode: "QUEUE",
-          sessionStart: input.sessionStart,
-          sessionEnd: input.sessionEnd,
-          slotStart: input.sessionStart,
+          sessionStart: resolved.sessionStart,
+          sessionEnd: resolved.sessionEnd,
+          slotStart: resolved.sessionStart,
           queueNumber: next,
           status,
           lockKey: true,

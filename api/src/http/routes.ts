@@ -18,6 +18,28 @@ import {
 import { cancelBooking, createBooking } from "../modules/booking/booking.service.js";
 import { flushPending } from "../notifications/dispatch.js";
 import { normalizeIraqiPhone } from "../lib/phone.js";
+import { addDaysISO } from "../lib/timezone.js";
+import { getAvailability } from "../modules/availability/availability.service.js";
+import { getOwnerSummary } from "../modules/owner/summary.service.js";
+import {
+  addFamilyMember,
+  getDoctorProfile,
+  getMyBookings,
+  getMyPatients,
+  listSpecialtiesWithCounts,
+  searchDoctors,
+} from "../modules/discovery/discovery.service.js";
+import type { ScheduleEntry } from "../modules/doctor/schedule.service.js";
+import {
+  addException,
+  getMyAppointments,
+  getMyPractices,
+  listExceptions,
+  removeException,
+  setAppointmentStatus,
+  setWeeklySchedule,
+  updateBookingSettings,
+} from "../modules/doctor/schedule.service.js";
 
 export async function registerRoutes(app: FastifyInstance) {
   app.get("/health", async () => ({ ok: true }));
@@ -208,6 +230,9 @@ export async function registerRoutes(app: FastifyInstance) {
     return reply.status(201).send(practice);
   });
 
+  /** ملخص لوحة المالك */
+  app.get("/owner/summary", ownerOnly, async () => getOwnerSummary());
+
   /** سجل رسائل الواتساب — ليرى المالك ما وصل وما لم يصل */
   app.get("/owner/notifications", ownerOnly, async () => {
     return prisma.notificationLog.findMany({
@@ -231,25 +256,130 @@ export async function registerRoutes(app: FastifyInstance) {
     return { delivered: await flushPending() };
   });
 
+  // ── ما يراه المريض ────────────────────────────────────────────
+  app.get<{ Querystring: { governorateId?: string } }>("/specialties/available", async (request) => {
+    const governorateId = request.query.governorateId ? Number(request.query.governorateId) : null;
+    return listSpecialtiesWithCounts(governorateId);
+  });
+
+  app.get<{
+    Querystring: { governorateId?: string; districtId?: string; specialtyId?: string; q?: string };
+  }>("/doctors", async (request) => {
+    const q = request.query;
+    return searchDoctors({
+      governorateId: q.governorateId ? Number(q.governorateId) : null,
+      districtId: q.districtId ? Number(q.districtId) : null,
+      specialtyId: q.specialtyId ? Number(q.specialtyId) : null,
+      q: q.q ?? null,
+    });
+  });
+
+  app.get<{ Params: { id: string } }>("/doctors/:id", async (request) => {
+    return getDoctorProfile(request.params.id);
+  });
+
+  /** الأوقات الشاغرة فقط — المحجوز لا يظهر للمريض أصلاً */
+  app.get<{ Params: { id: string }; Querystring: { from?: string; to?: string } }>(
+    "/practices/:id/availability",
+    async (request) => {
+      const from = request.query.from ?? new Date().toISOString().slice(0, 10);
+      const to = request.query.to ?? addDaysISO(from, 13);
+      return getAvailability(request.params.id, from, to, { includeTaken: false });
+    },
+  );
+
+  app.get("/me/bookings", { preHandler: requireRole("PATIENT") }, async (request) => {
+    return getMyBookings(request.auth!.sub);
+  });
+
+  app.get("/me/patients", { preHandler: requireRole("PATIENT") }, async (request) => {
+    return getMyPatients(request.auth!.sub);
+  });
+
+  app.post<{ Body: { fullName: string; birthYear?: number; gender?: "MALE" | "FEMALE" } }>(
+    "/me/patients",
+    { preHandler: requireRole("PATIENT") },
+    async (request, reply) => {
+      const created = await addFamilyMember(request.auth!.sub, request.body);
+      return reply.status(201).send(created);
+    },
+  );
+
+  // ── لوحة الطبيب ───────────────────────────────────────────────
+  const doctorOnly = { preHandler: requireRole("DOCTOR") };
+
+  app.get("/doctor/me/practices", doctorOnly, async (request) => {
+    return getMyPractices(request.auth!.sub);
+  });
+
+  /** يستبدل جدول الأسبوع كاملاً — ما على الشاشة هو ما يُحفظ */
+  app.put<{ Params: { id: string }; Body: { entries: ScheduleEntry[] } }>(
+    "/doctor/me/practices/:id/schedule",
+    doctorOnly,
+    async (request) => {
+      return setWeeklySchedule(request.auth!.sub, request.params.id, request.body.entries ?? []);
+    },
+  );
+
+  app.patch<{ Params: { id: string }; Body: Record<string, unknown> }>(
+    "/doctor/me/practices/:id/settings",
+    doctorOnly,
+    async (request) => {
+      return updateBookingSettings(request.auth!.sub, request.params.id, request.body);
+    },
+  );
+
+  app.get<{ Params: { id: string }; Querystring: { from?: string; to?: string } }>(
+    "/doctor/me/practices/:id/availability",
+    doctorOnly,
+    async (request) => {
+      const from = request.query.from ?? new Date().toISOString().slice(0, 10);
+      const to = request.query.to ?? addDaysISO(from, 13);
+      // الطبيب يرى المحجوز أيضاً، لا الشاغر فقط
+      return getAvailability(request.params.id, from, to, { includeTaken: true });
+    },
+  );
+
+  app.get<{ Params: { id: string } }>("/doctor/me/practices/:id/exceptions", doctorOnly, async (request) => {
+    return listExceptions(request.auth!.sub, request.params.id);
+  });
+
+  app.post<{
+    Params: { id: string };
+    Body: { date: string; type: "CLOSED" | "CUSTOM"; startTime?: string; endTime?: string; capacity?: number; reason?: string };
+  }>("/doctor/me/practices/:id/exceptions", doctorOnly, async (request, reply) => {
+    const created = await addException(request.auth!.sub, request.params.id, request.body);
+    return reply.status(201).send(created);
+  });
+
+  app.delete<{ Params: { id: string } }>("/doctor/me/exceptions/:id", doctorOnly, async (request, reply) => {
+    await removeException(request.auth!.sub, request.params.id);
+    return reply.status(204).send();
+  });
+
+  app.get<{ Querystring: { date?: string } }>("/doctor/me/appointments", doctorOnly, async (request) => {
+    const date = request.query.date ?? new Date().toISOString().slice(0, 10);
+    return getMyAppointments(request.auth!.sub, date);
+  });
+
+  app.patch<{ Params: { id: string }; Body: { status: "CONFIRMED" | "NO_SHOW" | "COMPLETED" } }>(
+    "/doctor/me/appointments/:id/status",
+    doctorOnly,
+    async (request) => {
+      return setAppointmentStatus(request.auth!.sub, request.params.id, request.body.status);
+    },
+  );
+
   // ── الحجوزات ──────────────────────────────────────────────────
   app.post<{
-    Body: {
-      doctorClinicId: string;
-      patientId: string;
-      sessionStart: string;
-      sessionEnd: string;
-      slotStart?: string;
-      patientNote?: string;
-    };
+    Body: { doctorClinicId: string; patientId: string; startAt: string; patientNote?: string };
   }>("/bookings", { preHandler: requireRole("PATIENT", "STAFF", "DOCTOR") }, async (request, reply) => {
     const body = request.body;
     const result = await createBooking({
       doctorClinicId: body.doctorClinicId,
       patientId: body.patientId,
       bookedByUserId: request.auth!.sub,
-      sessionStart: new Date(body.sessionStart),
-      sessionEnd: new Date(body.sessionEnd),
-      slotStart: body.slotStart ? new Date(body.slotStart) : undefined,
+      startAt: new Date(body.startAt),
       patientNote: body.patientNote ?? null,
     });
     return reply.status(201).send(result);
