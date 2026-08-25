@@ -9,6 +9,7 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { PrismaClient } from "@prisma/client";
+import { hashPassword } from "../../src/lib/password.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const prisma = new PrismaClient();
@@ -128,10 +129,45 @@ async function seedSpecialties() {
   console.log(`  التخصصات:  ${specialties.length}`);
 }
 
+/**
+ * حساب المالك الأول. بدونه لا يستطيع أحد الدخول لتسجيل الأطباء،
+ * لأن المنصة لا تسمح بالتسجيل الذاتي لأي دور غير المريض.
+ */
+async function seedOwner() {
+  const email = process.env.OWNER_EMAIL?.trim().toLowerCase();
+  const password = process.env.OWNER_PASSWORD;
+
+  if (!email || !password) {
+    console.log("  المالك:     تخطّي — عيّن OWNER_EMAIL وOWNER_PASSWORD لإنشائه");
+    return;
+  }
+  if (password.length < 10) {
+    throw new Error("OWNER_PASSWORD يجب أن يكون ١٠ خانات على الأقل");
+  }
+
+  const existing = await prisma.user.findUnique({ where: { email }, select: { id: true } });
+  if (existing) {
+    console.log(`  المالك:     موجود مسبقاً (${email}) — لم يُمسّ باسووردهُ`);
+    return;
+  }
+
+  await prisma.user.create({
+    data: {
+      email,
+      fullName: process.env.OWNER_NAME?.trim() || "مالك المنصة",
+      role: "OWNER",
+      passwordHash: await hashPassword(password),
+      mustChangePassword: true,
+    },
+  });
+  console.log(`  المالك:     أُنشئ (${email}) — غيّر الباسوورد أول دخول`);
+}
+
 async function main() {
   console.log("تعبئة البيانات المرجعية…");
   await seedLocations();
   await seedSpecialties();
+  await seedOwner();
   console.log("تمت التعبئة.");
 }
 

@@ -13,18 +13,24 @@
     "db:validate": "prisma validate",
     "db:format": "prisma format",
     "verify:booking": "tsx scripts/verify-booking-lock.ts",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "dev": "tsx watch src/server.ts",
+    "start": "tsx src/server.ts",
+    "verify:owner": "tsx scripts/verify-owner-and-whatsapp.ts",
+    "verify": "npm run typecheck && npm run verify:booking && npm run verify:owner"
   },
   "prisma": {
     "seed": "tsx prisma/seed/index.ts"
   },
   "dependencies": {
-    "@prisma/client": "^6.2.1"
+    "@prisma/client": "^6.2.1",
+    "fastify": "^5.12.1",
+    "jose": "^6.2.10"
   },
   "devDependencies": {
+    "@types/node": "^22.10.5",
     "prisma": "^6.2.1",
     "tsx": "^4.19.2",
-    "typescript": "^5.7.3",
-    "@types/node": "^22.10.5"
+    "typescript": "^5.7.3"
   }
 }

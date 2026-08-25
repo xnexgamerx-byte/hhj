@@ -33,7 +33,7 @@ async function buildFixtures() {
     data: { phone: `+9647${Date.now().toString().slice(-9)}`, fullName: "طبيب اختبار", role: "DOCTOR" },
   });
   const doctor = await prisma.doctor.create({
-    data: { userId: doctorUser.id, verification: "APPROVED", isActive: true },
+    data: { userId: doctorUser.id, isPublished: true, isActive: true },
   });
   const clinic = await prisma.clinic.create({
     data: {

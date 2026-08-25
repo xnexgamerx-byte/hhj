@@ -85,32 +85,64 @@ model Area {
 // ═══════════════════════════════════════════════════════════
 
 enum UserRole {
-  PATIENT /// مريض
-  DOCTOR /// طبيب
-  STAFF /// سكرتير أو موظف استقبال
-  ADMIN /// إدارة المنصة
+  PATIENT /// مريض — يدخل برقم الهاتف ورمز تحقق
+  DOCTOR /// طبيب — يدخل بإيميل وباسوورد ينشئهما المالك
+  STAFF /// سكرتير — يدخل بإيميل وباسوورد ينشئهما المالك
+  OWNER /// المالك — هو وحده من يسجّل الأطباء وينشئ حساباتهم
 }
 
+/// مساران للدخول لا مسار واحد:
+///   المريض  → رقم هاتف + رمز تحقق، بلا باسوورد إطلاقاً (أقل احتكاك)
+///   الطبيب والسكرتير والمالك → إيميل + باسوورد ينشئهما المالك
+/// لذلك phone وemail كلاهما اختياري، ويضمن قيد قاعدة البيانات تفرّد الموجود منهما.
 model User {
-  id         String    @id @default(uuid())
-  phone      String    @unique /// بصيغة E.164: ‎+9647XXXXXXXXX
-  fullName   String
-  role       UserRole  @default(PATIENT)
-  isActive   Boolean   @default(true)
-  lastSeenAt DateTime?
-  createdAt  DateTime  @default(now())
-  updatedAt  DateTime  @updatedAt
+  id                 String    @id @default(uuid())
+  phone              String?   @unique /// بصيغة E.164: ‎+9647XXXXXXXXX — للمرضى
+  email              String?   @unique /// للطبيب والسكرتير والمالك
+  fullName           String
+  role               UserRole  @default(PATIENT)
+  passwordHash       String? /// scrypt — لا يُخزَّن الباسوورد نفسه أبداً
+  /// المالك ينشئ باسووردًا أولياً ويسلّمه للطبيب، فيُلزَم الطبيب بتغييره أول دخول
+  mustChangePassword Boolean   @default(false)
+  failedLoginCount   Int       @default(0)
+  lockedUntil        DateTime? /// قفل مؤقت بعد محاولات دخول فاشلة متتالية
+  isActive           Boolean   @default(true)
+  lastLoginAt        DateTime?
+  lastSeenAt         DateTime?
+  /// المالك الذي أنشأ هذا الحساب — فارغ للمرضى لأنهم يسجّلون أنفسهم
+  createdByUserId    String?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
 
+  createdBy          User?             @relation("AccountCreatedBy", fields: [createdByUserId], references: [id])
+  createdAccounts    User[]            @relation("AccountCreatedBy")
   doctor             Doctor?
   staffMember        StaffMember?
   patients           Patient[] /// نفسه + أفراد عائلته
   bookedAppointments Appointment[]     @relation("BookedByUser")
+  registeredDoctors  Doctor[]          @relation("DoctorRegisteredBy")
+  refreshTokens      RefreshToken[]
   devices            Device[]
   notifications      NotificationLog[]
   auditEntries       AuditLog[]
 
   @@index([role, isActive])
   @@map("users")
+}
+
+/// جلسات طويلة الأمد لتطبيق الجوال — لا يُخزَّن الرمز نفسه بل تجزئته
+model RefreshToken {
+  id        String    @id @default(uuid())
+  userId    String
+  tokenHash String    @unique
+  expiresAt DateTime
+  revokedAt DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, revokedAt])
+  @@map("refresh_tokens")
 }
 
 /// رموز التحقق المرسلة بالرسائل النصية. يُخزَّن التجزئة لا الرمز نفسه.
@@ -186,36 +218,43 @@ model Specialty {
   @@map("specialties")
 }
 
-enum VerificationStatus {
-  PENDING /// بانتظار مراجعة الإدارة — لا يظهر للمرضى
-  APPROVED /// موثّق
-  REJECTED
-}
-
+/// لا يوجد تسجيل ذاتي للأطباء: المالك هو من يسجّل كل طبيب وينشئ حسابه.
+/// لذلك لا توجد قائمة انتظار مراجعة — كل طبيب على المنصة موثّق بحكم أن المالك أدخله بنفسه،
+/// وهذا أقوى في بناء الثقة من مراجعة وثائق يرفعها مجهول.
 model Doctor {
-  id                String             @id @default(uuid())
-  userId            String             @unique
-  title             String             @default("د.") /// د. | أ.د. | أ.م.د.
+  id                String  @id @default(uuid())
+  userId            String  @unique
+  title             String  @default("د.") /// د. | أ.د. | أ.م.د.
   bio               String?
   yearsOfExperience Int?
   gender            Gender?
   photoUrl          String?
-  licenseNumber     String? /// رقم عضوية نقابة الأطباء
-  licenseDocUrl     String? /// صورة الوثيقة، تُراجع يدوياً
-  verification      VerificationStatus @default(PENDING)
-  verifiedAt        DateTime?
-  verifiedById      String?
-  rejectionReason   String?
-  isActive          Boolean            @default(true)
-  createdAt         DateTime           @default(now())
-  updatedAt         DateTime           @updatedAt
+  licenseNumber     String? /// رقم عضوية نقابة الأطباء — يسجّله المالك للأرشيف
+  licenseDocUrl     String? /// صورة الوثيقة
+
+  /// رقم واتساب الطبيب الذي تصله تفاصيل الحجوزات.
+  /// بصيغة E.164 بلا رموز: ‎+9647XXXXXXXXX
+  whatsappNumber  String?
+  /// يوقف إرسال الواتساب لهذا الطبيب دون تعطيل حسابه
+  whatsappEnabled Boolean @default(true)
+
+  /// هل يظهر للمرضى في نتائج البحث
+  isPublished Boolean @default(true)
+  isActive    Boolean @default(true)
+
+  /// المالك الذي سجّل هذا الطبيب ومتى
+  registeredByUserId String?
+  registeredAt       DateTime @default(now())
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
 
   user            User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  registeredBy    User?             @relation("DoctorRegisteredBy", fields: [registeredByUserId], references: [id])
   specialties     DoctorSpecialty[]
   practices       DoctorClinic[]
   blockedPatients BlockedPatient[]
 
-  @@index([verification, isActive])
+  @@index([isPublished, isActive])
   @@map("doctors")
 }
 
@@ -283,6 +322,8 @@ model DoctorClinic {
   autoConfirm         Boolean     @default(true) /// تأكيد فوري أم بانتظار موافقة العيادة
   cancelCutoffMinutes Int         @default(120) /// آخر مهلة للإلغاء قبل الموعد
   bookingHorizonDays  Int         @default(14) /// إلى أي مدى مستقبلاً يُسمح بالحجز
+  /// يتجاوز رقم واتساب الطبيب لهذا الموقع تحديداً — لعيادة لها سكرتير برقم خاص
+  whatsappNumber      String?
   isActive            Boolean     @default(true)
   createdAt           DateTime    @default(now())
   updatedAt           DateTime    @updatedAt
@@ -420,11 +461,12 @@ model Appointment {
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
 
-  doctorClinic   DoctorClinic @relation(fields: [doctorClinicId], references: [id])
-  patient        Patient      @relation(fields: [patientId], references: [id])
-  bookedByUser   User         @relation("BookedByUser", fields: [bookedByUserId], references: [id])
-  createdByStaff StaffMember? @relation("CreatedByStaff", fields: [createdByStaffId], references: [id])
-  review         Review?
+  doctorClinic     DoctorClinic      @relation(fields: [doctorClinicId], references: [id])
+  patient          Patient           @relation(fields: [patientId], references: [id])
+  bookedByUser     User              @relation("BookedByUser", fields: [bookedByUserId], references: [id])
+  createdByStaff   StaffMember?      @relation("CreatedByStaff", fields: [createdByStaffId], references: [id])
+  review           Review?
+  notificationLogs NotificationLog[]
 
   /// القيد الذي يمنع حجز نفس المكان مرتين
   @@unique([doctorClinicId, slotStart, queueNumber, lockKey])
@@ -483,24 +525,44 @@ model BlockedPatient {
 enum NotificationChannel {
   PUSH
   SMS
+  WHATSAPP
 }
 
+/// سجل كل رسالة خارجة — إشعار، رسالة نصية، أو رسالة واتساب.
+/// وجودها كصفوف لا كنداءات مباشرة يسمح بإعادة المحاولة وبمعرفة ما وصل وما لم يصل.
 model NotificationLog {
-  id        String              @id @default(uuid())
-  userId    String
-  channel   NotificationChannel
-  template  String /// booking_confirmed | reminder_24h | reminder_2h | cancelled_by_clinic …
-  payload   Json?
-  status    String              @default("QUEUED") /// QUEUED | SENT | FAILED
-  error     String?
-  sentAt    DateTime?
-  createdAt DateTime            @default(now())
+  id                String              @id @default(uuid())
+  userId            String? /// المستلم إن كان له حساب
+  appointmentId     String? /// الحجز الذي سبّب الرسالة
+  channel           NotificationChannel
+  template          String /// doctor_new_booking | booking_confirmed | reminder_24h …
+  /// الوجهة الفعلية: رقم واتساب أو هاتف أو رمز جهاز
+  toAddress         String?
+  payload           Json?
+  /// نص الرسالة كما أُرسل — يفيد عند أي نزاع «ما وصلني شيء»
+  renderedBody      String?
+  status            NotificationStatus  @default(QUEUED)
+  attempts          Int                 @default(0)
+  error             String?
+  /// معرّف الرسالة عند المزوّد، لتتبّع حالة التسليم لاحقاً
+  providerMessageId String?
+  sentAt            DateTime?
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
 
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user        User?        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  appointment Appointment? @relation(fields: [appointmentId], references: [id], onDelete: SetNull)
 
   @@index([userId, createdAt])
-  @@index([status])
+  @@index([status, createdAt])
+  @@index([appointmentId])
   @@map("notification_logs")
+}
+
+enum NotificationStatus {
+  QUEUED /// في الطابور، لم تُرسل بعد
+  SENT /// سلّمها المزوّد
+  FAILED /// فشلت بعد استنفاد المحاولات
 }
 
 /// من عدّل ماذا ومتى — ضروري عند أي نزاع بين مريض وعيادة
