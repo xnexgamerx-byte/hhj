@@ -1,0 +1,35 @@
+{
+  "expo": {
+    "name": "موعد",
+    "slug": "mawid",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "scheme": "mawid",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
+    "backgroundColor": "#F4F7F7",
+    "splash": {
+      "backgroundColor": "#0A6C72",
+      "resizeMode": "contain"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "iq.mawid.app"
+    },
+    "android": {
+      "package": "iq.mawid.app",
+      "edgeToEdgeEnabled": true,
+      "adaptiveIcon": { "backgroundColor": "#0A6C72" }
+    },
+    "web": {
+      "bundler": "metro",
+      "output": "single",
+      "lang": "ar",
+      "dir": "rtl"
+    },
+    "plugins": ["expo-router", "expo-font", "expo-secure-store"],
+    "extra": {
+      "apiUrl": "http://localhost:3000"
+    }
+  }
+}

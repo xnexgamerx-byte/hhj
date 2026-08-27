@@ -1,0 +1,23 @@
+/**
+ * خادم ثابت لتجربة نسخة الويب المصدَّرة (npm run export:web).
+ * كل مسار غير موجود يعود لـ index.html لأن المخرَج أحادي الصفحة.
+ */
+import { createServer } from "node:http";
+import { readFile } from "node:fs/promises";
+import { join, extname } from "node:path";
+
+const ROOT = new URL("../dist/", import.meta.url).pathname;
+const TYPES = { ".html": "text/html", ".js": "text/javascript", ".json": "application/json",
+  ".png": "image/png", ".ttf": "font/ttf", ".css": "text/css", ".svg": "image/svg+xml" };
+
+createServer(async (req, res) => {
+  const path = decodeURIComponent(new URL(req.url, "http://x").pathname);
+  for (const candidate of [join(ROOT, path), join(ROOT, "index.html")]) {
+    try {
+      const body = await readFile(candidate);
+      res.writeHead(200, { "Content-Type": TYPES[extname(candidate)] ?? "application/octet-stream" });
+      return res.end(body);
+    } catch { /* نجرّب التالي */ }
+  }
+  res.writeHead(404).end("not found");
+}).listen(3002, () => console.log("dist على 3002"));
