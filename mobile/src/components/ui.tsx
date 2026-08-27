@@ -11,6 +11,7 @@ import {
   type ViewStyle,
 } from "react-native";
 import { font, radius, shadow, space, usePalette, type Palette } from "@/theme";
+import { toArabic } from "@/lib/format";
 
 /* ── النص ────────────────────────────────────────────────────── */
 
@@ -265,6 +266,28 @@ export function EmptyState({ title, hint, action }: { title: string; hint?: stri
         </T>
       ) : null}
       {action ? <View style={{ marginTop: space(2) }}>{action}</View> : null}
+    </View>
+  );
+}
+
+/** النجوم: الممتلئة بلون الإبراز والفارغة بلون الخطوط، فيقرأ التقييم بلمحة. */
+export function Stars({ value, size = 13, count }: { value: number; size?: number; count?: number }) {
+  const palette = usePalette();
+  const filled = Math.round(value);
+  return (
+    <View
+      style={{ flexDirection: "row", alignItems: "center", gap: 4 }}
+      accessibilityLabel={`التقييم ${value} من ٥${count !== undefined ? ` من ${count} تقييم` : ""}`}
+    >
+      <Text style={{ fontSize: size, color: palette.accent, letterSpacing: 1 }}>
+        {"★".repeat(filled)}
+        <Text style={{ color: palette.lineStrong }}>{"★".repeat(5 - filled)}</Text>
+      </Text>
+      {count !== undefined ? (
+        <Text style={{ fontFamily: font.regular, fontSize: size - 1, color: palette.muted }}>
+          {toArabic(value.toFixed(1))} ({toArabic(count)})
+        </Text>
+      ) : null}
     </View>
   );
 }

@@ -235,6 +235,8 @@ export async function registerRoutes(app: FastifyInstance) {
       capacityPerSession?: number;
       autoConfirm?: boolean;
       whatsappNumber?: string | null;
+      /** عربون يُدفع لتثبيت الحجز. صفر = بلا عربون. */
+      depositAmount?: number;
       schedules?: { weekday: number; startTime: string; endTime: string; capacity?: number }[];
     };
   }>("/owner/doctors/:id/practices", ownerOnly, async (request, reply) => {
@@ -248,6 +250,7 @@ export async function registerRoutes(app: FastifyInstance) {
         slotMinutes: body.slotMinutes ?? 15,
         capacityPerSession: body.capacityPerSession ?? 20,
         autoConfirm: body.autoConfirm ?? true,
+        depositAmount: Math.max(0, body.depositAmount ?? 0),
         whatsappNumber: body.whatsappNumber ? normalizeIraqiPhone(body.whatsappNumber) : null,
         schedules: body.schedules?.length
           ? { create: body.schedules.map((s) => ({ ...s })) }

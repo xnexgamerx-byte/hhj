@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { Pressable, ScrollView, View } from "react-native";
+import { Pressable, RefreshControl, ScrollView, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { font, radius, space, usePalette } from "@/theme";
@@ -14,6 +14,8 @@ export function Screen({
   children,
   scroll = true,
   footer,
+  onRefresh,
+  refreshing,
 }: {
   title?: string;
   subtitle?: string;
@@ -21,6 +23,9 @@ export function Screen({
   children: ReactNode;
   scroll?: boolean;
   footer?: ReactNode;
+  /** السحب للتحديث — يتوقّعه المستخدم في أي قائمة على الجوال */
+  onRefresh?: () => void;
+  refreshing?: boolean;
 }) {
   const palette = usePalette();
   const insets = useSafeAreaInsets();
@@ -84,6 +89,11 @@ export function Screen({
           contentContainerStyle={{ paddingTop: space(4) }}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
+          refreshControl={
+            onRefresh ? (
+              <RefreshControl refreshing={!!refreshing} onRefresh={onRefresh} tintColor={palette.primary} />
+            ) : undefined
+          }
         >
           {body}
         </ScrollView>

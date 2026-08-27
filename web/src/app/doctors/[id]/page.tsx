@@ -21,6 +21,7 @@ type Profile = {
     bookingMode: "SLOT" | "QUEUE";
     slotMinutes: number;
     cancelCutoffMinutes: number;
+    depositAmount: number;
     clinicName: string;
     landmark: string | null;
     addressLine: string | null;
@@ -56,12 +57,15 @@ type Day = {
 
 type Patient = { id: string; fullName: string; isSelf: boolean };
 
+type Review = { id: string; rating: number; comment: string | null; createdAt: string; patientName: string };
+
 export default function DoctorProfilePage() {
   const { id } = useParams<{ id: string }>();
 
   const [profile, setProfile] = useState<Profile | null>(null);
   const [practiceId, setPracticeId] = useState<string | null>(null);
   const [days, setDays] = useState<Day[] | null>(null);
+  const [reviews, setReviews] = useState<Review[]>([]);
   const [activeDate, setActiveDate] = useState<string | null>(null);
   const [chosen, setChosen] = useState<{ startAt: string; label: string; queue: number | null } | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -74,6 +78,7 @@ export default function DoctorProfilePage() {
         setPracticeId(data.practices[0]?.id ?? null);
       })
       .catch((e) => setError(e.message));
+    api.get<Review[]>(`/doctors/${id}/reviews`).then(setReviews).catch(() => {});
   }, [id]);
 
   const loadAvailability = useCallback((practice: string) => {
@@ -144,6 +149,7 @@ export default function DoctorProfilePage() {
                 <Badge tone={practice.bookingMode === "QUEUE" ? "accent" : "muted"}>
                   {practice.bookingMode === "QUEUE" ? "نظام أدوار" : `كشف ${toArabic(practice.slotMinutes)} دقيقة`}
                 </Badge>
+                {practice.depositAmount > 0 && <Badge tone="warn">عربون {formatFee(practice.depositAmount)}</Badge>}
               </div>
             </div>
           </div>
@@ -245,6 +251,31 @@ export default function DoctorProfilePage() {
             </>
           )}
         </section>
+        {reviews.length > 0 && (
+          <section className="mt-6">
+            <h2 className="text-[17px] font-bold mb-3" style={{ fontFamily: "var(--font-display)" }}>
+              آراء المرضى
+            </h2>
+            <div className="grid gap-2.5">
+              {reviews.map((review) => (
+                <Card key={review.id}>
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="text-[14px] font-semibold">{review.patientName}</span>
+                    <span className="text-[13px]" style={{ color: "var(--accent)" }} aria-label={`${review.rating} من ٥`}>
+                      {"★".repeat(review.rating)}
+                      <span style={{ color: "var(--line-strong)" }}>{"★".repeat(5 - review.rating)}</span>
+                    </span>
+                  </div>
+                  {review.comment && (
+                    <p className="text-[14px] mt-2" style={{ color: "var(--muted)" }}>
+                      {review.comment}
+                    </p>
+                  )}
+                </Card>
+              ))}
+            </div>
+          </section>
+        )}
       </main>
 
       {chosen && practice && day && (

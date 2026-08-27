@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Header } from "@/components/Header";
-import { Alert, Badge, Button, Card, EmptyState, Field, Input, Loading, Select, StatTile } from "@/components/ui";
+import { Alert, Badge, Button, Card, Dialog, EmptyState, Field, Input, Loading, Select, StatTile } from "@/components/ui";
 import { api, getSession } from "@/lib/api";
 import { addDays, formatClock, formatDay, formatTimeLabel, statNumber, STATUS_LABELS, toArabic, todayISO, WEEKDAYS } from "@/lib/format";
 
@@ -25,6 +25,8 @@ type Appointment = {
   id: string;
   reference: string;
   status: string;
+  paymentStatus: string;
+  depositAmount: number;
   bookingMode: "SLOT" | "QUEUE";
   queueNumber: number;
   slotStart: string;
@@ -33,27 +35,66 @@ type Appointment = {
   patientName: string;
   patientPhone: string | null;
   patientNote: string | null;
+  clinicName: string;
+  doctorName: string;
+  practiceId: string;
   arrivedAt: string | null;
+  isWalkIn: boolean;
 };
+
+type ClinicContext = {
+  role: "DOCTOR" | "STAFF";
+  canManageSchedule: boolean;
+  practices: {
+    id: string;
+    clinicName: string;
+    landmark: string | null;
+    doctorName: string;
+    bookingMode: "SLOT" | "QUEUE";
+    feeAmount: number;
+  }[];
+};
+type AvailabilityDay = {
+  date: string;
+  isClosed: boolean;
+  hasSchedule: boolean;
+  sessions: {
+    sessionStart: string;
+    startTime: string;
+    endTime: string;
+    bookingMode: "SLOT" | "QUEUE";
+    slots: { start: string; time: string; taken: boolean }[];
+    remaining: number;
+  }[];
+};
+
 type ExceptionRow = { id: string; date: string; type: "CLOSED" | "CUSTOM"; startTime: string | null; endTime: string | null; reason: string | null };
 
 type Tab = "today" | "hours" | "off";
 
 export default function DoctorDashboard() {
   const router = useRouter();
+  const [context, setContext] = useState<ClinicContext | null>(null);
   const [practices, setPractices] = useState<Practice[] | null>(null);
   const [practiceId, setPracticeId] = useState<string | null>(null);
   const [tab, setTab] = useState<Tab>("today");
   const [error, setError] = useState<string | null>(null);
 
-  const loadPractices = useCallback(() => {
-    api
-      .get<Practice[]>("/doctor/me/practices")
-      .then((list) => {
-        setPractices(list);
-        setPracticeId((current) => current ?? list[0]?.id ?? null);
-      })
-      .catch((e) => setError(e.message));
+  const loadContext = useCallback(async () => {
+    try {
+      const ctx = await api.get<ClinicContext>("/clinic/me");
+      setContext(ctx);
+      setPracticeId((current) => current ?? ctx.practices[0]?.id ?? null);
+
+      // جدول الدوام وإعداداته للطبيب وحده — السكرتير لا يعدّل السعر ولا الملف
+      if (ctx.role === "DOCTOR") {
+        setPractices(await api.get<Practice[]>("/doctor/me/practices"));
+      } else {
+        setPractices([]);
+      }
+    } catch (e) {
+      setError((e as Error).message);
+    }
   }, []);
 
   useEffect(() => {
@@ -62,10 +103,11 @@ export default function DoctorDashboard() {
       router.replace("/login");
       return;
     }
-    loadPractices();
-  }, [router, loadPractices]);
+    void loadContext();
+  }, [router, loadContext]);
 
   const practice = practices?.find((p) => p.id === practiceId) ?? null;
+  const isDoctor = context?.role === "DOCTOR";
 
   return (
     <>
@@ -77,26 +119,26 @@ export default function DoctorDashboard() {
           </div>
         )}
 
-        {practices === null && <Loading />}
+        {context === null && !error && <Loading />}
 
-        {practices?.length === 0 && (
+        {context?.practices.length === 0 && (
           <Card>
             <EmptyState
               title="لم تُربط بعيادة بعد"
-              hint="راجع إدارة المنصة لربط حسابك بعيادة، ثم تستطيع تحديد أوقاتك."
+              hint="راجع إدارة المنصة لربط حسابك بعيادة، ثم تستطيع إدارة الحجوزات."
             />
           </Card>
         )}
 
-        {practice && (
+        {context && context.practices.length > 0 && (
           <>
-            {practices!.length > 1 && (
-              <div className="mb-4 max-w-xs">
+            {context.practices.length > 1 && (
+              <div className="mb-4 max-w-sm">
                 <label className="block text-[13px] font-semibold mb-1.5">العيادة</label>
                 <Select value={practiceId ?? ""} onChange={(e) => setPracticeId(e.target.value)}>
-                  {practices!.map((p) => (
+                  {context.practices.map((p) => (
                     <option key={p.id} value={p.id}>
-                      {p.clinicName} — {p.governorate}
+                      {p.clinicName} — {p.doctorName}
                     </option>
                   ))}
                 </Select>
@@ -107,8 +149,7 @@ export default function DoctorDashboard() {
               {(
                 [
                   ["today", "مرضى اليوم"],
-                  ["hours", "أوقات الحجز"],
-                  ["off", "الإجازات"],
+                  ...(isDoctor ? ([["hours", "أوقات الحجز"], ["off", "الإجازات"]] as [Tab, string][]) : []),
                 ] as [Tab, string][]
               ).map(([key, label]) => (
                 <button
@@ -127,9 +168,14 @@ export default function DoctorDashboard() {
               ))}
             </nav>
 
-            {tab === "today" && <TodayTab practice={practice} />}
-            {tab === "hours" && <HoursTab practice={practice} onSaved={loadPractices} />}
-            {tab === "off" && <TimeOffTab practice={practice} />}
+            {tab === "today" && (
+              <TodayTab
+                context={context}
+                practiceId={practiceId}
+              />
+            )}
+            {tab === "hours" && practice && <HoursTab practice={practice} onSaved={() => void loadContext()} />}
+            {tab === "off" && practice && <TimeOffTab practice={practice} />}
           </>
         )}
       </main>
@@ -139,26 +185,34 @@ export default function DoctorDashboard() {
 
 /* ── مرضى اليوم ─────────────────────────────────────────────── */
 
-function TodayTab({ practice }: { practice: Practice }) {
+function TodayTab({ context, practiceId }: { context: ClinicContext; practiceId: string | null }) {
   const [date, setDate] = useState(todayISO());
   const [rows, setRows] = useState<Appointment[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
+  const [walkIn, setWalkIn] = useState(false);
+  const [shifting, setShifting] = useState(false);
 
   const load = useCallback((day: string) => {
     setRows(null);
     api
-      .get<Appointment[]>(`/doctor/me/appointments?date=${day}`)
+      .get<Appointment[]>(`/clinic/me/appointments?date=${day}`)
       .then(setRows)
       .catch((e) => setError(e.message));
   }, []);
 
   useEffect(() => load(date), [date, load]);
 
+  const visible = (rows ?? []).filter((row) => !practiceId || row.practiceId === practiceId);
+  const active = visible.filter((row) => !row.status.startsWith("CANCELLED"));
+  const attended = active.filter((row) => row.arrivedAt || row.status === "COMPLETED").length;
+  const noShow = active.filter((row) => row.status === "NO_SHOW").length;
+  const awaitingDeposit = active.filter((row) => row.paymentStatus === "PENDING").length;
+
   async function mark(id: string, status: "CONFIRMED" | "NO_SHOW" | "COMPLETED") {
     setBusy(id);
     try {
-      await api.patch(`/doctor/me/appointments/${id}/status`, { status });
+      await api.patch(`/clinic/me/appointments/${id}/status`, { status });
       load(date);
     } catch (e) {
       setError((e as Error).message);
@@ -167,9 +221,19 @@ function TodayTab({ practice }: { practice: Practice }) {
     }
   }
 
-  const active = rows?.filter((r) => !r.status.startsWith("CANCELLED")) ?? [];
-  const attended = active.filter((r) => r.arrivedAt || r.status === "COMPLETED").length;
-  const noShow = active.filter((r) => r.status === "NO_SHOW").length;
+  async function markPaid(id: string) {
+    setBusy(id);
+    try {
+      await api.post(`/clinic/me/appointments/${id}/mark-paid`, {});
+      load(date);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  const sessions = [...new Set(active.map((row) => row.sessionStart))];
 
   return (
     <>
@@ -186,12 +250,26 @@ function TodayTab({ practice }: { practice: Practice }) {
             اليوم
           </Button>
         )}
+        <div className="flex-1" />
+        {practiceId && (
+          <>
+            <Button variant="accent" size="sm" onClick={() => setWalkIn(true)}>
+              + حجز يدوي
+            </Button>
+            {sessions.length > 0 && (
+              <Button variant="outline" size="sm" onClick={() => setShifting(true)}>
+                تأجيل الفترة
+              </Button>
+            )}
+          </>
+        )}
       </div>
 
-      <div className="grid grid-cols-3 gap-3 mb-5">
+      <div className={`grid gap-3 mb-5 ${awaitingDeposit > 0 ? "grid-cols-2 sm:grid-cols-4" : "grid-cols-3"}`}>
         <StatTile label="الحجوزات" value={statNumber(active.length)} />
         <StatTile label="حضروا" value={statNumber(attended)} tone="ok" />
         <StatTile label="لم يحضروا" value={statNumber(noShow)} tone="danger" />
+        {awaitingDeposit > 0 && <StatTile label="بانتظار العربون" value={statNumber(awaitingDeposit)} tone="warn" />}
       </div>
 
       {error && (
@@ -201,16 +279,22 @@ function TodayTab({ practice }: { practice: Practice }) {
       )}
       {rows === null && <Loading />}
 
-      {rows?.length === 0 && (
+      {rows !== null && visible.length === 0 && (
         <Card>
-          <EmptyState title="لا توجد حجوزات في هذا اليوم" hint="الحجوزات الجديدة تظهر هنا فور إتمامها." />
+          <EmptyState
+            title="لا توجد حجوزات في هذا اليوم"
+            hint="الحجوزات الجديدة تظهر هنا فور إتمامها، ويمكنك إضافة حجز يدوي لمريض حضر بلا تطبيق."
+            action={practiceId ? <Button onClick={() => setWalkIn(true)}>+ حجز يدوي</Button> : undefined}
+          />
         </Card>
       )}
 
       <div className="grid gap-2.5">
-        {rows?.map((row) => {
+        {visible.map((row) => {
           const status = STATUS_LABELS[row.status] ?? { label: row.status, tone: "muted" as const };
           const cancelled = row.status.startsWith("CANCELLED");
+          const heldForDeposit = row.status === "HELD" || row.paymentStatus === "PENDING";
+
           return (
             <Card key={row.id} className={cancelled ? "opacity-60" : ""}>
               <div className="flex items-start gap-3">
@@ -218,21 +302,32 @@ function TodayTab({ practice }: { practice: Practice }) {
                   className="grid place-items-center w-11 h-11 rounded-[11px] text-[15px] font-bold shrink-0 tnum"
                   style={{ background: "var(--primary-soft)", color: "var(--primary)" }}
                 >
-                  {row.bookingMode === "QUEUE" ? toArabic(row.queueNumber) : formatClock(row.slotStart).replace(/\s.*/, "")}
+                  {row.bookingMode === "QUEUE"
+                    ? toArabic(row.queueNumber)
+                    : formatClock(row.slotStart).replace(/\s.*/, "")}
                 </span>
 
                 <div className="flex-1 min-w-0">
                   <div className="flex items-start justify-between gap-2 flex-wrap">
                     <p className="text-[15.5px] font-bold">{row.patientName}</p>
-                    <Badge tone={status.tone}>{status.label}</Badge>
+                    <div className="flex gap-1.5 flex-wrap">
+                      {row.isWalkIn && <Badge tone="muted">حجز يدوي</Badge>}
+                      {heldForDeposit && !cancelled && (
+                        <Badge tone="warn">عربون {toArabic(row.depositAmount.toLocaleString("en-US"))} غير مدفوع</Badge>
+                      )}
+                      <Badge tone={status.tone}>{status.label}</Badge>
+                    </div>
                   </div>
+
                   <p className="text-[13px] mt-0.5 tnum" style={{ color: "var(--muted)" }}>
                     {row.bookingMode === "QUEUE"
                       ? `الدور ${toArabic(row.queueNumber)} · ${formatClock(row.sessionStart)} – ${formatClock(row.sessionEnd)}`
                       : formatClock(row.slotStart)}
                     {" · "}
                     {row.reference}
+                    {context.practices.length > 1 && ` · ${row.clinicName}`}
                   </p>
+
                   {row.patientNote && (
                     <p
                       className="text-[13px] mt-2 px-3 py-2 rounded-[8px]"
@@ -251,20 +346,28 @@ function TodayTab({ practice }: { practice: Practice }) {
                           </Button>
                         </a>
                       )}
-                      <Button
-                        variant={row.arrivedAt ? "outline" : "primary"}
-                        size="sm"
-                        loading={busy === row.id}
-                        onClick={() => mark(row.id, "CONFIRMED")}
-                      >
-                        حضر
-                      </Button>
-                      <Button variant="outline" size="sm" loading={busy === row.id} onClick={() => mark(row.id, "COMPLETED")}>
-                        تم الكشف
-                      </Button>
-                      <Button variant="danger" size="sm" loading={busy === row.id} onClick={() => mark(row.id, "NO_SHOW")}>
-                        لم يحضر
-                      </Button>
+                      {heldForDeposit ? (
+                        <Button variant="accent" size="sm" loading={busy === row.id} onClick={() => markPaid(row.id)}>
+                          قبضتُ العربون
+                        </Button>
+                      ) : (
+                        <>
+                          <Button
+                            variant={row.arrivedAt ? "outline" : "primary"}
+                            size="sm"
+                            loading={busy === row.id}
+                            onClick={() => mark(row.id, "CONFIRMED")}
+                          >
+                            حضر
+                          </Button>
+                          <Button variant="outline" size="sm" loading={busy === row.id} onClick={() => mark(row.id, "COMPLETED")}>
+                            تم الكشف
+                          </Button>
+                          <Button variant="danger" size="sm" loading={busy === row.id} onClick={() => mark(row.id, "NO_SHOW")}>
+                            لم يحضر
+                          </Button>
+                        </>
+                      )}
                     </div>
                   )}
                 </div>
@@ -273,7 +376,182 @@ function TodayTab({ practice }: { practice: Practice }) {
           );
         })}
       </div>
+
+      {walkIn && practiceId && (
+        <WalkInDialog
+          practiceId={practiceId}
+          date={date}
+          onClose={() => setWalkIn(false)}
+          onCreated={() => {
+            setWalkIn(false);
+            load(date);
+          }}
+        />
+      )}
+
+      {shifting && practiceId && (
+        <ShiftDialog
+          practiceId={practiceId}
+          sessions={sessions}
+          onClose={() => setShifting(false)}
+          onShifted={() => {
+            setShifting(false);
+            load(date);
+          }}
+        />
+      )}
     </>
+  );
+}
+
+/** حجز يدوي لمريض حضر أو اتصل بلا تطبيق — أكثر ما يستعمله السكرتير. */
+function WalkInDialog({
+  practiceId,
+  date,
+  onClose,
+  onCreated,
+}: {
+  practiceId: string;
+  date: string;
+  onClose: () => void;
+  onCreated: () => void;
+}) {
+  const [days, setDays] = useState<AvailabilityDay[] | null>(null);
+  const [startAt, setStartAt] = useState("");
+  const [fullName, setFullName] = useState("");
+  const [phone, setPhone] = useState("");
+  const [note, setNote] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    api
+      .get<AvailabilityDay[]>(`/doctor/me/practices/${practiceId}/availability?from=${date}&to=${date}`)
+      .then(setDays)
+      .catch((e) => setError(e.message));
+  }, [practiceId, date]);
+
+  const options = (days?.[0]?.sessions ?? []).flatMap((session) =>
+    session.bookingMode === "SLOT"
+      ? session.slots.filter((slot) => !slot.taken).map((slot) => ({ value: slot.start, label: formatTimeLabel(slot.time) }))
+      : [{ value: session.sessionStart, label: `الدور التالي · ${formatTimeLabel(session.startTime)} – ${formatTimeLabel(session.endTime)}` }],
+  );
+
+  async function submit() {
+    setBusy(true);
+    setError(null);
+    try {
+      await api.post("/clinic/me/walk-in", { doctorClinicId: practiceId, fullName, phone, startAt, note: note || undefined });
+      onCreated();
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Dialog title="حجز يدوي" hint="لمريض حضر أو اتصل بلا تطبيق. يُنشأ له حساب برقمه فيصله التذكير." onClose={onClose}>
+      {error && (
+        <div className="mb-3">
+          <Alert>{error}</Alert>
+        </div>
+      )}
+      <div className="grid gap-3">
+        <Field label="اسم المريض">
+          <Input value={fullName} onChange={(e) => setFullName(e.target.value)} placeholder="الاسم الثلاثي" />
+        </Field>
+        <Field label="رقم الهاتف" hint="يقبل ٠٧٧٠ أو ‎+964">
+          <Input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="07701234567" />
+        </Field>
+        <Field label="الوقت" hint={options.length === 0 ? "لا توجد أوقات شاغرة في هذا اليوم" : undefined}>
+          <Select value={startAt} onChange={(e) => setStartAt(e.target.value)}>
+            <option value="">اختر الوقت</option>
+            {options.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </Select>
+        </Field>
+        <Field label="ملاحظة" hint="اختياري">
+          <Input value={note} onChange={(e) => setNote(e.target.value)} placeholder="مثلاً: حالة طارئة" />
+        </Field>
+        <Button size="lg" full loading={busy} disabled={!fullName || !phone || !startAt} onClick={submit}>
+          تثبيت الحجز
+        </Button>
+        <Button variant="ghost" full onClick={onClose}>
+          إلغاء
+        </Button>
+      </div>
+    </Dialog>
+  );
+}
+
+/** الطبيب تأخر: تُزاح مواعيد الفترة كلها دفعة واحدة. */
+function ShiftDialog({
+  practiceId,
+  sessions,
+  onClose,
+  onShifted,
+}: {
+  practiceId: string;
+  sessions: string[];
+  onClose: () => void;
+  onShifted: () => void;
+}) {
+  const [sessionStart, setSessionStart] = useState(sessions[0] ?? "");
+  const [minutes, setMinutes] = useState(30);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function submit() {
+    setBusy(true);
+    setError(null);
+    try {
+      await api.post("/clinic/me/shift", { doctorClinicId: practiceId, sessionStart, minutes });
+      onShifted();
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Dialog title="تأجيل الفترة" hint="تُزاح مواعيد الفترة كلها معاً — إما كلها أو لا شيء." onClose={onClose}>
+      {error && (
+        <div className="mb-3">
+          <Alert>{error}</Alert>
+        </div>
+      )}
+      <div className="grid gap-3">
+        <Field label="الفترة">
+          <Select value={sessionStart} onChange={(e) => setSessionStart(e.target.value)}>
+            {sessions.map((session) => (
+              <option key={session} value={session}>
+                {formatClock(session)}
+              </option>
+            ))}
+          </Select>
+        </Field>
+        <Field label="مقدار التأجيل">
+          <Select value={minutes} onChange={(e) => setMinutes(Number(e.target.value))}>
+            {[15, 30, 45, 60, 90, 120].map((m) => (
+              <option key={m} value={m}>
+                {toArabic(m)} دقيقة
+              </option>
+            ))}
+          </Select>
+        </Field>
+        <Button size="lg" full loading={busy} disabled={!sessionStart} onClick={submit}>
+          تأجيل
+        </Button>
+        <Button variant="ghost" full onClick={onClose}>
+          إلغاء
+        </Button>
+      </div>
+    </Dialog>
   );
 }
 

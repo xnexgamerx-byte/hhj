@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
-import { Pressable, View } from "react-native";
+import { Pressable, RefreshControl, View } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { Screen } from "@/components/Screen";
-import { Alert, Badge, Card, EmptyState, Input, Loading, T } from "@/components/ui";
+import { Alert, Badge, Card, EmptyState, Input, Loading, Stars, T } from "@/components/ui";
 import { api, type DoctorCard, type Specialty } from "@/lib/api";
 import { formatFee, toArabic } from "@/lib/format";
 import { radius, space, usePalette } from "@/theme";
@@ -104,6 +104,11 @@ export default function DoctorsScreen() {
                   <T size={13} tone="primary">
                     {doctor.specialties.join(" · ")}
                   </T>
+                  {doctor.ratingCount > 0 ? (
+                    <View style={{ marginTop: 2 }}>
+                      <Stars value={doctor.ratingAvg} count={doctor.ratingCount} />
+                    </View>
+                  ) : null}
                 </View>
 
                 {practice ? (

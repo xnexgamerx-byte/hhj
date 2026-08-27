@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Header } from "@/components/Header";
-import { Alert, Badge, Button, Card, EmptyState, Field, Input, Loading, SectionTitle, Select, StatTile } from "@/components/ui";
+import { Alert, Badge, Button, Card, Dialog, EmptyState, Field, Input, Loading, SectionTitle, Select, StatTile } from "@/components/ui";
 import { api, getSession } from "@/lib/api";
 import { formatClock, formatDay, statNumber, toArabic } from "@/lib/format";
 
@@ -41,7 +41,7 @@ type DoctorRow = {
   _count: { practices: number };
 };
 
-type Tab = "overview" | "doctors" | "messages";
+type Tab = "overview" | "doctors" | "staff" | "reviews" | "messages";
 
 export default function OwnerDashboard() {
   const router = useRouter();
@@ -68,6 +68,8 @@ export default function OwnerDashboard() {
             [
               ["overview", "نظرة عامة"],
               ["doctors", "الأطباء"],
+              ["staff", "السكرتيرون"],
+              ["reviews", "التقييمات"],
               ["messages", "رسائل الواتساب"],
             ] as [Tab, string][]
           ).map(([key, label]) => (
@@ -89,6 +91,8 @@ export default function OwnerDashboard() {
 
         {tab === "overview" && <OverviewTab />}
         {tab === "doctors" && <DoctorsTab />}
+        {tab === "staff" && <StaffTab />}
+        {tab === "reviews" && <ReviewsTab />}
         {tab === "messages" && <MessagesTab />}
       </main>
     </>
@@ -573,6 +577,296 @@ function AddDoctorDialog({
         </div>
       </div>
     </div>
+  );
+}
+
+/* ── السكرتيرون ─────────────────────────────────────────────── */
+
+type StaffRow = {
+  id: string;
+  fullName: string;
+  email: string | null;
+  isActive: boolean;
+  mustChangePassword: boolean;
+  canManageSchedule: boolean;
+  scope: string;
+};
+
+type ClinicRow = { id: string; nameAr: string; governorate: { nameAr: string }; _count: { practices: number } };
+
+function StaffTab() {
+  const [rows, setRows] = useState<StaffRow[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [adding, setAdding] = useState(false);
+  const [created, setCreated] = useState<{ fullName: string; email: string; temporaryPassword: string } | null>(null);
+
+  const load = useCallback(() => {
+    api.get<StaffRow[]>("/owner/staff").then(setRows).catch((e) => setError(e.message));
+  }, []);
+  useEffect(load, [load]);
+
+  async function toggle(id: string, isActive: boolean) {
+    try {
+      await api.patch(`/owner/staff/${id}/status`, { isActive: !isActive });
+      load();
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  }
+
+  return (
+    <>
+      <div className="flex items-center justify-between gap-3 mb-4 flex-wrap">
+        <div>
+          <h2 className="text-[18px] font-bold" style={{ fontFamily: "var(--font-display)" }}>
+            السكرتيرون
+          </h2>
+          <p className="text-[13px] mt-0.5" style={{ color: "var(--muted)" }}>
+            هم من يفتح اللوحة يومياً — يضيفون الحجوزات اليدوية ويؤشّرون الحضور.
+          </p>
+        </div>
+        <Button onClick={() => setAdding(true)}>+ تسجيل سكرتير</Button>
+      </div>
+
+      {error && (
+        <div className="mb-4">
+          <Alert>{error}</Alert>
+        </div>
+      )}
+      {created && <CredentialsCard created={created} onClose={() => setCreated(null)} />}
+      {rows === null && <Loading />}
+
+      {rows?.length === 0 && (
+        <Card>
+          <EmptyState
+            title="لا يوجد سكرتيرون بعد"
+            hint="بدون سكرتير يتحمّل الطبيب وحده إدخال كل حجز يدوي — وهذا ما يجعل الجداول تتضارب."
+            action={<Button onClick={() => setAdding(true)}>تسجيل أول سكرتير</Button>}
+          />
+        </Card>
+      )}
+
+      <div className="grid gap-2.5">
+        {rows?.map((row) => (
+          <Card key={row.id}>
+            <div className="flex items-start justify-between gap-3 flex-wrap">
+              <div className="min-w-0">
+                <p className="text-[15.5px] font-bold">{row.fullName}</p>
+                <p className="text-[13px] mt-0.5" dir="ltr" style={{ color: "var(--muted)", textAlign: "start" }}>
+                  {row.email}
+                </p>
+                <p className="text-[13px] mt-0.5" style={{ color: "var(--primary)" }}>
+                  {row.scope}
+                </p>
+              </div>
+              <div className="flex gap-1.5 flex-wrap justify-end">
+                {!row.isActive && <Badge tone="danger">موقوف</Badge>}
+                {row.mustChangePassword && <Badge tone="warn">لم يدخل بعد</Badge>}
+                {row.canManageSchedule && <Badge tone="primary">يعدّل الجدول</Badge>}
+              </div>
+            </div>
+            <div className="mt-3">
+              <Button
+                variant={row.isActive ? "danger" : "primary"}
+                size="sm"
+                onClick={() => toggle(row.id, row.isActive)}
+              >
+                {row.isActive ? "إيقاف" : "تفعيل"}
+              </Button>
+            </div>
+          </Card>
+        ))}
+      </div>
+
+      {adding && (
+        <AddStaffDialog
+          onClose={() => setAdding(false)}
+          onCreated={(result) => {
+            setAdding(false);
+            setCreated(result);
+            load();
+          }}
+        />
+      )}
+    </>
+  );
+}
+
+function AddStaffDialog({
+  onClose,
+  onCreated,
+}: {
+  onClose: () => void;
+  onCreated: (result: { fullName: string; email: string; temporaryPassword: string }) => void;
+}) {
+  const [fullName, setFullName] = useState("");
+  const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
+  const [clinicId, setClinicId] = useState("");
+  const [canManageSchedule, setCanManageSchedule] = useState(false);
+  const [clinics, setClinics] = useState<ClinicRow[]>([]);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    api.get<ClinicRow[]>("/owner/clinics").then(setClinics).catch(() => {});
+  }, []);
+
+  async function submit() {
+    setBusy(true);
+    setError(null);
+    try {
+      const result = await api.post<{ fullName: string; email: string; temporaryPassword: string }>("/owner/staff", {
+        fullName,
+        email,
+        phone: phone || undefined,
+        clinicId,
+        canManageSchedule,
+      });
+      onCreated(result);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Dialog
+      title="تسجيل سكرتير"
+      hint="يُنشأ الحساب بباسوورد أولي يظهر لك مرة واحدة لتسلّمه له."
+      onClose={onClose}
+    >
+      {error && (
+        <div className="mb-3">
+          <Alert>{error}</Alert>
+        </div>
+      )}
+      <div className="grid gap-3">
+        <Field label="الاسم">
+          <Input value={fullName} onChange={(e) => setFullName(e.target.value)} placeholder="الاسم الثلاثي" />
+        </Field>
+        <Field label="الإيميل" hint="يدخل به للوحة">
+          <Input value={email} onChange={(e) => setEmail(e.target.value)} type="email" dir="ltr" placeholder="staff@clinic.iq" />
+        </Field>
+        <Field label="رقم الهاتف" hint="اختياري">
+          <Input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="07701234567" />
+        </Field>
+        <Field label="العيادة" hint="يرى حجوزات أطباء هذه العيادة فقط">
+          <Select value={clinicId} onChange={(e) => setClinicId(e.target.value)}>
+            <option value="">اختر العيادة</option>
+            {clinics.map((clinic) => (
+              <option key={clinic.id} value={clinic.id}>
+                {clinic.nameAr} — {clinic.governorate.nameAr}
+              </option>
+            ))}
+          </Select>
+        </Field>
+        <label className="flex items-center gap-2 text-[14px] cursor-pointer">
+          <input type="checkbox" checked={canManageSchedule} onChange={(e) => setCanManageSchedule(e.target.checked)} />
+          يستطيع تعديل جدول الدوام أيضاً
+        </label>
+        <Button size="lg" full loading={busy} disabled={!fullName || !email || !clinicId} onClick={submit}>
+          إنشاء الحساب
+        </Button>
+        <Button variant="ghost" full onClick={onClose}>
+          إلغاء
+        </Button>
+      </div>
+    </Dialog>
+  );
+}
+
+/* ── التقييمات ──────────────────────────────────────────────── */
+
+type PendingReview = {
+  id: string;
+  rating: number;
+  comment: string | null;
+  createdAt: string;
+  doctorName: string;
+  patientName: string;
+};
+
+function ReviewsTab() {
+  const [rows, setRows] = useState<PendingReview[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
+
+  const load = useCallback(() => {
+    api.get<PendingReview[]>("/owner/reviews/pending").then(setRows).catch((e) => setError(e.message));
+  }, []);
+  useEffect(load, [load]);
+
+  async function decide(id: string, isPublished: boolean) {
+    setBusy(id);
+    try {
+      await api.patch(`/owner/reviews/${id}`, { isPublished });
+      load();
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  return (
+    <>
+      <h2 className="text-[18px] font-bold mb-1" style={{ fontFamily: "var(--font-display)" }}>
+        تعليقات بانتظار المراجعة
+      </h2>
+      <p className="text-[13px] mb-4" style={{ color: "var(--muted)" }}>
+        الدرجة تُحتسب في متوسط الطبيب فور كتابتها؛ التعليق وحده هو ما ينتظر موافقتك.
+      </p>
+
+      {error && (
+        <div className="mb-4">
+          <Alert>{error}</Alert>
+        </div>
+      )}
+      {rows === null && <Loading />}
+
+      {rows?.length === 0 && (
+        <Card>
+          <EmptyState title="لا توجد تعليقات معلّقة" hint="التعليقات الجديدة تظهر هنا للمراجعة قبل نشرها." />
+        </Card>
+      )}
+
+      <div className="grid gap-2.5">
+        {rows?.map((row) => (
+          <Card key={row.id}>
+            <div className="flex items-start justify-between gap-3 flex-wrap">
+              <div className="min-w-0">
+                <p className="text-[15px] font-bold">{row.doctorName}</p>
+                <p className="text-[12.5px] mt-0.5" style={{ color: "var(--muted)" }}>
+                  من {row.patientName}
+                </p>
+              </div>
+              <Badge tone={row.rating >= 4 ? "ok" : row.rating >= 3 ? "warn" : "danger"}>
+                {"★".repeat(row.rating)}
+                {"☆".repeat(5 - row.rating)}
+              </Badge>
+            </div>
+
+            <p
+              className="text-[14px] mt-3 px-3 py-2.5 rounded-[9px]"
+              style={{ background: "var(--surface-2)" }}
+            >
+              {row.comment}
+            </p>
+
+            <div className="flex gap-2 mt-3">
+              <Button size="sm" loading={busy === row.id} onClick={() => decide(row.id, true)}>
+                نشر
+              </Button>
+              <Button variant="danger" size="sm" loading={busy === row.id} onClick={() => decide(row.id, false)}>
+                رفض
+              </Button>
+            </div>
+          </Card>
+        ))}
+      </div>
+    </>
   );
 }
 

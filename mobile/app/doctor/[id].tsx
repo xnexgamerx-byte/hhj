@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Linking, Modal, Pressable, ScrollView, View } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { Screen } from "@/components/Screen";
-import { Alert, Badge, Button, Card, EmptyState, Field, Input, Loading, T } from "@/components/ui";
+import { Alert, Badge, Button, Card, EmptyState, Field, Input, Loading, Stars, T } from "@/components/ui";
 import {
   api,
   getSession,
@@ -10,6 +10,7 @@ import {
   type Day,
   type DoctorProfile,
   type Patient,
+  type Review,
   type Session,
   type SessionUser,
 } from "@/lib/api";
@@ -27,6 +28,7 @@ export default function DoctorScreen() {
   const [days, setDays] = useState<Day[] | null>(null);
   const [activeDate, setActiveDate] = useState<string | null>(null);
   const [chosen, setChosen] = useState<Chosen | null>(null);
+  const [reviews, setReviews] = useState<Review[]>([]);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -37,6 +39,7 @@ export default function DoctorScreen() {
         setPracticeId(data.practices[0]?.id ?? null);
       })
       .catch((e) => setError(e.message));
+    api.get<Review[]>(`/doctors/${id}/reviews`).then(setReviews).catch(() => {});
   }, [id]);
 
   const loadAvailability = useCallback((practice: string) => {
@@ -96,6 +99,7 @@ export default function DoctorScreen() {
               <T size={18} weight="bold">
                 {profile.title} {profile.fullName}
               </T>
+              {profile.ratingCount > 0 ? <Stars value={profile.ratingAvg} count={profile.ratingCount} size={14} /> : null}
               <View style={{ flexDirection: "row", flexWrap: "wrap", gap: space(2) }}>
                 <Badge tone="primary" label={formatFee(practice.feeAmount)} />
                 {profile.yearsOfExperience ? (
@@ -109,6 +113,9 @@ export default function DoctorScreen() {
                       : `كشف ${toArabic(practice.slotMinutes)} دقيقة`
                   }
                 />
+                {practice.depositAmount > 0 ? (
+                  <Badge tone="warn" label={`عربون ${formatFee(practice.depositAmount)}`} />
+                ) : null}
               </View>
             </View>
           </View>
@@ -214,6 +221,28 @@ export default function DoctorScreen() {
             </>
           ) : null}
         </View>
+        {reviews.length > 0 ? (
+          <View style={{ gap: space(3) }}>
+            <T size={17} weight="bold">
+              آراء المرضى
+            </T>
+            {reviews.map((review) => (
+              <Card key={review.id} style={{ gap: space(2) }}>
+                <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
+                  <T size={14} weight="semibold">
+                    {review.patientName}
+                  </T>
+                  <Stars value={review.rating} />
+                </View>
+                {review.comment ? (
+                  <T size={14} tone="muted">
+                    {review.comment}
+                  </T>
+                ) : null}
+              </Card>
+            ))}
+          </View>
+        ) : null}
       </Screen>
 
       {chosen && day ? (
@@ -224,6 +253,7 @@ export default function DoctorScreen() {
           date={day.date}
           chosen={chosen}
           cancelCutoffMinutes={practice.cancelCutoffMinutes}
+          depositAmount={practice.depositAmount}
           onClose={() => setChosen(null)}
           onBooked={() => {
             setChosen(null);
@@ -391,6 +421,7 @@ function BookingSheet({
   date,
   chosen,
   cancelCutoffMinutes,
+  depositAmount,
   onClose,
   onBooked,
 }: {
@@ -400,6 +431,7 @@ function BookingSheet({
   date: string;
   chosen: Chosen;
   cancelCutoffMinutes: number;
+  depositAmount: number;
   onClose: () => void;
   onBooked: () => void;
 }) {
@@ -412,7 +444,9 @@ function BookingSheet({
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [done, setDone] = useState<{ reference: string; queueNumber: number } | null>(null);
+  const [done, setDone] = useState<{ reference: string; queueNumber: number; status: string; depositAmount: number } | null>(
+    null,
+  );
 
   const [phone, setPhone] = useState("");
   const [fullName, setFullName] = useState("");
@@ -473,7 +507,7 @@ function BookingSheet({
     setBusy(true);
     setError(null);
     try {
-      const result = await api.post<{ reference: string; queueNumber: number }>("/bookings", {
+      const result = await api.post<{ reference: string; queueNumber: number; status: string; depositAmount: number }>("/bookings", {
         doctorClinicId: practiceId,
         patientId,
         startAt: chosen.startAt,
@@ -514,20 +548,22 @@ function BookingSheet({
                   width: 56,
                   height: 56,
                   borderRadius: 28,
-                  backgroundColor: palette.okSoft,
+                  backgroundColor: done.status === "HELD" ? palette.warnSoft : palette.okSoft,
                   alignItems: "center",
                   justifyContent: "center",
                 }}
               >
-                <T size={26} tone="ok" align="center">
-                  ✓
+                <T size={26} tone={done.status === "HELD" ? "warn" : "ok"} align="center">
+                  {done.status === "HELD" ? "⏳" : "✓"}
                 </T>
               </View>
               <T size={19} weight="bold" align="center">
-                تم تثبيت حجزك
+                {done.status === "HELD" ? "حُجز وقتك مؤقتاً" : "تم تثبيت حجزك"}
               </T>
               <T size={14} tone="muted" align="center">
-                أرسلنا التفاصيل إلى الطبيب.
+                {done.status === "HELD"
+                  ? `ادفع عربون ${formatFee(done.depositAmount)} خلال ربع ساعة من شاشة «مواعيدي» لتثبيت الحجز.`
+                  : "أرسلنا التفاصيل إلى الطبيب."}
               </T>
               <T size={26} weight="bold" tone="primary" align="center">
                 {done.reference}
@@ -542,7 +578,8 @@ function BookingSheet({
               ) : null}
               <View style={{ gap: space(2), alignSelf: "stretch", marginTop: space(3) }}>
                 <Button
-                  label="حجوزاتي"
+                  label={done.status === "HELD" ? "الذهاب للدفع" : "مواعيدي"}
+                  variant={done.status === "HELD" ? "accent" : "primary"}
                   full
                   onPress={() => {
                     onBooked();
@@ -650,12 +687,23 @@ function BookingSheet({
                     />
                   </Field>
 
+                  {depositAmount > 0 ? (
+                    <View style={{ backgroundColor: palette.warnSoft, borderRadius: radius.md, padding: space(3) }}>
+                      <T size={13.5} weight="semibold" tone="warn">
+                        هذه العيادة تطلب عربون {formatFee(depositAmount)}
+                      </T>
+                      <T size={12.5} tone="warn">
+                        يُخصم من أجرة الكشف عند حضورك. يُحجز وقتك ربع ساعة لتدفعه.
+                      </T>
+                    </View>
+                  ) : null}
+
                   <T size={12.5} tone="faint">
                     يمكنك الإلغاء حتى {toArabic(Math.round(cancelCutoffMinutes / 60))} ساعة قبل الموعد.
                   </T>
 
                   <Button
-                    label="تثبيت الحجز"
+                    label={depositAmount > 0 ? "حجز ومتابعة للدفع" : "تثبيت الحجز"}
                     variant="accent"
                     size="lg"
                     full

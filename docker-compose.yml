@@ -1,0 +1,25 @@
+# قاعدة البيانات للتطوير المحلي.
+# التشغيل: docker compose up -d
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: mawid-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: mawid
+      POSTGRES_PASSWORD: mawid
+      POSTGRES_DB: mawid
+      # ترتيب عربي صحيح في الفرز
+      LANG: ar_IQ.utf8
+    ports:
+      - "5432:5432"
+    volumes:
+      - mawid-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mawid -d mawid"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  mawid-data:

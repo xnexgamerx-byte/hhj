@@ -74,21 +74,20 @@ export default function HomeScreen() {
             موعد
           </T>
           <View style={{ flex: 1 }} />
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={user ? "حجوزاتي" : "دخول"}
-            onPress={() => router.push("/bookings")}
-            style={{
-              paddingHorizontal: space(3),
-              paddingVertical: space(1.5),
-              borderRadius: radius.md,
-              backgroundColor: palette.surface2,
-            }}
-          >
-            <T size={13} weight="semibold">
-              {user ? "حجوزاتي" : "دخول"}
-            </T>
-          </Pressable>
+          {user ? (
+            <View
+              style={{
+                paddingHorizontal: space(3),
+                paddingVertical: space(1.5),
+                borderRadius: radius.pill,
+                backgroundColor: palette.surface2,
+              }}
+            >
+              <T size={12.5} weight="semibold" tone="muted">
+                {user.fullName}
+              </T>
+            </View>
+          ) : null}
         </View>
 
         <T size={24} weight="bold" style={{ marginTop: space(2) }}>

@@ -124,10 +124,14 @@ export async function searchDoctors(search: DoctorSearch, client: PrismaClient =
         photoUrl: doctor.photoUrl,
         yearsOfExperience: doctor.yearsOfExperience,
         gender: doctor.gender,
+        ratingAvg: doctor.ratingAvg,
+        ratingCount: doctor.ratingCount,
         specialties: doctor.specialties.map((s) => s.specialty.nameAr),
         practices: doctor.practices.map((practice) => ({
           id: practice.id,
           feeAmount: practice.feeAmount,
+          // المريض يجب أن يعرف بالعربون قبل أن يحجز لا بعده
+          depositAmount: practice.depositAmount,
           bookingMode: practice.bookingMode,
           clinicName: practice.clinic.nameAr,
           landmark: practice.clinic.landmark,
@@ -181,10 +185,13 @@ export async function getDoctorProfile(doctorId: string, client: PrismaClient = 
     photoUrl: doctor.photoUrl,
     yearsOfExperience: doctor.yearsOfExperience,
     gender: doctor.gender,
+    ratingAvg: doctor.ratingAvg,
+    ratingCount: doctor.ratingCount,
     specialties: doctor.specialties.map((s) => s.specialty.nameAr),
     practices: doctor.practices.map((practice) => ({
       id: practice.id,
       feeAmount: practice.feeAmount,
+      depositAmount: practice.depositAmount,
       bookingMode: practice.bookingMode,
       slotMinutes: practice.slotMinutes,
       cancelCutoffMinutes: practice.cancelCutoffMinutes,
@@ -213,6 +220,7 @@ export async function getMyBookings(accountId: string, client: PrismaClient = de
     take: 100,
     include: {
       patient: { select: { fullName: true } },
+      review: { select: { id: true } },
       doctorClinic: {
         include: {
           clinic: { select: { nameAr: true, landmark: true, phone: true } },
@@ -232,7 +240,14 @@ export async function getMyBookings(accountId: string, client: PrismaClient = de
     slotStart: b.slotStart.toISOString(),
     sessionStart: b.sessionStart.toISOString(),
     sessionEnd: b.sessionEnd.toISOString(),
-    isUpcoming: b.lockKey === true && b.sessionEnd > now,
+    // الحالة تسبق الوقت: زيارة أُشِّر انتهاء كشفها أو غيابها ليست «قادمة»
+    // حتى لو لم يمرّ وقتها بعد — وإلا لم يظهر للمريض زر تقييمها
+    isUpcoming:
+      b.lockKey === true && b.sessionEnd > now && b.status !== "COMPLETED" && b.status !== "NO_SHOW",
+    paymentStatus: b.paymentStatus,
+    depositAmount: b.depositAmount,
+    holdExpiresAt: b.holdExpiresAt?.toISOString() ?? null,
+    canReview: b.status === "COMPLETED" && b.review === null,
     patientName: b.patient.fullName,
     doctorName: `${b.doctorClinic.doctor.title} ${b.doctorClinic.doctor.user.fullName}`,
     clinicName: b.doctorClinic.clinic.nameAr,

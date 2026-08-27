@@ -17,6 +17,7 @@ const APP = process.env.APP_URL ?? "http://localhost:3002";
 const OWNER_EMAIL = process.env.OWNER_EMAIL ?? "owner@mawid.iq";
 const OWNER_PASSWORD = process.env.OWNER_PASSWORD;
 const CHROME = process.env.CHROME_PATH;
+const SHOTS = process.env.SHOTS;
 
 if (!OWNER_PASSWORD) {
   console.error("عيّن OWNER_PASSWORD — باسوورد المالك بعد تغييره الأول");
@@ -99,12 +100,14 @@ const ctx = await browser.newContext({
   hasTouch: true,
 });
 const page = await ctx.newPage();
+const shot = (name) => (SHOTS ? page.screenshot({ path: `${SHOTS}/${name}.png`, fullPage: true }) : Promise.resolve());
 const errors = [];
 page.on("pageerror", (e) => errors.push(e.message));
 page.on("console", (m) => { if (m.type() === "error") errors.push(m.text()); });
 
 await page.goto(APP, { waitUntil: "networkidle" });
 await page.waitForTimeout(2500);
+await shot("m1-home");
 
 check(
   "الشاشة الرئيسية تفتح على محافظة المستخدم وتخصصاتها",
@@ -126,8 +129,13 @@ check(
   `dir=${meta.dir} lang=${meta.lang} font=${meta.font.slice(0, 20)}`,
 );
 
+await page.goto(`${APP}/doctors?governorateId=${governorates[0].id}`, { waitUntil: "networkidle" });
+await page.waitForTimeout(2500);
+await shot("m2-doctors");
+
 await page.goto(`${APP}/doctor/${doctor.doctorId}`, { waitUntil: "networkidle" });
 await page.waitForTimeout(2800);
+await shot("m3-profile");
 
 const slots = page.getByRole("button").filter({ hasText: /^[٠-٩]+:[٠-٩]+ [صم]$/ });
 const before = await slots.count();
@@ -147,9 +155,11 @@ await page.getByRole("button", { name: "تأكيد الرمز" }).click();
 await page.waitForTimeout(2000);
 
 await page.getByPlaceholder(/ألم في الصدر/).fill("ملاحظة اختبارية");
+await shot("m4-booking");
 await page.getByRole("button", { name: "تثبيت الحجز" }).click();
 await page.waitForTimeout(3000);
 check("الحجز يتم من التطبيق ويظهر الرقم المرجعي", await page.getByText("تم تثبيت حجزك").isVisible().catch(() => false));
+await shot("m5-done");
 
 await page.getByRole("button", { name: "إغلاق", exact: true }).click();
 await page.waitForTimeout(3000);
@@ -163,7 +173,128 @@ check(
 
 await page.goto(`${APP}/bookings`, { waitUntil: "networkidle" });
 await page.waitForTimeout(2500);
-check("شاشة حجوزاتي تعرض الموعد القادم", await page.getByText("المواعيد القادمة").isVisible().catch(() => false));
+check("شاشة مواعيدي تعرض الموعد القادم", await page.getByText("المواعيد القادمة").isVisible().catch(() => false));
+await shot("m6-bookings");
+
+// ── التقييم: نُنهي الزيارة عبر الخادم ثم نقيّمها من التطبيق ──
+const doctorSession = await callApi("/auth/login", {
+  method: "POST",
+  body: { email: doctor.email, password: doctor.temporaryPassword },
+});
+if (doctorSession.mustChangePassword) {
+  await callApi("/auth/password/change", {
+    method: "POST",
+    token: doctorSession.accessToken,
+    body: { currentPassword: doctor.temporaryPassword, newPassword: "E2ePass2026" },
+  });
+}
+const doctorLogin = await callApi("/auth/login", {
+  method: "POST",
+  body: { email: doctor.email, password: "E2ePass2026" },
+});
+// الموعد قد يقع في اليوم البغدادي التالي إن حُجز قرب منتصف الليل،
+// فنبحث في اليوم وما بعده بدل افتراض «اليوم»
+const clinicDay = (offset) =>
+  new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Baghdad" }).format(new Date(Date.now() + offset * 86_400_000));
+
+let todays = [];
+for (const offset of [0, 1]) {
+  const rows = await callApi(`/clinic/me/appointments?date=${clinicDay(offset)}`, { token: doctorLogin.accessToken });
+  if (rows.length > 0) {
+    todays = rows;
+    break;
+  }
+}
+
+check("لوحة العيادة تعرض الحجز الذي أنشأه المريض من التطبيق", todays.length > 0, `${todays.length} حجز`);
+
+if (todays.length > 0) {
+  await callApi(`/clinic/me/appointments/${todays[0].id}/status`, {
+    method: "PATCH",
+    token: doctorLogin.accessToken,
+    body: { status: "COMPLETED" },
+  });
+
+  await page.reload({ waitUntil: "networkidle" });
+  await page.waitForTimeout(2500);
+
+  const reviewButton = page.getByRole("button", { name: "قيّم هذه الزيارة" });
+  const canReview = await reviewButton.first().isVisible().catch(() => false);
+
+  if (canReview) {
+    await reviewButton.first().click();
+    await page.waitForTimeout(900);
+    await shot("m7-review");
+
+    // النجمة الرابعة
+    await page.getByRole("button", { name: "4 من ٥" }).click();
+    await page.getByPlaceholder(/ما الذي أعجبك/).fill("طبيبة متعاونة والانتظار قصير");
+    await page.getByRole("button", { name: "إرسال التقييم" }).click();
+    await page.waitForTimeout(2500);
+  }
+
+  check(
+    "المريض يقيّم زيارته بعد أن تؤشّر العيادة انتهاء الكشف",
+    canReview && !(await page.getByRole("button", { name: "قيّم هذه الزيارة" }).first().isVisible().catch(() => false)),
+    "زر التقييم يظهر للزيارة المكتملة ويختفي بعد الإرسال",
+  );
+}
+
+// ── العربون: طبيب منفصل تطلب عيادته عربوناً ──
+const depositDoctor = await callApi("/owner/doctors", {
+  method: "POST",
+  token: owner.accessToken,
+  body: {
+    fullName: `طبيب العربون ${stamp}`,
+    email: `dep.${stamp}@clinic.iq`,
+    whatsappNumber: "٠٧٧٠١٢٣٤٥٦٧",
+    specialtyIds: [specialties[0].id],
+  },
+});
+const depositClinic = await callApi("/owner/clinics", {
+  method: "POST",
+  token: owner.accessToken,
+  body: {
+    nameAr: `عيادة العربون ${stamp}`,
+    governorateId: governorates[0].id,
+    districtId: districts[0].id,
+    landmark: "مقابل مستشفى الاختبار",
+  },
+});
+await callApi(`/owner/doctors/${depositDoctor.doctorId}/practices`, {
+  method: "POST",
+  token: owner.accessToken,
+  body: {
+    clinicId: depositClinic.id,
+    feeAmount: 30000,
+    depositAmount: 10000,
+    bookingMode: "SLOT",
+    slotMinutes: 20,
+    schedules: [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({ weekday, startTime: "00:00", endTime: "23:59" })),
+  },
+});
+
+await page.goto(`${APP}/doctor/${depositDoctor.doctorId}`, { waitUntil: "networkidle" });
+await page.waitForTimeout(2800);
+check(
+  "ملف الطبيب يُظهر مبلغ العربون قبل الحجز",
+  await page.getByText(/عربون ١٠٬?٠٠٠|عربون ١٠,٠٠٠/).first().isVisible().catch(() => false),
+  "المريض يعرف بالعربون قبل أن يحجز لا بعده",
+);
+
+const depositSlots = page.getByRole("button").filter({ hasText: /^[٠-٩]+:[٠-٩]+ [صم]$/ });
+await depositSlots.nth(1).click();
+await page.waitForTimeout(900);
+await shot("m8-deposit");
+
+await page.getByRole("button", { name: "حجز ومتابعة للدفع" }).click();
+await page.waitForTimeout(3000);
+check(
+  "الحجز بعربون يُحجز مؤقتاً ويطالب بالدفع",
+  await page.getByText("حُجز وقتك مؤقتاً").isVisible().catch(() => false),
+  "الوقت محجوز ربع ساعة حتى يُدفع العربون",
+);
+await shot("m9-held");
 
 await browser.close();
 if (errors.length) console.log("\nأخطاء صفحات: " + errors.slice(0, 4).join(" | "));

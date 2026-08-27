@@ -25,6 +25,7 @@ import type { WhatsAppMessage } from "../src/notifications/whatsapp/templates.js
 process.env.JWT_SECRET ??= "test-secret-that-is-long-enough-for-hs256!!";
 
 const prisma = new PrismaClient();
+const TZ = "Asia/Baghdad";
 const results: { name: string; passed: boolean }[] = [];
 
 function check(name: string, passed: boolean, detail = "") {
@@ -229,8 +230,15 @@ async function main() {
       `الحجز ${walkIn.reference} وأُنشئ حساب للمريض برقمه فيصله التذكير`,
     );
 
-    const today = new Date(slotIn(4)).toISOString().slice(0, 10);
-    const list = await getScopedAppointments(staff.userId, today, prisma);
+    // التاريخ بتوقيت العيادة لا بالتوقيت العالمي: موعد الساعة ٢١:٣٠ عالمياً
+    // يقع في اليوم التالي ببغداد، والسكرتير يفكّر بتوقيت عيادته
+    const clinicDate = new Intl.DateTimeFormat("en-CA", {
+      timeZone: TZ,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).format(created.slotStart);
+    const list = await getScopedAppointments(staff.userId, clinicDate, prisma);
     check(
       "السكرتير يرى حجوزات عيادته فقط",
       list.length >= 1 && list.every((row) => row.practiceId === mine.practice.id),

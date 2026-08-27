@@ -17,6 +17,7 @@ type Booking = {
   sessionStart: string;
   sessionEnd: string;
   isUpcoming: boolean;
+  canReview: boolean;
   patientName: string;
   doctorName: string;
   clinicName: string;

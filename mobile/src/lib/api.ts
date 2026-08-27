@@ -10,11 +10,29 @@ import { Platform } from "react-native";
 import * as SecureStore from "expo-secure-store";
 
 /**
- * عنوان الخادم: متغيّر البيئة أولاً (يُحقن وقت البناء)، ثم إعدادات التطبيق.
- * لا يُترك ثابتاً في الشفرة لأن نسخة التطوير ونسخة الإنتاج تختلفان.
+ * عنوان الخادم.
+ *
+ * الترتيب: متغيّر البيئة، ثم استنتاجه من خادم التطوير، ثم إعدادات التطبيق.
+ *
+ * الاستنتاج هو ما يجعل التجربة على هاتف حقيقي تعمل بلا إعداد: حين تفتح
+ * التطبيق عبر Expo Go يكون Metro على حاسوبك، فنأخذ عنوانه ونستعمل المنفذ
+ * ٣٠٠٠. بدونه يشير localhost داخل الهاتف إلى الهاتف نفسه لا إلى حاسوبك،
+ * وهو أكثر ما يُربك في أول تجربة.
  */
+function inferDevHost(): string | null {
+  const hostUri =
+    Constants.expoConfig?.hostUri ??
+    (Constants.expoGoConfig as { debuggerHost?: string } | undefined)?.debuggerHost;
+  if (!hostUri) return null;
+
+  const host = hostUri.split(":")[0];
+  if (!host || host === "localhost" || host === "127.0.0.1") return null;
+  return `http://${host}:${process.env.EXPO_PUBLIC_API_PORT ?? "3000"}`;
+}
+
 const BASE: string =
   process.env.EXPO_PUBLIC_API_URL ??
+  inferDevHost() ??
   (Constants.expoConfig?.extra as { apiUrl?: string } | undefined)?.apiUrl ??
   "http://localhost:3000";
 
@@ -141,6 +159,8 @@ export const api = {
   get: <T>(path: string) => request<T>(path),
   post: <T>(path: string, body?: unknown) =>
     request<T>(path, { method: "POST", body: body ? JSON.stringify(body) : undefined }),
+  patch: <T>(path: string, body?: unknown) =>
+    request<T>(path, { method: "PATCH", body: body ? JSON.stringify(body) : undefined }),
   del: <T>(path: string) => request<T>(path, { method: "DELETE" }),
 };
 
@@ -153,10 +173,13 @@ export type DoctorCard = {
   title: string;
   fullName: string;
   yearsOfExperience: number | null;
+  ratingAvg: number;
+  ratingCount: number;
   specialties: string[];
   practices: {
     id: string;
     feeAmount: number;
+    depositAmount: number;
     bookingMode: "SLOT" | "QUEUE";
     clinicName: string;
     landmark: string | null;
@@ -172,6 +195,8 @@ export type DoctorProfile = {
   fullName: string;
   bio: string | null;
   yearsOfExperience: number | null;
+  ratingAvg: number;
+  ratingCount: number;
   specialties: string[];
   practices: {
     id: string;
@@ -179,6 +204,7 @@ export type DoctorProfile = {
     bookingMode: "SLOT" | "QUEUE";
     slotMinutes: number;
     cancelCutoffMinutes: number;
+    depositAmount: number;
     clinicName: string;
     landmark: string | null;
     addressLine: string | null;
@@ -216,6 +242,10 @@ export type Day = {
 
 export type Patient = { id: string; fullName: string; isSelf: boolean };
 
+export type Review = { id: string; rating: number; comment: string | null; createdAt: string; patientName: string };
+
+export type ReviewableVisit = { appointmentId: string; reference: string; doctorName: string; visitedAt: string };
+
 export type Booking = {
   id: string;
   reference: string;
@@ -232,4 +262,25 @@ export type Booking = {
   landmark: string | null;
   clinicPhone: string | null;
   feeAmount: number;
+  paymentStatus: "NOT_REQUIRED" | "PENDING" | "PAID" | "FAILED" | "REFUNDED";
+  depositAmount: number;
+  holdExpiresAt: string | null;
+  canReview: boolean;
+};
+
+export type BookingResult = {
+  appointmentId: string;
+  reference: string;
+  queueNumber: number;
+  status: string;
+  depositAmount: number;
+  holdExpiresAt: string | null;
+};
+
+export type PaymentStart = {
+  paymentId: string;
+  amount: number;
+  checkoutUrl: string | null;
+  provider: string;
+  expiresAt: string | null;
 };

@@ -216,6 +216,44 @@ export function Loading({ label = "جارٍ التحميل…" }: { label?: stri
   );
 }
 
+/* ── النوافذ ─────────────────────────────────────────────────── */
+
+/**
+ * نافذة منزلقة من الأسفل على الجوال، ووسطية على الشاشات الكبيرة.
+ * الخلفية واسمها مميّزان عن زر الإغلاق حتى لا يلتبسا على قارئ الشاشة.
+ */
+export function Dialog({
+  title,
+  hint,
+  children,
+  onClose,
+}: {
+  title: string;
+  hint?: string;
+  children: ReactNode;
+  onClose: () => void;
+}) {
+  return (
+    <div className="fixed inset-0 z-40 flex items-end sm:items-center justify-center" role="dialog" aria-modal="true">
+      <button className="absolute inset-0 bg-black/40" onClick={onClose} aria-label="إغلاق النافذة بالنقر خارجها" />
+      <div
+        className="relative w-full sm:max-w-md max-h-[88vh] overflow-y-auto rounded-t-[20px] sm:rounded-[18px] p-5"
+        style={{ background: "var(--surface)", boxShadow: "var(--shadow-lg)" }}
+      >
+        <h2 className="text-[18px] font-bold mb-1" style={{ fontFamily: "var(--font-display)" }}>
+          {title}
+        </h2>
+        {hint && (
+          <p className="text-[13px] mb-4" style={{ color: "var(--muted)" }}>
+            {hint}
+          </p>
+        )}
+        {children}
+      </div>
+    </div>
+  );
+}
+
 /* ── لوحة الإحصاءات ──────────────────────────────────────────── */
 
 export function StatTile({

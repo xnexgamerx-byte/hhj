@@ -63,6 +63,7 @@ export async function getMyPractices(userId: string, client: PrismaClient = defa
     governorate: practice.clinic.governorate.nameAr,
     district: practice.clinic.district.nameAr,
     feeAmount: practice.feeAmount,
+    depositAmount: practice.depositAmount,
     bookingMode: practice.bookingMode,
     slotMinutes: practice.slotMinutes,
     capacityPerSession: practice.capacityPerSession,
@@ -163,6 +164,7 @@ export async function updateBookingSettings(
     cancelCutoffMinutes?: number;
     bookingHorizonDays?: number;
     feeAmount?: number;
+    depositAmount?: number;
   },
   client: PrismaClient = defaultPrisma,
 ) {
@@ -173,6 +175,17 @@ export async function updateBookingSettings(
   }
   if (settings.capacityPerSession !== undefined && settings.capacityPerSession < 1) {
     throw badRequest("INVALID_CAPACITY", "عدد المرضى في الفترة يجب أن يكون واحداً على الأقل");
+  }
+  if (settings.depositAmount !== undefined && settings.depositAmount < 0) {
+    throw badRequest("INVALID_DEPOSIT", "العربون لا يكون بالسالب");
+  }
+  if (
+    settings.depositAmount !== undefined &&
+    settings.feeAmount !== undefined &&
+    settings.depositAmount > settings.feeAmount
+  ) {
+    // العربون يُخصم من أجرة الكشف، فتجاوزه لها يعني دفع المريض أكثر من السعر
+    throw badRequest("DEPOSIT_ABOVE_FEE", "العربون لا يتجاوز أجرة الكشف");
   }
 
   await client.doctorClinic.update({ where: { id: practiceId }, data: settings });
