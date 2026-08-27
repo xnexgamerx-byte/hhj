@@ -19,6 +19,19 @@ import { cancelBooking, createBooking } from "../modules/booking/booking.service
 import { flushPending } from "../notifications/dispatch.js";
 import { normalizeIraqiPhone } from "../lib/phone.js";
 import { addDaysISO } from "../lib/timezone.js";
+import { createReview, listDoctorReviews, listPendingReviews, listReviewableVisits, setReviewPublished } from "../modules/reviews/reviews.service.js";
+import {
+  createStaffAccount,
+  createWalkInBooking,
+  getMyClinics,
+  getScopedAppointments,
+  listStaff,
+  setScopedAppointmentStatus,
+  setStaffActive,
+  shiftSessionAppointments,
+} from "../modules/staff/staff.service.js";
+import { markPaidManually, refreshPayment, startPayment } from "../modules/payments/payments.service.js";
+import { runReminders } from "../modules/reminders/reminders.service.js";
 import { getAvailability } from "../modules/availability/availability.service.js";
 import { getOwnerSummary } from "../modules/owner/summary.service.js";
 import {
@@ -114,6 +127,21 @@ export async function registerRoutes(app: FastifyInstance) {
     const created = await createDoctorAccount(request.auth!.sub, request.body);
     // الباسوورد الأولي يظهر هنا مرة واحدة فقط ليسلّمه المالك للطبيب
     return reply.status(201).send(created);
+  });
+
+  app.get("/owner/clinics", ownerOnly, async () => {
+    return prisma.clinic.findMany({
+      where: { isActive: true },
+      orderBy: { createdAt: "desc" },
+      select: {
+        id: true,
+        nameAr: true,
+        landmark: true,
+        governorate: { select: { nameAr: true } },
+        district: { select: { nameAr: true } },
+        _count: { select: { practices: true } },
+      },
+    });
   });
 
   app.get("/owner/doctors", ownerOnly, async () => {
@@ -233,6 +261,44 @@ export async function registerRoutes(app: FastifyInstance) {
   /** ملخص لوحة المالك */
   app.get("/owner/summary", ownerOnly, async () => getOwnerSummary());
 
+  // ── السكرتيرون ──
+  app.get("/owner/staff", ownerOnly, async () => listStaff());
+
+  app.post<{
+    Body: {
+      fullName: string;
+      email: string;
+      phone?: string;
+      clinicId?: string;
+      doctorClinicId?: string;
+      canManageSchedule?: boolean;
+    };
+  }>("/owner/staff", ownerOnly, async (request, reply) => {
+    const created = await createStaffAccount(request.auth!.sub, request.body);
+    return reply.status(201).send(created);
+  });
+
+  app.patch<{ Params: { id: string }; Body: { isActive: boolean } }>(
+    "/owner/staff/:id/status",
+    ownerOnly,
+    async (request, reply) => {
+      await setStaffActive(request.auth!.sub, request.params.id, request.body.isActive);
+      return reply.status(204).send();
+    },
+  );
+
+  // ── مراجعة التعليقات قبل نشرها ──
+  app.get("/owner/reviews/pending", ownerOnly, async () => listPendingReviews());
+
+  app.patch<{ Params: { id: string }; Body: { isPublished: boolean } }>(
+    "/owner/reviews/:id",
+    ownerOnly,
+    async (request) => setReviewPublished(request.params.id, request.body.isPublished),
+  );
+
+  /** تشغيل التذكيرات يدوياً — للتجربة وللتعافي بعد توقف */
+  app.post("/owner/reminders/run", ownerOnly, async () => runReminders());
+
   /** سجل رسائل الواتساب — ليرى المالك ما وصل وما لم يصل */
   app.get("/owner/notifications", ownerOnly, async () => {
     return prisma.notificationLog.findMany({
@@ -278,6 +344,10 @@ export async function registerRoutes(app: FastifyInstance) {
     return getDoctorProfile(request.params.id);
   });
 
+  app.get<{ Params: { id: string } }>("/doctors/:id/reviews", async (request) => {
+    return listDoctorReviews(request.params.id);
+  });
+
   /** الأوقات الشاغرة فقط — المحجوز لا يظهر للمريض أصلاً */
   app.get<{ Params: { id: string }; Querystring: { from?: string; to?: string } }>(
     "/practices/:id/availability",
@@ -294,6 +364,37 @@ export async function registerRoutes(app: FastifyInstance) {
 
   app.get("/me/patients", { preHandler: requireRole("PATIENT") }, async (request) => {
     return getMyPatients(request.auth!.sub);
+  });
+
+  /** الزيارات التي يستطيع المريض تقييمها الآن */
+  app.get("/me/reviewable", { preHandler: requireRole("PATIENT") }, async (request) => {
+    return listReviewableVisits(request.auth!.sub);
+  });
+
+  app.post<{ Body: { appointmentId: string; rating: number; comment?: string } }>(
+    "/reviews",
+    { preHandler: requireRole("PATIENT") },
+    async (request, reply) => {
+      const review = await createReview(request.auth!.sub, request.body.appointmentId, {
+        rating: request.body.rating,
+        comment: request.body.comment ?? null,
+      });
+      return reply.status(201).send(review);
+    },
+  );
+
+  /** بدء دفع عربون حجز محجوز مؤقتاً */
+  app.post<{ Params: { id: string }; Body: { returnUrl?: string } }>(
+    "/bookings/:id/pay",
+    { preHandler: requireRole("PATIENT") },
+    async (request) => {
+      const returnUrl = request.body?.returnUrl ?? `${process.env.WEB_ORIGIN ?? ""}/my`;
+      return startPayment(request.auth!.sub, request.params.id, returnUrl);
+    },
+  );
+
+  app.get<{ Params: { id: string } }>("/payments/:id", { preHandler: requireRole("PATIENT") }, async (request) => {
+    return refreshPayment(request.params.id);
   });
 
   app.post<{ Body: { fullName: string; birthYear?: number; gender?: "MALE" | "FEMALE" } }>(
@@ -369,6 +470,40 @@ export async function registerRoutes(app: FastifyInstance) {
       return setAppointmentStatus(request.auth!.sub, request.params.id, request.body.status);
     },
   );
+
+  // ── عمليات اليوم: الطبيب والسكرتير معاً ───────────────────────
+  const clinicStaff = { preHandler: requireRole("DOCTOR", "STAFF") };
+
+  app.get("/clinic/me", clinicStaff, async (request) => getMyClinics(request.auth!.sub));
+
+  app.get<{ Querystring: { date?: string } }>("/clinic/me/appointments", clinicStaff, async (request) => {
+    return getScopedAppointments(request.auth!.sub, request.query.date ?? new Date().toISOString().slice(0, 10));
+  });
+
+  app.patch<{ Params: { id: string }; Body: { status: "CONFIRMED" | "NO_SHOW" | "COMPLETED" } }>(
+    "/clinic/me/appointments/:id/status",
+    clinicStaff,
+    async (request) => setScopedAppointmentStatus(request.auth!.sub, request.params.id, request.body.status),
+  );
+
+  /** حجز يدوي لمريض حضر أو اتصل بلا تطبيق */
+  app.post<{
+    Body: { doctorClinicId: string; fullName: string; phone: string; startAt: string; note?: string };
+  }>("/clinic/me/walk-in", clinicStaff, async (request, reply) => {
+    const result = await createWalkInBooking(request.auth!.sub, request.body);
+    return reply.status(201).send(result);
+  });
+
+  /** تأجيل جماعي: الطبيب تأخر فتُزاح مواعيد الفترة كلها */
+  app.post<{ Body: { doctorClinicId: string; sessionStart: string; minutes: number } }>(
+    "/clinic/me/shift",
+    clinicStaff,
+    async (request) => shiftSessionAppointments(request.auth!.sub, request.body),
+  );
+
+  app.post<{ Params: { id: string } }>("/clinic/me/appointments/:id/mark-paid", clinicStaff, async (request) => {
+    return markPaidManually(request.auth!.sub, request.params.id);
+  });
 
   // ── الحجوزات ──────────────────────────────────────────────────
   app.post<{

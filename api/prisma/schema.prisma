@@ -242,6 +242,11 @@ model Doctor {
   isPublished Boolean @default(true)
   isActive    Boolean @default(true)
 
+  /// متوسط التقييم وعدده — محسوبان عند كل تقييم جديد.
+  /// حسابهما لحظة كل بحث يعني تجميعاً على كل الحجوزات في كل طلب.
+  ratingAvg   Float @default(0)
+  ratingCount Int   @default(0)
+
   /// المالك الذي سجّل هذا الطبيب ومتى
   registeredByUserId String?
   registeredAt       DateTime @default(now())
@@ -253,6 +258,7 @@ model Doctor {
   specialties     DoctorSpecialty[]
   practices       DoctorClinic[]
   blockedPatients BlockedPatient[]
+  reviews         Review[]
 
   @@index([isPublished, isActive])
   @@map("doctors")
@@ -324,6 +330,9 @@ model DoctorClinic {
   bookingHorizonDays  Int         @default(14) /// إلى أي مدى مستقبلاً يُسمح بالحجز
   /// يتجاوز رقم واتساب الطبيب لهذا الموقع تحديداً — لعيادة لها سكرتير برقم خاص
   whatsappNumber      String?
+  /// عربون يُدفع لتثبيت الحجز. صفر = بلا عربون (الوضع الافتراضي).
+  /// يُخصم من أجرة الكشف عند الحضور، ولا يُسترد عند الغياب.
+  depositAmount       Int         @default(0)
   isActive            Boolean     @default(true)
   createdAt           DateTime    @default(now())
   updatedAt           DateTime    @updatedAt
@@ -453,6 +462,10 @@ model Appointment {
   patientNote   String?
   clinicNote    String?
 
+  /// حالة العربون — NOT_REQUIRED حين لا تطلب العيادة عربوناً
+  paymentStatus PaymentStatus @default(NOT_REQUIRED)
+  depositAmount Int           @default(0)
+
   confirmedAt  DateTime?
   arrivedAt    DateTime?
   completedAt  DateTime?
@@ -467,6 +480,7 @@ model Appointment {
   createdByStaff   StaffMember?      @relation("CreatedByStaff", fields: [createdByStaffId], references: [id])
   review           Review?
   notificationLogs NotificationLog[]
+  payments         Payment[]
 
   /// القيد الذي يمنع حجز نفس المكان مرتين
   @@unique([doctorClinicId, slotStart, queueNumber, lockKey])
@@ -476,17 +490,24 @@ model Appointment {
   @@map("appointments")
 }
 
-/// لا يقيّم إلا من حضر فعلاً — الشرط الوحيد الذي يحمي التقييمات من التزوير
+/// لا يقيّم إلا من حضر فعلاً — الشرط الوحيد الذي يحمي التقييمات من التزوير.
+/// القيد الفريد على الحجز يمنع تقييمين لنفس الزيارة.
 model Review {
   id            String   @id @default(uuid())
   appointmentId String   @unique
+  /// مكرَّر من الحجز عمداً: يجعل «تقييمات هذا الطبيب» استعلاماً مباشراً
+  /// بلا ربط عبر جدولين في كل مرة
+  doctorId      String
   rating        Int /// ١ إلى ٥
   comment       String?
+  /// التعليقات تُنشر بعد مراجعة المالك؛ الدرجة تُحتسب فوراً
   isPublished   Boolean  @default(false)
   createdAt     DateTime @default(now())
 
   appointment Appointment @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+  doctor      Doctor      @relation(fields: [doctorId], references: [id], onDelete: Cascade)
 
+  @@index([doctorId, createdAt])
   @@map("reviews")
 }
 
@@ -528,6 +549,41 @@ enum NotificationChannel {
   WHATSAPP
 }
 
+enum PaymentStatus {
+  NOT_REQUIRED /// لا عربون على هذه العيادة
+  PENDING /// بانتظار إتمام الدفع — الحجز محجوز مؤقتاً
+  PAID
+  FAILED
+  REFUNDED
+}
+
+/// عملية دفع عربون.
+/// مفصولة عن الحجز لأن المحاولة الواحدة قد تفشل وتُعاد، ونحتاج سجلاً لكل محاولة.
+model Payment {
+  id            String        @id @default(uuid())
+  appointmentId String
+  amount        Int
+  currency      String        @default("IQD")
+  /// اسم المزوّد: zaincash | fastpay | manual …
+  provider      String
+  status        PaymentStatus @default(PENDING)
+  /// معرّف العملية عند المزوّد، للمطابقة والاسترجاع
+  providerRef   String?
+  /// رابط يُحوَّل إليه المريض لإتمام الدفع
+  checkoutUrl   String?
+  error         String?
+  paidAt        DateTime?
+  refundedAt    DateTime?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  appointment Appointment @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+
+  @@index([appointmentId, createdAt])
+  @@index([status, createdAt])
+  @@map("payments")
+}
+
 /// سجل كل رسالة خارجة — إشعار، رسالة نصية، أو رسالة واتساب.
 /// وجودها كصفوف لا كنداءات مباشرة يسمح بإعادة المحاولة وبمعرفة ما وصل وما لم يصل.
 model NotificationLog {
@@ -553,6 +609,11 @@ model NotificationLog {
   user        User?        @relation(fields: [userId], references: [id], onDelete: Cascade)
   appointment Appointment? @relation(fields: [appointmentId], references: [id], onDelete: SetNull)
 
+  /// رسالة واحدة من كل نوع لكل حجز — يمنع إرسال تذكير مرتين لو تداخل
+  /// تشغيلان للمجدوِل، أو أُعيد تشغيل الخادم أثناء الإرسال.
+  /// الصفوف بلا حجز (appointmentId فارغ) لا يمسّها القيد لأن بوستغرس
+  /// يعتبر قيم NULL مختلفة.
+  @@unique([appointmentId, template])
   @@index([userId, createdAt])
   @@index([status, createdAt])
   @@index([appointmentId])

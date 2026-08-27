@@ -17,8 +17,9 @@
     "dev": "tsx watch src/server.ts",
     "start": "tsx src/server.ts",
     "verify:owner": "tsx scripts/verify-owner-and-whatsapp.ts",
-    "verify": "npm run typecheck && npm run verify:booking && npm run verify:owner && npm run verify:availability",
-    "verify:availability": "tsx scripts/verify-availability.ts"
+    "verify": "npm run typecheck && npm run verify:booking && npm run verify:owner && npm run verify:availability && npm run verify:features",
+    "verify:availability": "tsx scripts/verify-availability.ts",
+    "verify:features": "tsx scripts/verify-features.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed/index.ts"

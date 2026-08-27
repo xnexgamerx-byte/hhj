@@ -121,3 +121,50 @@ export function bookingCancelledMessage(
 
   return { templateName: "booking_cancelled", languageCode: "ar", params, body };
 }
+
+/**
+ * تذكير المريض قبل موعده. اسم القالب لدى ميتا: appointment_reminder
+ * وسائطه: متى (غداً/بعد ساعتين) · الطبيب · الموعد · العيادة · الرقم المرجعي
+ */
+export function patientReminderMessage(
+  booking: {
+    patientName: string;
+    doctorName: string;
+    clinicName: string;
+    landmark: string | null;
+    reference: string;
+    bookingMode: "SLOT" | "QUEUE";
+    slotStart: Date;
+    sessionStart: Date;
+    sessionEnd: Date;
+    queueNumber: number;
+  },
+  whenLabel: string,
+): WhatsAppMessage {
+  const when = describeAppointmentTime({
+    reference: booking.reference,
+    patientName: booking.patientName,
+    patientPhone: "",
+    clinicName: booking.clinicName,
+    bookingMode: booking.bookingMode,
+    slotStart: booking.slotStart,
+    sessionStart: booking.sessionStart,
+    sessionEnd: booking.sessionEnd,
+    queueNumber: booking.queueNumber,
+  });
+
+  const params = [whenLabel, booking.doctorName, when, booking.clinicName, booking.reference].map(sanitizeParam);
+
+  const lines = [
+    `⏰ تذكير: موعدك ${params[0]}`,
+    "",
+    `الطبيب: ${params[1]}`,
+    `الموعد: ${params[2]}`,
+    `العيادة: ${params[3]}`,
+  ];
+  if (booking.landmark) lines.push(`العنوان: ${sanitizeParam(booking.landmark)}`);
+  lines.push(`الرقم المرجعي: ${params[4]}`);
+  lines.push("", "إن تعذّر حضورك، ألغِ الحجز من التطبيق ليستفيد غيرك.");
+
+  return { templateName: "appointment_reminder", languageCode: "ar", params, body: lines.join("\n") };
+}

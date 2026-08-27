@@ -31,6 +31,11 @@ type QueueInput = {
   userId: string | null;
   appointmentId: string | null;
   to: string;
+  /**
+   * مفتاح منع التكرار: رسالة واحدة بهذا المفتاح لكل حجز.
+   * قد يختلف عن اسم القالب المعتمد لدى ميتا — تذكير اليوم وتذكير الساعتين
+   * مفتاحان مختلفان لكنهما يستعملان القالب نفسه.
+   */
   template: string;
   message: WhatsAppMessage;
 };
@@ -48,7 +53,12 @@ export async function queueWhatsApp(
       template: input.template,
       toAddress: input.to,
       renderedBody: input.message.body,
-      payload: { params: input.message.params, languageCode: input.message.languageCode },
+      payload: {
+        params: input.message.params,
+        languageCode: input.message.languageCode,
+        // اسم القالب لدى ميتا يُحفظ هنا لأن حقل template مفتاحُ منع تكرار لا اسمُ قالب
+        templateName: input.message.templateName,
+      },
       status: "QUEUED",
     },
     select: { id: true },
@@ -61,9 +71,9 @@ export async function deliver(logId: string, client: PrismaClient = defaultPrism
   const log = await client.notificationLog.findUnique({ where: { id: logId } });
   if (!log || log.status === "SENT" || !log.toAddress) return false;
 
-  const payload = (log.payload ?? {}) as { params?: string[]; languageCode?: string };
+  const payload = (log.payload ?? {}) as { params?: string[]; languageCode?: string; templateName?: string };
   const message: WhatsAppMessage = {
-    templateName: log.template,
+    templateName: payload.templateName ?? log.template,
     languageCode: payload.languageCode ?? "ar",
     params: payload.params ?? [],
     body: log.renderedBody ?? "",
