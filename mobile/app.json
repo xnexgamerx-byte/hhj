@@ -8,10 +8,10 @@
     "scheme": "mawid",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
-    "backgroundColor": "#F4F7F7",
+    "backgroundColor": "#F3F7F4",
     "splash": {
       "image": "./assets/splash-icon.png",
-      "backgroundColor": "#0A6C72",
+      "backgroundColor": "#0E5140",
       "resizeMode": "contain"
     },
     "ios": {
@@ -25,7 +25,7 @@
         "foregroundImage": "./assets/android-icon-foreground.png",
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png",
-        "backgroundColor": "#0A6C72"
+        "backgroundColor": "#0E5140"
       }
     },
     "web": {
@@ -45,7 +45,7 @@
           "image": "./assets/splash-icon.png",
           "imageWidth": 320,
           "resizeMode": "contain",
-          "backgroundColor": "#0A6C72"
+          "backgroundColor": "#0E5140"
         }
       ]
     ],

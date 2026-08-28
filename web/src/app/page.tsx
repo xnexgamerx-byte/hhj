@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { Header } from "@/components/Header";
 import { Card, EmptyState, Loading, Select } from "@/components/ui";
+import { SpecialtyIcon } from "@/components/SpecialtyIcon";
 import { api } from "@/lib/api";
 import { toArabic } from "@/lib/format";
 
@@ -11,13 +12,6 @@ type Governorate = { id: number; slug: string; nameAr: string };
 type Specialty = { id: number; slug: string; nameAr: string; nameEn: string; doctorCount: number };
 
 const GOVERNORATE_KEY = "mawid.governorate";
-
-/**
- * رمز بسيط لكل تخصص. حرف واحد أوضح من أيقونة غامضة، ولا يحتاج تحميل ملفات.
- */
-function specialtyMark(name: string): string {
-  return name.trim().charAt(0);
-}
 
 export default function HomePage() {
   const [governorates, setGovernorates] = useState<Governorate[]>([]);
@@ -118,11 +112,11 @@ export default function HomePage() {
                   style={{ background: "var(--surface)", border: "1px solid var(--line)" }}
                 >
                   <span
-                    className="grid place-items-center w-10 h-10 rounded-[11px] text-[18px] font-bold mb-3"
-                    style={{ background: "var(--primary-soft)", color: "var(--primary)", fontFamily: "var(--font-display)" }}
+                    className="grid place-items-center w-11 h-11 rounded-full mb-3"
+                    style={{ background: "var(--primary-soft)", color: "var(--primary)" }}
                     aria-hidden
                   >
-                    {specialtyMark(specialty.nameAr)}
+                    <SpecialtyIcon slug={specialty.slug} size={23} />
                   </span>
                   <span className="block text-[15px] font-semibold leading-snug">{specialty.nameAr}</span>
                   <span className="block text-[12.5px] mt-1 tnum" style={{ color: "var(--muted)" }}>

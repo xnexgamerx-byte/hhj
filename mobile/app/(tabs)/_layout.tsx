@@ -1,7 +1,8 @@
 import { Tabs } from "expo-router";
-import { Text, View, type ColorValue } from "react-native";
+import { View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { font, usePalette } from "@/theme";
+import { Icon } from "@/components/icons";
+import { font, radius, shadow, usePalette } from "@/theme";
 
 /**
  * تبويبان فقط: البحث والحجوزات.
@@ -23,15 +24,13 @@ export default function TabsLayout() {
         headerShown: false,
         tabBarActiveTintColor: palette.primary,
         tabBarInactiveTintColor: palette.faint,
-        // بلا ارتفاع ثابت: React Navigation يضيف المنطقة الآمنة من تلقائه،
-        // وتثبيت الارتفاع يلغيها فيقع الشريط تحت شريط الإيماءات في الآيفون
         tabBarStyle: {
           backgroundColor: palette.surface,
-          borderTopColor: palette.line,
-          borderTopWidth: 1,
+          borderTopWidth: 0,
           height: CONTENT_HEIGHT + insets.bottom,
-          paddingTop: 6,
+          paddingTop: 8,
           paddingBottom: insets.bottom + 6,
+          ...shadow(2, palette.shadowTint),
         },
         // ارتفاع السطر يتّسع لنزول الحروف العربية — «مواعيدي» تُقصّ بدونه
         tabBarLabelStyle: { fontFamily: font.semibold, fontSize: 12, lineHeight: 18, paddingBottom: 2 },
@@ -42,25 +41,43 @@ export default function TabsLayout() {
         name="index"
         options={{
           title: "احجز",
-          tabBarIcon: ({ color, focused }) => <TabGlyph glyph="⌕" color={color} focused={focused} />,
+          tabBarIcon: ({ focused }) => (
+            <TabIcon focused={focused}>
+              <Icon.search size={21} color={focused ? palette.primary : palette.faint} weight={focused ? 2.1 : 1.7} />
+            </TabIcon>
+          ),
         }}
       />
       <Tabs.Screen
         name="bookings"
         options={{
           title: "مواعيدي",
-          tabBarIcon: ({ color, focused }) => <TabGlyph glyph="◷" color={color} focused={focused} />,
+          tabBarIcon: ({ focused }) => (
+            <TabIcon focused={focused}>
+              <Icon.calendar size={21} color={focused ? palette.primary : palette.faint} weight={focused ? 2.1 : 1.7} />
+            </TabIcon>
+          ),
         }}
       />
     </Tabs>
   );
 }
 
-/** رمز نصي بدل مكتبة أيقونات — أخفّ، ويكفي لتبويبين. */
-function TabGlyph({ glyph, color, focused }: { glyph: string; color: ColorValue; focused: boolean }) {
+/** التبويب النشط يجلس على وسادة خضراء — أوضح من تغيير اللون وحده */
+function TabIcon({ focused, children }: { focused: boolean; children: React.ReactNode }) {
+  const palette = usePalette();
   return (
-    <View style={{ width: 24, height: 24, alignItems: "center", justifyContent: "center" }}>
-      <Text style={{ fontSize: focused ? 20 : 18, color, lineHeight: 24 }}>{glyph}</Text>
+    <View
+      style={{
+        width: 54,
+        height: 32,
+        borderRadius: radius.pill,
+        alignItems: "center",
+        justifyContent: "center",
+        backgroundColor: focused ? palette.primarySoft : "transparent",
+      }}
+    >
+      {children}
     </View>
   );
 }

@@ -2,7 +2,7 @@
  * يولّد أيقونات التطبيق وشاشة البداية والويب من تعريف واحد للهوية،
  * كي لا تتفرّق العلامة بين الحزمتين.
  *
- * العلامة: حرف «م» أبيض بخط IBM Plex Sans Arabic 700 فوق تدرّج فيروزي،
+ * العلامة: حرف «م» أبيض بخط IBM Plex Sans Arabic 700 فوق تدرّج زمرّدي،
  * والكلمة «موعد» بخط ريم كوفي 700 كما في واجهة الويب.
  *
  *   npx playwright install chromium   # مرّة واحدة
@@ -27,9 +27,10 @@ const PREVIEW = process.env.ICON_OUT_DIR ? path.resolve(process.env.ICON_OUT_DIR
 const dirs = { mobile: ASSETS, web: WEB_APP };
 
 // ── الهوية ───────────────────────────────────────────────────────────────────
-const TEAL_LIGHT = "#128F96";
-const TEAL = "#0A6C72";
-const TEAL_DEEP = "#064B50";
+// نفس درجات mobile/src/theme.ts — الأيقونة والتطبيق لون واحد
+const EMERALD_LIGHT = "#1A7C61";
+const EMERALD = "#0E5140";
+const EMERALD_DEEP = "#073328";
 const WHITE = "#FFFFFF";
 
 const SANS = path.join(ASSETS, "fonts", "IBMPlexSansArabic-700.ttf");
@@ -49,9 +50,9 @@ const ADAPTIVE_VISIBLE = 2 / 3;
 const gradient = (w, h) => `
   <defs>
     <linearGradient id="bg" x1="0" y1="0" x2="0.65" y2="1">
-      <stop offset="0" stop-color="${TEAL_LIGHT}"/>
-      <stop offset="0.55" stop-color="${TEAL}"/>
-      <stop offset="1" stop-color="${TEAL_DEEP}"/>
+      <stop offset="0" stop-color="${EMERALD_LIGHT}"/>
+      <stop offset="0.55" stop-color="${EMERALD}"/>
+      <stop offset="1" stop-color="${EMERALD_DEEP}"/>
     </linearGradient>
   </defs>
   <rect width="${w}" height="${h}" fill="url(#bg)"/>`;
@@ -109,7 +110,7 @@ const assets = [
   },
   {
     file: "splash-icon.png",
-    note: "شاشة البداية — العلامة والكلمة بالأبيض فوق خلفية فيروزية",
+    note: "شاشة البداية — العلامة والكلمة بالأبيض فوق خلفية زمرّدية",
     width: SPLASH, height: SPLASH, transparent: true,
     body: () =>
       fitted("م", { cx: SPLASH / 2, cy: 420, span: 230 }) +

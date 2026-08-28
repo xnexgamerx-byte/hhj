@@ -1,13 +1,15 @@
 import { useCallback, useEffect, useState } from "react";
-import { Alert as RNAlert, Linking, Modal, Pressable, ScrollView, View } from "react-native";
+import { Alert as RNAlert, Linking, Modal, Pressable, RefreshControl, ScrollView, View } from "react-native";
 import { useFocusEffect, useRouter } from "expo-router";
-import { Screen } from "@/components/Screen";
-import { Alert, Badge, Button, Card, EmptyState, Field, Input, Loading, Stars, T } from "@/components/ui";
+import { GradientHeader } from "@/components/GradientHeader";
+import { Icon } from "@/components/icons";
+import { Alert, Badge, Button, Card, EmptyState, Field, IconTile, Input, Loading, T } from "@/components/ui";
 import { api, clearSession, getSession, type Booking, type SessionUser } from "@/lib/api";
 import { formatClock, formatDay, formatFee, STATUS_LABELS, toArabic } from "@/lib/format";
 import { radius, space, usePalette } from "@/theme";
 
 export default function BookingsScreen() {
+  const palette = usePalette();
   const router = useRouter();
   const [user, setUser] = useState<SessionUser | null>(null);
   const [bookings, setBookings] = useState<Booking[] | null>(null);
@@ -55,15 +57,23 @@ export default function BookingsScreen() {
 
   if (!user || user.role !== "PATIENT") {
     return (
-      <Screen title="مواعيدي">
-        <Card>
-          <EmptyState
-            title="لم تسجّل الدخول بعد"
-            hint="تدخل تلقائياً برقم هاتفك عند أول حجز — بلا كلمة مرور."
-            action={<Button label="ابحث عن طبيب" onPress={() => router.replace("/")} />}
-          />
-        </Card>
-      </Screen>
+      <View style={{ flex: 1, backgroundColor: palette.bg }}>
+        <GradientHeader title="مواعيدي">
+          <T size={13.5} tone="onPrimary" style={{ opacity: 0.82 }}>
+            حجوزاتك كلها في مكان واحد
+          </T>
+        </GradientHeader>
+        <View style={{ padding: space(4) }}>
+          <Card>
+            <EmptyState
+              icon={(c, sz) => <Icon.user size={sz} color={c} />}
+              title="لم تسجّل الدخول بعد"
+              hint="تدخل تلقائياً برقم هاتفك عند أول حجز — بلا كلمة مرور."
+              action={<Button label="ابحث عن طبيب" onPress={() => router.replace("/")} />}
+            />
+          </Card>
+        </View>
+      </View>
     );
   }
 
@@ -71,22 +81,45 @@ export default function BookingsScreen() {
   const past = bookings?.filter((b) => !b.isUpcoming) ?? [];
 
   return (
-    <Screen
-      title="مواعيدي"
-      subtitle={user.fullName}
-      refreshing={refreshing}
-      onRefresh={() => {
-        setRefreshing(true);
-        load();
-        setTimeout(() => setRefreshing(false), 600);
-      }}
-    >
+    <View style={{ flex: 1, backgroundColor: palette.bg }}>
+      <GradientHeader title="مواعيدي">
+        <View style={{ flexDirection: "row", alignItems: "center", gap: space(3) }}>
+          <View style={{ flex: 1 }}>
+            <T size={13.5} tone="onPrimary" style={{ opacity: 0.82 }}>
+              {user.fullName}
+            </T>
+            <T size={15} weight="semibold" tone="onPrimary">
+              {upcoming.length > 0 ? `${toArabic(upcoming.length)} موعد قادم` : "لا مواعيد قادمة"}
+            </T>
+          </View>
+          <IconTile size={44} round bg="rgba(255,255,255,0.16)">
+            <Icon.calendar size={21} color="#FFFFFF" />
+          </IconTile>
+        </View>
+      </GradientHeader>
+
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={{ padding: space(4), paddingBottom: space(8), gap: space(5) }}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            tintColor={palette.primary}
+            onRefresh={() => {
+              setRefreshing(true);
+              load();
+              setTimeout(() => setRefreshing(false), 600);
+            }}
+          />
+        }
+      >
       {error ? <Alert message={error} /> : null}
       {bookings === null ? <Loading /> : null}
 
       {bookings?.length === 0 ? (
         <Card>
           <EmptyState
+            icon={(c, sz) => <Icon.calendar size={sz} color={c} />}
             title="لا توجد حجوزات بعد"
             hint="ابحث عن طبيب في محافظتك واحجز موعدك."
             action={<Button label="ابحث عن طبيب" onPress={() => router.replace("/")} />}
@@ -132,10 +165,12 @@ export default function BookingsScreen() {
         }}
       />
 
+      </ScrollView>
+
       {reviewing ? (
         <ReviewSheet booking={reviewing} onClose={() => setReviewing(null)} onDone={() => { setReviewing(null); load(); }} />
       ) : null}
-    </Screen>
+    </View>
   );
 }
 
@@ -179,9 +214,7 @@ function ReviewSheet({ booking, onClose, onDone }: { booking: Booking; onClose: 
             onPress={() => setRating(value)}
             hitSlop={6}
           >
-            <T size={34} align="center" style={{ color: value <= rating ? palette.accent : palette.lineStrong }}>
-              ★
-            </T>
+            <Icon.star size={36} filled={value <= rating} color={value <= rating ? palette.goldBright : palette.lineStrong} />
           </Pressable>
         ))}
       </View>
@@ -244,55 +277,89 @@ function BookingCard({
 
   return (
     <Card style={{ gap: space(3) }}>
-      <View style={{ flexDirection: "row", alignItems: "flex-start", gap: space(2) }}>
+      <View style={{ flexDirection: "row", alignItems: "flex-start", gap: space(3) }}>
+        <IconTile size={44} bg={palette.primaryTint}>
+          <Icon.user size={22} color={palette.primary} />
+        </IconTile>
         <View style={{ flex: 1, gap: 2 }}>
-          <T size={15.5} weight="bold">
+          <T size={15.5} weight="bold" numberOfLines={1}>
             {booking.doctorName}
           </T>
-          <T size={13} tone="muted">
+          <T size={13} tone="muted" numberOfLines={1}>
             {booking.clinicName}
           </T>
         </View>
         <Badge tone={status.tone} label={status.label} />
       </View>
 
-      <View style={{ borderTopWidth: 1, borderTopColor: palette.line, paddingTop: space(3), gap: space(1) }}>
-        <T size={14} weight="semibold" tone="primary">
+      {/* الموعد نفسه مبرَز: هو السبب الوحيد لفتح البطاقة */}
+      <View
+        style={{
+          flexDirection: "row",
+          alignItems: "center",
+          gap: space(2.5),
+          backgroundColor: palette.primaryTint,
+          borderRadius: radius.md,
+          paddingHorizontal: space(3.5),
+          paddingVertical: space(3),
+        }}
+      >
+        <Icon.calendar size={19} color={palette.primary} />
+        <T size={14} weight="semibold" tone="primary" style={{ flex: 1 }}>
           {formatDay(booking.sessionStart.slice(0, 10))} —{" "}
           {booking.bookingMode === "SLOT"
             ? formatClock(booking.slotStart)
             : `الدور ${toArabic(booking.queueNumber)} بين ${formatClock(booking.sessionStart)} و${formatClock(booking.sessionEnd)}`}
         </T>
-        <T size={13} tone="muted">
-          المريض: {booking.patientName}
+      </View>
+
+      <View style={{ gap: space(1.5) }}>
+        <Row icon={(c, sz) => <Icon.user size={sz} color={c} />} text={`المريض: ${booking.patientName}`} />
+        {booking.landmark ? <Row icon={(c, sz) => <Icon.pin size={sz} color={c} />} text={booking.landmark} /> : null}
+      </View>
+
+      {/* كعب التذكرة: الرقم المرجعي والسعر — الحدّ المتقطّع يوحي بأنه قابل للاقتطاع */}
+      <View
+        style={{
+          flexDirection: "row",
+          alignItems: "center",
+          gap: space(2),
+          borderTopWidth: 1.4,
+          borderTopColor: palette.line,
+          borderStyle: "dashed",
+          paddingTop: space(3),
+        }}
+      >
+        <Icon.ticket size={17} color={palette.gold} />
+        <T size={13.5} weight="bold">
+          {booking.reference}
         </T>
-        {booking.landmark ? (
-          <T size={13} tone="muted">
-            {booking.landmark}
-          </T>
-        ) : null}
-        <View style={{ flexDirection: "row", gap: space(3), marginTop: space(1) }}>
-          <T size={13} weight="bold">
-            {booking.reference}
-          </T>
-          <T size={13} tone="muted">
-            {formatFee(booking.feeAmount)}
-          </T>
-        </View>
+        <View style={{ flex: 1 }} />
+        <T size={13} tone="muted">
+          {formatFee(booking.feeAmount)}
+        </T>
       </View>
 
       {booking.canReview && onReview ? (
-        <Button label="قيّم هذه الزيارة" variant="outline" size="sm" full onPress={onReview} />
+        <Button
+          label="قيّم هذه الزيارة"
+          variant="gold"
+          size="sm"
+          full
+          icon={(c, sz) => <Icon.star size={sz} color={c} filled />}
+          onPress={onReview}
+        />
       ) : null}
 
       {onCancel || booking.clinicPhone ? (
         <View style={{ flexDirection: "row", gap: space(2) }}>
           {booking.clinicPhone ? (
             <Button
-              label="اتصال بالعيادة"
-              variant="outline"
+              label="اتصال"
+              variant="soft"
               size="sm"
               style={{ flex: 1 }}
+              icon={(c, sz) => <Icon.phone size={sz} color={c} />}
               onPress={() => Linking.openURL(`tel:${booking.clinicPhone}`)}
             />
           ) : null}
@@ -302,5 +369,18 @@ function BookingCard({
         </View>
       ) : null}
     </Card>
+  );
+}
+
+/** سطر أيقونة + نصّ — يتكرّر كثيراً في البطاقة */
+function Row({ icon, text }: { icon: (color: string, size: number) => React.ReactNode; text: string }) {
+  const palette = usePalette();
+  return (
+    <View style={{ flexDirection: "row", alignItems: "center", gap: space(2) }}>
+      {icon(palette.faint, 15)}
+      <T size={13} tone="muted" numberOfLines={1} style={{ flex: 1 }}>
+        {text}
+      </T>
+    </View>
   );
 }

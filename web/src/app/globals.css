@@ -3,7 +3,8 @@
 
 /* ───────────────────────────────────────────────────────────────
    نظام التصميم
-   فيروزي عميق للهوية، ومرجاني دافئ لأفعال الحجز.
+   زمرّدي عميق للهوية، وذهبي دافئ للتمييز (طبيب مميّز، تقييم، شارة).
+   نفس درجات تطبيق الجوال في mobile/src/theme.ts — لون واحد للمنتج كلّه.
    ألوان الحالة (متاح/محجوز/ملغى) منفصلة عن لون الهوية عمداً،
    وإلا اختلط «هذا زر أساسي» بـ«هذه الحالة سليمة».
    ─────────────────────────────────────────────────────────────── */
@@ -13,34 +14,34 @@
 }
 
 :root {
-  --bg: #f4f7f7;
+  --bg: #f3f7f4;
   --surface: #ffffff;
-  --surface-2: #eef3f3;
-  --surface-3: #e3ebeb;
-  --ink: #10201f;
-  --muted: #5b6b6a;
-  --faint: #849695;
-  --line: #dde5e5;
-  --line-strong: #c6d2d2;
+  --surface-2: #edf3ef;
+  --surface-3: #e0eae4;
+  --ink: #0c1f19;
+  --muted: #576b63;
+  --faint: #7f918a;
+  --line: #e3ebe6;
+  --line-strong: #c8d6cf;
 
-  --primary: #0a6c72;
-  --primary-hover: #085a5f;
-  --primary-soft: #e0efef;
+  --primary: #0e5140;
+  --primary-hover: #0a3f31;
+  --primary-soft: #e3efe9;
   --on-primary: #ffffff;
 
-  --accent: #d2542f;
-  --accent-hover: #b84624;
-  --accent-soft: #fbe9e3;
+  --accent: #8b6316;
+  --accent-hover: #6f4e10;
+  --accent-soft: #f8efda;
   --on-accent: #ffffff;
 
-  --ok: #1c7a52;
-  --ok-soft: #e2f2ea;
+  --ok: #186b49;
+  --ok-soft: #dff0e7;
   --warn: #9a6a10;
   --warn-soft: #fbefd9;
   --danger: #b03528;
   --danger-soft: #fbe6e3;
 
-  --ring: #0a6c72;
+  --ring: #0e5140;
   --shadow-sm: 0 1px 2px rgba(16, 32, 31, 0.05);
   --shadow: 0 1px 3px rgba(16, 32, 31, 0.06), 0 8px 24px -14px rgba(16, 32, 31, 0.22);
   --shadow-lg: 0 2px 6px rgba(16, 32, 31, 0.07), 0 20px 48px -20px rgba(16, 32, 31, 0.3);
@@ -48,34 +49,34 @@
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --bg: #0c1413;
-    --surface: #121c1b;
-    --surface-2: #182524;
-    --surface-3: #21302f;
-    --ink: #e6eeed;
-    --muted: #9aa9a8;
-    --faint: #7b8a89;
-    --line: #263433;
-    --line-strong: #364645;
+    --bg: #081310;
+    --surface: #0f1d18;
+    --surface-2: #152722;
+    --surface-3: #1e332c;
+    --ink: #e7efea;
+    --muted: #9baca5;
+    --faint: #7c8d87;
+    --line: #22352e;
+    --line-strong: #33473f;
 
-    --primary: #4fb3b8;
-    --primary-hover: #6bc4c8;
-    --primary-soft: #102a2c;
-    --on-primary: #06201f;
+    --primary: #3fa383;
+    --primary-hover: #4fb994;
+    --primary-soft: #12291f;
+    --on-primary: #04170f;
 
-    --accent: #f0805c;
-    --accent-hover: #f79575;
-    --accent-soft: #2c1810;
-    --on-accent: #2a1008;
+    --accent: #e7c069;
+    --accent-hover: #f0d18c;
+    --accent-soft: #2a2213;
+    --on-accent: #241a04;
 
-    --ok: #56c08d;
-    --ok-soft: #10261d;
+    --ok: #4fbb8b;
+    --ok-soft: #0f2a1f;
     --warn: #dfae54;
     --warn-soft: #2a2113;
     --danger: #ef8a7c;
     --danger-soft: #2c1714;
 
-    --ring: #4fb3b8;
+    --ring: #3fa383;
     --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
     --shadow: 0 1px 3px rgba(0, 0, 0, 0.4), 0 8px 24px -14px rgba(0, 0, 0, 0.7);
     --shadow-lg: 0 2px 6px rgba(0, 0, 0, 0.5), 0 20px 48px -20px rgba(0, 0, 0, 0.8);
@@ -83,34 +84,34 @@
 }
 
 [data-theme="dark"] {
-  --bg: #0c1413;
-  --surface: #121c1b;
-  --surface-2: #182524;
-  --surface-3: #21302f;
-  --ink: #e6eeed;
-  --muted: #9aa9a8;
-  --faint: #7b8a89;
-  --line: #263433;
-  --line-strong: #364645;
+  --bg: #081310;
+  --surface: #0f1d18;
+  --surface-2: #152722;
+  --surface-3: #1e332c;
+  --ink: #e7efea;
+  --muted: #9baca5;
+  --faint: #7c8d87;
+  --line: #22352e;
+  --line-strong: #33473f;
 
-  --primary: #4fb3b8;
-  --primary-hover: #6bc4c8;
-  --primary-soft: #102a2c;
-  --on-primary: #06201f;
+  --primary: #3fa383;
+  --primary-hover: #4fb994;
+  --primary-soft: #12291f;
+  --on-primary: #04170f;
 
-  --accent: #f0805c;
-  --accent-hover: #f79575;
-  --accent-soft: #2c1810;
-  --on-accent: #2a1008;
+  --accent: #e7c069;
+  --accent-hover: #f0d18c;
+  --accent-soft: #2a2213;
+  --on-accent: #241a04;
 
-  --ok: #56c08d;
-  --ok-soft: #10261d;
+  --ok: #4fbb8b;
+  --ok-soft: #0f2a1f;
   --warn: #dfae54;
   --warn-soft: #2a2113;
   --danger: #ef8a7c;
   --danger-soft: #2c1714;
 
-  --ring: #4fb3b8;
+  --ring: #3fa383;
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
   --shadow: 0 1px 3px rgba(0, 0, 0, 0.4), 0 8px 24px -14px rgba(0, 0, 0, 0.7);
   --shadow-lg: 0 2px 6px rgba(0, 0, 0, 0.5), 0 20px 48px -20px rgba(0, 0, 0, 0.8);

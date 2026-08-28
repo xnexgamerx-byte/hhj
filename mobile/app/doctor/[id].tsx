@@ -2,7 +2,9 @@ import { useCallback, useEffect, useState } from "react";
 import { Linking, Modal, Pressable, ScrollView, View } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { Screen } from "@/components/Screen";
-import { Alert, Badge, Button, Card, EmptyState, Field, Input, Loading, Stars, T } from "@/components/ui";
+import { GradientHeader } from "@/components/GradientHeader";
+import { Icon } from "@/components/icons";
+import { Alert, Badge, Button, Card, EmptyState, Field, IconTile, Input, Loading, Stars, T } from "@/components/ui";
 import {
   api,
   getSession,
@@ -15,7 +17,7 @@ import {
   type SessionUser,
 } from "@/lib/api";
 import { formatDay, formatFee, formatTimeLabel, toArabic, todayISO, WEEKDAYS } from "@/lib/format";
-import { radius, space, usePalette } from "@/theme";
+import { radius, shadow, space, usePalette } from "@/theme";
 
 type Chosen = { startAt: string; label: string; queue: number | null };
 
@@ -77,76 +79,114 @@ export default function DoctorScreen() {
 
   return (
     <>
-      <Screen title={`${profile.title} ${profile.fullName}`} subtitle={profile.specialties.join(" · ")} back>
-        {/* ── الهوية والسعر ── */}
-        <Card style={{ gap: space(3) }}>
-          <View style={{ flexDirection: "row", gap: space(3), alignItems: "center" }}>
-            <View
-              style={{
-                width: 56,
-                height: 56,
-                borderRadius: 28,
-                backgroundColor: palette.primarySoft,
-                alignItems: "center",
-                justifyContent: "center",
-              }}
-            >
-              <T size={22} weight="bold" tone="primary" align="center">
-                {profile.fullName.charAt(0)}
-              </T>
-            </View>
-            <View style={{ flex: 1, gap: space(2) }}>
-              <T size={18} weight="bold">
-                {profile.title} {profile.fullName}
-              </T>
-              {profile.ratingCount > 0 ? <Stars value={profile.ratingAvg} count={profile.ratingCount} size={14} /> : null}
-              <View style={{ flexDirection: "row", flexWrap: "wrap", gap: space(2) }}>
-                <Badge tone="primary" label={formatFee(practice.feeAmount)} />
-                {profile.yearsOfExperience ? (
-                  <Badge tone="muted" label={`خبرة ${toArabic(profile.yearsOfExperience)} سنة`} />
-                ) : null}
-                <Badge
-                  tone={practice.bookingMode === "QUEUE" ? "accent" : "muted"}
-                  label={
-                    practice.bookingMode === "QUEUE"
-                      ? "نظام أدوار"
-                      : `كشف ${toArabic(practice.slotMinutes)} دقيقة`
-                  }
-                />
+      <View style={{ flex: 1, backgroundColor: palette.bg }}>
+        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: space(10) }}>
+          {/* ── الترويسة البطلة ── */}
+          <GradientHeader back overlap={44}>
+            <View style={{ flexDirection: "row", gap: space(3.5), alignItems: "center" }}>
+              <View
+                style={{
+                  width: 72,
+                  height: 72,
+                  borderRadius: 36,
+                  backgroundColor: "rgba(255,255,255,0.18)",
+                  borderWidth: 2,
+                  borderColor: "rgba(255,255,255,0.25)",
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}
+              >
+                <T size={28} weight="bold" tone="onPrimary" align="center">
+                  {profile.fullName.charAt(0)}
+                </T>
+              </View>
+              <View style={{ flex: 1, gap: space(1) }}>
+                <T size={19} weight="bold" tone="onPrimary" numberOfLines={2}>
+                  {profile.title} {profile.fullName}
+                </T>
+                <T size={13} tone="onPrimary" style={{ opacity: 0.85 }} numberOfLines={2}>
+                  {profile.specialties.join(" · ")}
+                </T>
               </View>
             </View>
-          </View>
 
-          {profile.bio ? (
-            <T size={14} tone="muted">
-              {profile.bio}
-            </T>
-          ) : null}
-
-          <View style={{ borderTopWidth: 1, borderTopColor: palette.line, paddingTop: space(3), gap: 2 }}>
-            <T size={14} weight="semibold">
-              {practice.clinicName}
-            </T>
-            <T size={13} tone="muted">
-              {practice.governorate}، {practice.district}
-            </T>
-            {/* العلامة المميزة تُستعمل للوصول أكثر من الخريطة نفسها */}
-            {practice.landmark ? (
-              <T size={13} tone="muted">
-                {practice.landmark}
-              </T>
-            ) : null}
-            {practice.phone ? (
-              <Button
-                label="اتصال بالعيادة"
-                variant="outline"
-                size="sm"
-                style={{ marginTop: space(2) }}
-                onPress={() => Linking.openURL(`tel:${practice.phone}`)}
+            <View style={{ flexDirection: "row", flexWrap: "wrap", gap: space(2) }}>
+              {profile.ratingCount > 0 ? (
+                <View
+                  style={{
+                    flexDirection: "row",
+                    alignItems: "center",
+                    gap: 5,
+                    backgroundColor: "rgba(255,255,255,0.16)",
+                    borderRadius: radius.pill,
+                    paddingHorizontal: space(3),
+                    paddingVertical: space(1.5),
+                  }}
+                >
+                  <Icon.star size={14} color={palette.goldBright} filled />
+                  <T size={13} weight="bold" tone="onPrimary">
+                    {toArabic(profile.ratingAvg.toFixed(1))}
+                  </T>
+                  <T size={12} tone="onPrimary" style={{ opacity: 0.75 }}>
+                    ({toArabic(profile.ratingCount)})
+                  </T>
+                </View>
+              ) : (
+                <Badge label="طبيب جديد" tone="onDark" />
+              )}
+              <Badge label={formatFee(practice.feeAmount)} tone="onDark" />
+              {profile.yearsOfExperience ? (
+                <Badge label={`خبرة ${toArabic(profile.yearsOfExperience)} سنة`} tone="onDark" />
+              ) : null}
+              <Badge
+                label={
+                  practice.bookingMode === "QUEUE" ? "نظام أدوار" : `كشف ${toArabic(practice.slotMinutes)} دقيقة`
+                }
+                tone={practice.bookingMode === "QUEUE" ? "gold" : "onDark"}
+                solid={practice.bookingMode === "QUEUE"}
               />
-            ) : null}
-          </View>
-        </Card>
+            </View>
+          </GradientHeader>
+
+          <View style={{ marginTop: -44, paddingHorizontal: space(4), gap: space(5) }}>
+            {/* ── العيادة ── */}
+            <Card level={2} style={{ gap: space(3) }}>
+              {profile.bio ? (
+                <T size={14} tone="muted">
+                  {profile.bio}
+                </T>
+              ) : null}
+
+              <View style={{ flexDirection: "row", gap: space(3), alignItems: "flex-start" }}>
+                <IconTile size={40} bg={palette.primaryTint}>
+                  <Icon.pin size={20} color={palette.primary} />
+                </IconTile>
+                <View style={{ flex: 1, gap: 2 }}>
+                  <T size={14.5} weight="semibold">
+                    {practice.clinicName}
+                  </T>
+                  <T size={13} tone="muted">
+                    {practice.governorate}، {practice.district}
+                  </T>
+                  {/* العلامة المميزة تُستعمل للوصول أكثر من الخريطة نفسها */}
+                  {practice.landmark ? (
+                    <T size={13} tone="muted">
+                      {practice.landmark}
+                    </T>
+                  ) : null}
+                </View>
+              </View>
+
+              {practice.phone ? (
+                <Button
+                  label="اتصال بالعيادة"
+                  variant="soft"
+                  full
+                  icon={(c, sz) => <Icon.phone size={sz} color={c} />}
+                  onPress={() => Linking.openURL(`tel:${practice.phone}`)}
+                />
+              ) : null}
+            </Card>
 
         {/* ── أيام الدوام ── */}
         {practice.schedules.length > 0 ? (
@@ -240,7 +280,9 @@ export default function DoctorScreen() {
             ))}
           </View>
         ) : null}
-      </Screen>
+          </View>
+        </ScrollView>
+      </View>
 
       {chosen && day ? (
         <BookingSheet
@@ -274,7 +316,13 @@ function DayStrip({
   const palette = usePalette();
 
   return (
-    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: space(2) }}>
+    // يمتدّ إلى حافة الشاشة ليتّضح أن الشريط قابل للسحب
+    <ScrollView
+      horizontal
+      showsHorizontalScrollIndicator={false}
+      style={{ marginHorizontal: -space(4) }}
+      contentContainerStyle={{ gap: space(2), paddingHorizontal: space(4), paddingVertical: space(1) }}
+    >
       {days.map((day) => {
         const active = day.date === activeDate;
         const available = day.freeCount > 0;
@@ -350,19 +398,27 @@ function SessionBlock({
           accessibilityState={{ selected: active }}
           onPress={() => onPick(session.sessionStart, range, session.nextQueueNumber)}
           style={{
+            flexDirection: "row",
+            alignItems: "center",
+            gap: space(3),
             padding: space(4),
-            borderRadius: radius.lg,
-            backgroundColor: active ? palette.accent : palette.surface2,
-            borderWidth: 1,
-            borderColor: active ? palette.accent : palette.line,
+            borderRadius: radius.md,
+            backgroundColor: active ? palette.primary : palette.surface,
+            borderWidth: 1.4,
+            borderColor: active ? palette.primary : palette.line,
           }}
         >
-          <T size={15} weight="bold" tone={active ? "onAccent" : "ink"}>
+          <IconTile size={42} round bg={active ? "rgba(255,255,255,0.18)" : palette.primaryTint}>
+            <Icon.ticket size={21} color={active ? "#FFFFFF" : palette.primary} />
+          </IconTile>
+          <View style={{ flex: 1 }}>
+          <T size={15} weight="bold" tone={active ? "onPrimary" : "ink"}>
             دورك سيكون رقم {toArabic(session.nextQueueNumber)}
           </T>
-          <T size={13} tone={active ? "onAccent" : "muted"}>
+          <T size={13} tone={active ? "onPrimary" : "muted"}>
             تحضر ضمن الفترة {range} — بلا وقت محدد
           </T>
+          </View>
         </Pressable>
       </View>
     );
@@ -388,17 +444,18 @@ function SessionBlock({
               accessibilityState={{ selected: active }}
               onPress={() => onPick(slot.start, formatTimeLabel(slot.time), null)}
               style={{
-                minWidth: 88,
+                minWidth: 86,
                 flexGrow: 1,
-                paddingVertical: space(2.5),
+                paddingVertical: space(3),
                 borderRadius: radius.md,
                 alignItems: "center",
-                backgroundColor: active ? palette.accent : palette.surface2,
-                borderWidth: 1,
-                borderColor: active ? palette.accent : palette.line,
+                backgroundColor: active ? palette.primary : palette.surface,
+                borderWidth: 1.4,
+                borderColor: active ? palette.primary : palette.line,
+                ...(active ? shadow(1, palette.shadowTint) : null),
               }}
             >
-              <T size={14} weight="semibold" tone={active ? "onAccent" : "ink"} align="center">
+              <T size={14} weight="semibold" tone={active ? "onPrimary" : "ink"} align="center">
                 {formatTimeLabel(slot.time)}
               </T>
             </Pressable>
@@ -535,20 +592,9 @@ function BookingSheet({
         >
           {done ? (
             <View style={{ alignItems: "center", gap: space(2), paddingVertical: space(3) }}>
-              <View
-                style={{
-                  width: 56,
-                  height: 56,
-                  borderRadius: 28,
-                  backgroundColor: palette.okSoft,
-                  alignItems: "center",
-                  justifyContent: "center",
-                }}
-              >
-                <T size={26} tone="ok" align="center">
-                  ✓
-                </T>
-              </View>
+              <IconTile size={68} round bg={palette.okSoft}>
+                <Icon.checkCircle size={34} color={palette.ok} />
+              </IconTile>
               <T size={19} weight="bold" align="center">
                 تم تثبيت حجزك
               </T>
@@ -682,7 +728,7 @@ function BookingSheet({
 
                   <Button
                     label="تثبيت الحجز"
-                    variant="accent"
+                    variant="primary"
                     size="lg"
                     full
                     loading={busy}
