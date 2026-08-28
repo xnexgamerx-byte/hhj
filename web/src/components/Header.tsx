@@ -25,7 +25,9 @@ export function Header({ subtitle }: { subtitle?: string }) {
         <Link href="/" className="flex items-center gap-2 shrink-0">
           <span
             className="grid place-items-center w-8 h-8 rounded-[9px] text-[15px] font-bold"
-            style={{ background: "var(--primary)", color: "var(--on-primary)", fontFamily: "var(--font-display)" }}
+            // ريم كوفي جميل في الكلمة لكن حرف «م» وحده يذوب في هذا الحجم،
+            // فنستعمل خطّ النصّ ليطابق أيقونة التطبيق.
+            style={{ background: "var(--primary)", color: "var(--on-primary)", fontFamily: "var(--font-sans)" }}
           >
             م
           </span>

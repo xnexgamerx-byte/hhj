@@ -3,12 +3,14 @@
     "name": "موعد",
     "slug": "mawid",
     "version": "0.1.0",
+    "icon": "./assets/icon.png",
     "orientation": "portrait",
     "scheme": "mawid",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "backgroundColor": "#F4F7F7",
     "splash": {
+      "image": "./assets/splash-icon.png",
       "backgroundColor": "#0A6C72",
       "resizeMode": "contain"
     },
@@ -19,15 +21,34 @@
     "android": {
       "package": "iq.mawid.app",
       "edgeToEdgeEnabled": true,
-      "adaptiveIcon": { "backgroundColor": "#0A6C72" }
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png",
+        "backgroundColor": "#0A6C72"
+      }
     },
     "web": {
       "bundler": "metro",
       "output": "single",
+      "favicon": "./assets/favicon.png",
       "lang": "ar",
       "dir": "rtl"
     },
-    "plugins": ["expo-router", "expo-font", "expo-secure-store"],
+    "plugins": [
+      "expo-router",
+      "expo-font",
+      "expo-secure-store",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash-icon.png",
+          "imageWidth": 320,
+          "resizeMode": "contain",
+          "backgroundColor": "#0A6C72"
+        }
+      ]
+    ],
     "extra": {
       "apiUrl": "http://localhost:3000"
     }
