@@ -113,9 +113,6 @@ export default function DoctorScreen() {
                       : `كشف ${toArabic(practice.slotMinutes)} دقيقة`
                   }
                 />
-                {practice.depositAmount > 0 ? (
-                  <Badge tone="warn" label={`عربون ${formatFee(practice.depositAmount)}`} />
-                ) : null}
               </View>
             </View>
           </View>
@@ -253,7 +250,6 @@ export default function DoctorScreen() {
           date={day.date}
           chosen={chosen}
           cancelCutoffMinutes={practice.cancelCutoffMinutes}
-          depositAmount={practice.depositAmount}
           onClose={() => setChosen(null)}
           onBooked={() => {
             setChosen(null);
@@ -421,7 +417,6 @@ function BookingSheet({
   date,
   chosen,
   cancelCutoffMinutes,
-  depositAmount,
   onClose,
   onBooked,
 }: {
@@ -431,7 +426,6 @@ function BookingSheet({
   date: string;
   chosen: Chosen;
   cancelCutoffMinutes: number;
-  depositAmount: number;
   onClose: () => void;
   onBooked: () => void;
 }) {
@@ -444,9 +438,7 @@ function BookingSheet({
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [done, setDone] = useState<{ reference: string; queueNumber: number; status: string; depositAmount: number } | null>(
-    null,
-  );
+  const [done, setDone] = useState<{ reference: string; queueNumber: number } | null>(null);
 
   const [phone, setPhone] = useState("");
   const [fullName, setFullName] = useState("");
@@ -507,7 +499,7 @@ function BookingSheet({
     setBusy(true);
     setError(null);
     try {
-      const result = await api.post<{ reference: string; queueNumber: number; status: string; depositAmount: number }>("/bookings", {
+      const result = await api.post<{ reference: string; queueNumber: number }>("/bookings", {
         doctorClinicId: practiceId,
         patientId,
         startAt: chosen.startAt,
@@ -548,22 +540,20 @@ function BookingSheet({
                   width: 56,
                   height: 56,
                   borderRadius: 28,
-                  backgroundColor: done.status === "HELD" ? palette.warnSoft : palette.okSoft,
+                  backgroundColor: palette.okSoft,
                   alignItems: "center",
                   justifyContent: "center",
                 }}
               >
-                <T size={26} tone={done.status === "HELD" ? "warn" : "ok"} align="center">
-                  {done.status === "HELD" ? "⏳" : "✓"}
+                <T size={26} tone="ok" align="center">
+                  ✓
                 </T>
               </View>
               <T size={19} weight="bold" align="center">
-                {done.status === "HELD" ? "حُجز وقتك مؤقتاً" : "تم تثبيت حجزك"}
+                تم تثبيت حجزك
               </T>
               <T size={14} tone="muted" align="center">
-                {done.status === "HELD"
-                  ? `ادفع عربون ${formatFee(done.depositAmount)} خلال ربع ساعة من شاشة «مواعيدي» لتثبيت الحجز.`
-                  : "أرسلنا التفاصيل إلى الطبيب."}
+                أرسلنا التفاصيل إلى الطبيب.
               </T>
               <T size={26} weight="bold" tone="primary" align="center">
                 {done.reference}
@@ -578,8 +568,7 @@ function BookingSheet({
               ) : null}
               <View style={{ gap: space(2), alignSelf: "stretch", marginTop: space(3) }}>
                 <Button
-                  label={done.status === "HELD" ? "الذهاب للدفع" : "مواعيدي"}
-                  variant={done.status === "HELD" ? "accent" : "primary"}
+                  label="مواعيدي"
                   full
                   onPress={() => {
                     onBooked();
@@ -687,23 +676,12 @@ function BookingSheet({
                     />
                   </Field>
 
-                  {depositAmount > 0 ? (
-                    <View style={{ backgroundColor: palette.warnSoft, borderRadius: radius.md, padding: space(3) }}>
-                      <T size={13.5} weight="semibold" tone="warn">
-                        هذه العيادة تطلب عربون {formatFee(depositAmount)}
-                      </T>
-                      <T size={12.5} tone="warn">
-                        يُخصم من أجرة الكشف عند حضورك. يُحجز وقتك ربع ساعة لتدفعه.
-                      </T>
-                    </View>
-                  ) : null}
-
                   <T size={12.5} tone="faint">
                     يمكنك الإلغاء حتى {toArabic(Math.round(cancelCutoffMinutes / 60))} ساعة قبل الموعد.
                   </T>
 
                   <Button
-                    label={depositAmount > 0 ? "حجز ومتابعة للدفع" : "تثبيت الحجز"}
+                    label="تثبيت الحجز"
                     variant="accent"
                     size="lg"
                     full

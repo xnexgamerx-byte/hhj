@@ -179,7 +179,6 @@ export type DoctorCard = {
   practices: {
     id: string;
     feeAmount: number;
-    depositAmount: number;
     bookingMode: "SLOT" | "QUEUE";
     clinicName: string;
     landmark: string | null;
@@ -204,7 +203,6 @@ export type DoctorProfile = {
     bookingMode: "SLOT" | "QUEUE";
     slotMinutes: number;
     cancelCutoffMinutes: number;
-    depositAmount: number;
     clinicName: string;
     landmark: string | null;
     addressLine: string | null;
@@ -262,9 +260,6 @@ export type Booking = {
   landmark: string | null;
   clinicPhone: string | null;
   feeAmount: number;
-  paymentStatus: "NOT_REQUIRED" | "PENDING" | "PAID" | "FAILED" | "REFUNDED";
-  depositAmount: number;
-  holdExpiresAt: string | null;
   canReview: boolean;
 };
 
@@ -273,14 +268,4 @@ export type BookingResult = {
   reference: string;
   queueNumber: number;
   status: string;
-  depositAmount: number;
-  holdExpiresAt: string | null;
-};
-
-export type PaymentStart = {
-  paymentId: string;
-  amount: number;
-  checkoutUrl: string | null;
-  provider: string;
-  expiresAt: string | null;
 };

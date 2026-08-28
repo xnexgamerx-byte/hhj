@@ -125,6 +125,7 @@ model User {
   devices            Device[]
   notifications      NotificationLog[]
   auditEntries       AuditLog[]
+  settlements        Settlement[]
 
   @@index([role, isActive])
   @@map("users")
@@ -259,6 +260,7 @@ model Doctor {
   practices       DoctorClinic[]
   blockedPatients BlockedPatient[]
   reviews         Review[]
+  commissions     Commission[]
 
   @@index([isPublished, isActive])
   @@map("doctors")
@@ -303,6 +305,8 @@ model Clinic {
   area        Area?          @relation(fields: [areaId], references: [id])
   practices   DoctorClinic[]
   staff       StaffMember[]
+  commissions Commission[]
+  settlements Settlement[]
 
   @@index([governorateId, isActive])
   @@index([districtId, isActive])
@@ -330,9 +334,10 @@ model DoctorClinic {
   bookingHorizonDays  Int         @default(14) /// إلى أي مدى مستقبلاً يُسمح بالحجز
   /// يتجاوز رقم واتساب الطبيب لهذا الموقع تحديداً — لعيادة لها سكرتير برقم خاص
   whatsappNumber      String?
-  /// عربون يُدفع لتثبيت الحجز. صفر = بلا عربون (الوضع الافتراضي).
-  /// يُخصم من أجرة الكشف عند الحضور، ولا يُسترد عند الغياب.
-  depositAmount       Int         @default(0)
+  /// عمولة المنصة على كل مريض يحضر فعلاً عند هذا الطبيب في هذه العيادة.
+  /// صفر = بلا عمولة. تُستحق عند الحضور لا عند الحجز، فالعيادة لا تدفع عن
+  /// مريض لم يأتِ — وهذا ما يجعلها تقبل الاتفاق أصلاً.
+  commissionAmount    Int         @default(0)
   isActive            Boolean     @default(true)
   createdAt           DateTime    @default(now())
   updatedAt           DateTime    @updatedAt
@@ -344,6 +349,7 @@ model DoctorClinic {
   appointments Appointment[]
   staff        StaffMember[]
   waitlist     WaitlistEntry[]
+  commissions  Commission[]
 
   @@unique([doctorId, clinicId])
   @@index([clinicId, isActive])
@@ -462,10 +468,6 @@ model Appointment {
   patientNote   String?
   clinicNote    String?
 
-  /// حالة العربون — NOT_REQUIRED حين لا تطلب العيادة عربوناً
-  paymentStatus PaymentStatus @default(NOT_REQUIRED)
-  depositAmount Int           @default(0)
-
   confirmedAt  DateTime?
   arrivedAt    DateTime?
   completedAt  DateTime?
@@ -480,7 +482,7 @@ model Appointment {
   createdByStaff   StaffMember?      @relation("CreatedByStaff", fields: [createdByStaffId], references: [id])
   review           Review?
   notificationLogs NotificationLog[]
-  payments         Payment[]
+  commission       Commission?
 
   /// القيد الذي يمنع حجز نفس المكان مرتين
   @@unique([doctorClinicId, slotStart, queueNumber, lockKey])
@@ -549,39 +551,57 @@ enum NotificationChannel {
   WHATSAPP
 }
 
-enum PaymentStatus {
-  NOT_REQUIRED /// لا عربون على هذه العيادة
-  PENDING /// بانتظار إتمام الدفع — الحجز محجوز مؤقتاً
-  PAID
-  FAILED
-  REFUNDED
+enum CommissionStatus {
+  DUE /// مستحقة على العيادة ولم تُحصَّل بعد
+  SETTLED /// حُصِّلت ضمن تسوية
+  WAIVED /// أسقطها المالك
 }
 
-/// عملية دفع عربون.
-/// مفصولة عن الحجز لأن المحاولة الواحدة قد تفشل وتُعاد، ونحتاج سجلاً لكل محاولة.
-model Payment {
-  id            String        @id @default(uuid())
-  appointmentId String
-  amount        Int
-  currency      String        @default("IQD")
-  /// اسم المزوّد: zaincash | fastpay | manual …
-  provider      String
-  status        PaymentStatus @default(PENDING)
-  /// معرّف العملية عند المزوّد، للمطابقة والاسترجاع
-  providerRef   String?
-  /// رابط يُحوَّل إليه المريض لإتمام الدفع
-  checkoutUrl   String?
-  error         String?
-  paidAt        DateTime?
-  refundedAt    DateTime?
-  createdAt     DateTime      @default(now())
-  updatedAt     DateTime      @updatedAt
+/// عمولة على زيارة واحدة حضر فيها المريض فعلاً.
+/// صف لكل زيارة لا مجموعٌ محسوب: المالك يحتاج أن يبيّن للعيادة على أي مريض
+/// بالضبط يطالبها، وإلا صار كل حساب شهري خلافاً.
+model Commission {
+  id             String           @id @default(uuid())
+  appointmentId  String           @unique
+  doctorClinicId String
+  clinicId       String
+  doctorId       String
+  amount         Int
+  status         CommissionStatus @default(DUE)
+  /// لحظة حضور المريض — لا لحظة الحجز
+  earnedAt       DateTime
+  settlementId   String?
+  waivedReason   String?
+  createdAt      DateTime         @default(now())
 
-  appointment Appointment @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+  appointment  Appointment  @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+  doctorClinic DoctorClinic @relation(fields: [doctorClinicId], references: [id])
+  clinic       Clinic       @relation(fields: [clinicId], references: [id])
+  doctor       Doctor       @relation(fields: [doctorId], references: [id])
+  settlement   Settlement?  @relation(fields: [settlementId], references: [id])
 
-  @@index([appointmentId, createdAt])
-  @@index([status, createdAt])
-  @@map("payments")
+  @@index([clinicId, status])
+  @@index([status, earnedAt])
+  @@map("commissions")
+}
+
+/// واقعة تحصيل: المالك قبض مبلغاً من عيادة مقابل عمولات فترة.
+/// تسجيلها يجعل «ماذا قبضتُ ومتى ومقابل ماذا» سؤالاً له جواب واحد.
+model Settlement {
+  id                String   @id @default(uuid())
+  clinicId          String
+  amount            Int
+  count             Int /// عدد الزيارات المشمولة
+  note              String?
+  collectedByUserId String
+  createdAt         DateTime @default(now())
+
+  clinic      Clinic       @relation(fields: [clinicId], references: [id])
+  collectedBy User         @relation(fields: [collectedByUserId], references: [id])
+  commissions Commission[]
+
+  @@index([clinicId, createdAt])
+  @@map("settlements")
 }
 
 /// سجل كل رسالة خارجة — إشعار، رسالة نصية، أو رسالة واتساب.

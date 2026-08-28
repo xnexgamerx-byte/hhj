@@ -4,7 +4,6 @@ import { registerRoutes } from "./http/routes.js";
 import { errorHandler } from "./http/guard.js";
 import { prisma } from "./lib/prisma.js";
 import { getWhatsAppProvider } from "./notifications/dispatch.js";
-import { getPaymentProvider } from "./modules/payments/payments.service.js";
 import { startScheduler, stopScheduler } from "./scheduler.js";
 
 export async function buildServer() {
@@ -41,7 +40,6 @@ async function start() {
   try {
     await app.listen({ port, host: "0.0.0.0" });
     app.log.info(`مزوّد الواتساب: ${getWhatsAppProvider().name}`);
-    app.log.info(`مزوّد الدفع: ${getPaymentProvider().name}`);
 
     // المهام الدورية داخل الخادم. تُعطَّل عند التشغيل خلف عدة نسخ إن أُريد
     // فصلها في عامل مستقل — القيود في قاعدة البيانات تمنع الازدواج أصلاً.

@@ -240,62 +240,6 @@ if (todays.length > 0) {
   );
 }
 
-// ── العربون: طبيب منفصل تطلب عيادته عربوناً ──
-const depositDoctor = await callApi("/owner/doctors", {
-  method: "POST",
-  token: owner.accessToken,
-  body: {
-    fullName: `طبيب العربون ${stamp}`,
-    email: `dep.${stamp}@clinic.iq`,
-    whatsappNumber: "٠٧٧٠١٢٣٤٥٦٧",
-    specialtyIds: [specialties[0].id],
-  },
-});
-const depositClinic = await callApi("/owner/clinics", {
-  method: "POST",
-  token: owner.accessToken,
-  body: {
-    nameAr: `عيادة العربون ${stamp}`,
-    governorateId: governorates[0].id,
-    districtId: districts[0].id,
-    landmark: "مقابل مستشفى الاختبار",
-  },
-});
-await callApi(`/owner/doctors/${depositDoctor.doctorId}/practices`, {
-  method: "POST",
-  token: owner.accessToken,
-  body: {
-    clinicId: depositClinic.id,
-    feeAmount: 30000,
-    depositAmount: 10000,
-    bookingMode: "SLOT",
-    slotMinutes: 20,
-    schedules: [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({ weekday, startTime: "00:00", endTime: "23:59" })),
-  },
-});
-
-await page.goto(`${APP}/doctor/${depositDoctor.doctorId}`, { waitUntil: "networkidle" });
-await page.waitForTimeout(2800);
-check(
-  "ملف الطبيب يُظهر مبلغ العربون قبل الحجز",
-  await page.getByText(/عربون ١٠٬?٠٠٠|عربون ١٠,٠٠٠/).first().isVisible().catch(() => false),
-  "المريض يعرف بالعربون قبل أن يحجز لا بعده",
-);
-
-const depositSlots = page.getByRole("button").filter({ hasText: /^[٠-٩]+:[٠-٩]+ [صم]$/ });
-await depositSlots.nth(1).click();
-await page.waitForTimeout(900);
-await shot("m8-deposit");
-
-await page.getByRole("button", { name: "حجز ومتابعة للدفع" }).click();
-await page.waitForTimeout(3000);
-check(
-  "الحجز بعربون يُحجز مؤقتاً ويطالب بالدفع",
-  await page.getByText("حُجز وقتك مؤقتاً").isVisible().catch(() => false),
-  "الوقت محجوز ربع ساعة حتى يُدفع العربون",
-);
-await shot("m9-held");
-
 await browser.close();
 if (errors.length) console.log("\nأخطاء صفحات: " + errors.slice(0, 4).join(" | "));
 const passed = results.filter((r) => r.ok).length;

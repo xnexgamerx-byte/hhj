@@ -25,8 +25,6 @@ type Appointment = {
   id: string;
   reference: string;
   status: string;
-  paymentStatus: string;
-  depositAmount: number;
   bookingMode: "SLOT" | "QUEUE";
   queueNumber: number;
   slotStart: string;
@@ -207,24 +205,11 @@ function TodayTab({ context, practiceId }: { context: ClinicContext; practiceId:
   const active = visible.filter((row) => !row.status.startsWith("CANCELLED"));
   const attended = active.filter((row) => row.arrivedAt || row.status === "COMPLETED").length;
   const noShow = active.filter((row) => row.status === "NO_SHOW").length;
-  const awaitingDeposit = active.filter((row) => row.paymentStatus === "PENDING").length;
 
   async function mark(id: string, status: "CONFIRMED" | "NO_SHOW" | "COMPLETED") {
     setBusy(id);
     try {
       await api.patch(`/clinic/me/appointments/${id}/status`, { status });
-      load(date);
-    } catch (e) {
-      setError((e as Error).message);
-    } finally {
-      setBusy(null);
-    }
-  }
-
-  async function markPaid(id: string) {
-    setBusy(id);
-    try {
-      await api.post(`/clinic/me/appointments/${id}/mark-paid`, {});
       load(date);
     } catch (e) {
       setError((e as Error).message);
@@ -265,11 +250,10 @@ function TodayTab({ context, practiceId }: { context: ClinicContext; practiceId:
         )}
       </div>
 
-      <div className={`grid gap-3 mb-5 ${awaitingDeposit > 0 ? "grid-cols-2 sm:grid-cols-4" : "grid-cols-3"}`}>
+      <div className="grid gap-3 mb-5 grid-cols-3">
         <StatTile label="الحجوزات" value={statNumber(active.length)} />
         <StatTile label="حضروا" value={statNumber(attended)} tone="ok" />
         <StatTile label="لم يحضروا" value={statNumber(noShow)} tone="danger" />
-        {awaitingDeposit > 0 && <StatTile label="بانتظار العربون" value={statNumber(awaitingDeposit)} tone="warn" />}
       </div>
 
       {error && (
@@ -293,7 +277,6 @@ function TodayTab({ context, practiceId }: { context: ClinicContext; practiceId:
         {visible.map((row) => {
           const status = STATUS_LABELS[row.status] ?? { label: row.status, tone: "muted" as const };
           const cancelled = row.status.startsWith("CANCELLED");
-          const heldForDeposit = row.status === "HELD" || row.paymentStatus === "PENDING";
 
           return (
             <Card key={row.id} className={cancelled ? "opacity-60" : ""}>
@@ -312,9 +295,6 @@ function TodayTab({ context, practiceId }: { context: ClinicContext; practiceId:
                     <p className="text-[15.5px] font-bold">{row.patientName}</p>
                     <div className="flex gap-1.5 flex-wrap">
                       {row.isWalkIn && <Badge tone="muted">حجز يدوي</Badge>}
-                      {heldForDeposit && !cancelled && (
-                        <Badge tone="warn">عربون {toArabic(row.depositAmount.toLocaleString("en-US"))} غير مدفوع</Badge>
-                      )}
                       <Badge tone={status.tone}>{status.label}</Badge>
                     </div>
                   </div>
@@ -346,28 +326,20 @@ function TodayTab({ context, practiceId }: { context: ClinicContext; practiceId:
                           </Button>
                         </a>
                       )}
-                      {heldForDeposit ? (
-                        <Button variant="accent" size="sm" loading={busy === row.id} onClick={() => markPaid(row.id)}>
-                          قبضتُ العربون
-                        </Button>
-                      ) : (
-                        <>
-                          <Button
-                            variant={row.arrivedAt ? "outline" : "primary"}
-                            size="sm"
-                            loading={busy === row.id}
-                            onClick={() => mark(row.id, "CONFIRMED")}
-                          >
-                            حضر
-                          </Button>
-                          <Button variant="outline" size="sm" loading={busy === row.id} onClick={() => mark(row.id, "COMPLETED")}>
-                            تم الكشف
-                          </Button>
-                          <Button variant="danger" size="sm" loading={busy === row.id} onClick={() => mark(row.id, "NO_SHOW")}>
-                            لم يحضر
-                          </Button>
-                        </>
-                      )}
+                      <Button
+                        variant={row.arrivedAt ? "outline" : "primary"}
+                        size="sm"
+                        loading={busy === row.id}
+                        onClick={() => mark(row.id, "CONFIRMED")}
+                      >
+                        حضر
+                      </Button>
+                      <Button variant="outline" size="sm" loading={busy === row.id} onClick={() => mark(row.id, "COMPLETED")}>
+                        تم الكشف
+                      </Button>
+                      <Button variant="danger" size="sm" loading={busy === row.id} onClick={() => mark(row.id, "NO_SHOW")}>
+                        لم يحضر
+                      </Button>
                     </div>
                   )}
                 </div>

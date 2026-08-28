@@ -21,7 +21,6 @@ type Profile = {
     bookingMode: "SLOT" | "QUEUE";
     slotMinutes: number;
     cancelCutoffMinutes: number;
-    depositAmount: number;
     clinicName: string;
     landmark: string | null;
     addressLine: string | null;
@@ -149,7 +148,6 @@ export default function DoctorProfilePage() {
                 <Badge tone={practice.bookingMode === "QUEUE" ? "accent" : "muted"}>
                   {practice.bookingMode === "QUEUE" ? "نظام أدوار" : `كشف ${toArabic(practice.slotMinutes)} دقيقة`}
                 </Badge>
-                {practice.depositAmount > 0 && <Badge tone="warn">عربون {formatFee(practice.depositAmount)}</Badge>}
               </div>
             </div>
           </div>

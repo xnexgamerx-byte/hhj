@@ -11,7 +11,8 @@ import { hashPassword } from "../src/lib/password.js";
 import { AppError } from "../src/lib/errors.js";
 import { addDaysISO, zonedToUtc } from "../src/lib/timezone.js";
 import { getAvailability } from "../src/modules/availability/availability.service.js";
-import { setWeeklySchedule, addException, getMyAppointments } from "../src/modules/doctor/schedule.service.js";
+import { setWeeklySchedule, addException } from "../src/modules/doctor/schedule.service.js";
+import { getScopedAppointments } from "../src/modules/staff/staff.service.js";
 import { createBooking, cancelBooking } from "../src/modules/booking/booking.service.js";
 import { setWhatsAppProvider } from "../src/notifications/dispatch.js";
 import { ConsoleProvider } from "../src/notifications/whatsapp/provider.js";
@@ -292,7 +293,7 @@ async function main() {
   );
 
   // ── ١٠. لوحة الطبيب ترى مرضى اليوم ─────────────────────────────
-  const fridayList = await getMyAppointments(doctorUser.id, friday, prisma);
+  const fridayList = await getScopedAppointments(doctorUser.id, friday, prisma);
   check(
     "لوحة الطبيب تعرض مرضى اليوم بالترتيب",
     fridayList.length === 3 && fridayList[0].queueNumber === 1 && fridayList[0].patientName === "زينب كريم",

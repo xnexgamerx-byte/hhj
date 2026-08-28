@@ -12,7 +12,6 @@ import { badRequest, conflict, forbidden, notFound } from "../../lib/errors.js";
 import { notifyDoctorOfCancellation, notifyDoctorOfNewBooking } from "../../notifications/dispatch.js";
 import { getAvailability } from "../availability/availability.service.js";
 import { addDaysISO } from "../../lib/timezone.js";
-import { HOLD_MINUTES } from "../payments/payments.service.js";
 
 /** رقم مرجعي قصير يقرأه المريض للسكرتير — بلا أحرف متشابهة. */
 function generateReference(): string {
@@ -45,13 +44,9 @@ export type CreateBookingResult = {
   queueNumber: number;
   slotStart: Date;
   status: string;
-  /// أكبر من صفر ⇒ الحجز محجوز مؤقتاً حتى يُدفع العربون
-  depositAmount: number;
-  holdExpiresAt: string | null;
   whatsapp: { queued: boolean; delivered: boolean; reason?: string };
 };
 
-type PracticeSettings = { depositAmount: number; capacityPerSession: number };
 
 const isUniqueViolation = (error: unknown) =>
   error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002";
@@ -87,30 +82,20 @@ export async function createBooking(
   // مصدر الحقيقة لفترة الدوام هو جدول الطبيب، لا ما أرسله العميل
   const resolved = await resolveSession(input.doctorClinicId, input.startAt, practice.bookingMode, client);
 
-  // عيادة تطلب عرباً: يُحجز الوقت مؤقتاً بمهلة، ولا يتأكّد إلا بالدفع.
-  // بلا هذه المهلة يبقى الوقت مشغولاً بحجز لم يكتمل ويخسره مريض آخر.
-  const needsDeposit = practice.depositAmount > 0 && !input.createdByStaffId;
-  const status = needsDeposit ? "HELD" : practice.autoConfirm ? "CONFIRMED" : "PENDING";
-  const holdExpiresAt = needsDeposit ? new Date(Date.now() + HOLD_MINUTES * 60_000) : null;
+  const status = practice.autoConfirm ? "CONFIRMED" : "PENDING";
 
   const appointment =
     practice.bookingMode === "SLOT"
-      ? await createSlotBooking(input, resolved, status, practice, holdExpiresAt, client)
-      : await createQueueBooking(input, resolved, practice, status, holdExpiresAt, client);
+      ? await createSlotBooking(input, resolved, status, client)
+      : await createQueueBooking(input, resolved, practice.capacityPerSession, status, client);
 
-  // إشعار الطبيب يُؤجَّل حتى الدفع: حجز لم يُدفع عربونه قد لا يكتمل،
-  // وإرساله للطبيب الآن يعني رسالتين لكل حجز واحد.
-  let whatsapp: CreateBookingResult["whatsapp"] = {
-    queued: false,
-    delivered: false,
-    reason: needsDeposit ? "بانتظار دفع العربون" : undefined,
-  };
-  if (!needsDeposit) {
-    try {
-      whatsapp = await notifyDoctorOfNewBooking(appointment.id, client);
-    } catch (error) {
-      whatsapp = { queued: false, delivered: false, reason: (error as Error).message };
-    }
+  // بعد نجاح الحجز فقط: تحويل التفاصيل لواتساب الطبيب.
+  // أي فشل هنا لا يمس الحجز — يبقى في الطابور لإعادة المحاولة.
+  let whatsapp: CreateBookingResult["whatsapp"];
+  try {
+    whatsapp = await notifyDoctorOfNewBooking(appointment.id, client);
+  } catch (error) {
+    whatsapp = { queued: false, delivered: false, reason: (error as Error).message };
   }
 
   return {
@@ -119,8 +104,6 @@ export async function createBooking(
     queueNumber: appointment.queueNumber,
     slotStart: appointment.slotStart,
     status: appointment.status,
-    depositAmount: appointment.depositAmount,
-    holdExpiresAt: appointment.holdExpiresAt?.toISOString() ?? null,
     whatsapp,
   };
 }
@@ -180,9 +163,7 @@ async function resolveSession(
 async function createSlotBooking(
   input: CreateBookingInput,
   resolved: ResolvedSession,
-  status: "CONFIRMED" | "PENDING" | "HELD",
-  practice: PracticeSettings,
-  holdExpiresAt: Date | null,
+  status: "CONFIRMED" | "PENDING",
   client: PrismaClient,
 ) {
   try {
@@ -202,9 +183,6 @@ async function createSlotBooking(
         lockKey: true,
         patientNote: input.patientNote ?? null,
         confirmedAt: status === "CONFIRMED" ? new Date() : null,
-        depositAmount: practice.depositAmount,
-        paymentStatus: holdExpiresAt ? "PENDING" : "NOT_REQUIRED",
-        holdExpiresAt,
       },
     });
   } catch (error) {
@@ -223,12 +201,11 @@ async function createSlotBooking(
 async function createQueueBooking(
   input: CreateBookingInput,
   resolved: ResolvedSession,
-  practice: PracticeSettings,
-  status: "CONFIRMED" | "PENDING" | "HELD",
-  holdExpiresAt: Date | null,
+  fallbackCapacity: number,
+  status: "CONFIRMED" | "PENDING",
   client: PrismaClient,
 ) {
-  const capacity = resolved.capacity || practice.capacityPerSession;
+  const capacity = resolved.capacity || fallbackCapacity;
   const MAX_RETRIES = 10;
 
   for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
@@ -263,9 +240,6 @@ async function createQueueBooking(
           lockKey: true,
           patientNote: input.patientNote ?? null,
           confirmedAt: status === "CONFIRMED" ? new Date() : null,
-          depositAmount: practice.depositAmount,
-          paymentStatus: holdExpiresAt ? "PENDING" : "NOT_REQUIRED",
-          holdExpiresAt,
         },
       });
     } catch (error) {

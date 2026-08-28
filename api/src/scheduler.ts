@@ -29,35 +29,7 @@ const jobs: Job[] = [
     everyMs: 2 * MINUTE,
     run: async () => `أُرسل ${await flushPending(100)}`,
   },
-  {
-    name: "تحرير الحجوزات المؤقتة",
-    everyMs: MINUTE,
-    run: async () => `حُرِّر ${await releaseExpiredHolds()}`,
-  },
 ];
-
-/**
- * الحجز المؤقت أثناء الدفع يُحرَّر إن لم يُدفع في مهلته.
- * بدون هذا يبقى الوقت مشغولاً بحجز لم يكتمل، ويخسره مريض آخر.
- */
-export async function releaseExpiredHolds(): Promise<number> {
-  const expired = await prisma.appointment.findMany({
-    where: { status: "HELD", lockKey: true, holdExpiresAt: { lt: new Date() } },
-    select: { id: true },
-  });
-  if (expired.length === 0) return 0;
-
-  const result = await prisma.appointment.updateMany({
-    where: { id: { in: expired.map((a) => a.id) } },
-    data: {
-      status: "CANCELLED_BY_PATIENT",
-      lockKey: null, // يحرّر المكان لغيره مع بقاء الصف في السجل
-      cancelledAt: new Date(),
-      cancelReason: "انتهت مهلة الدفع",
-    },
-  });
-  return result.count;
-}
 
 let timers: ReturnType<typeof setInterval>[] = [];
 

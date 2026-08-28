@@ -12,6 +12,7 @@ import { normalizeIraqiPhone } from "../../lib/phone.js";
 import { badRequest, conflict, forbidden, notFound } from "../../lib/errors.js";
 import { createBooking } from "../booking/booking.service.js";
 import { resolveScope, assertOwns } from "./access.js";
+import { accrueCommission, reverseCommission } from "../commissions/commissions.service.js";
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 
@@ -284,8 +285,6 @@ export async function getScopedAppointments(
       id: appointment.id,
       reference: appointment.reference,
       status: appointment.status,
-      paymentStatus: appointment.paymentStatus,
-      depositAmount: appointment.depositAmount,
       bookingMode: appointment.bookingMode,
       queueNumber: appointment.queueNumber,
       slotStart: appointment.slotStart.toISOString(),
@@ -320,7 +319,7 @@ export async function setScopedAppointmentStatus(
   if (appointment.lockKey === null) throw badRequest("ALREADY_CANCELLED", "هذا الحجز ملغى");
 
   const now = new Date();
-  return client.appointment.update({
+  const updated = await client.appointment.update({
     where: { id: appointmentId },
     data: {
       status,
@@ -329,6 +328,17 @@ export async function setScopedAppointmentStatus(
     },
     select: { id: true, status: true },
   });
+
+  // العمولة تُستحق بالحضور: «حضر» و«تم الكشف» كلاهما حضور، و«لم يحضر»
+  // يُلغيها إن كان التأشير خطأً صُحِّح. القيد الفريد يمنع تسجيلها مرتين.
+  let commission = { created: false, amount: 0 };
+  if (status === "CONFIRMED" || status === "COMPLETED") {
+    commission = await accrueCommission(appointmentId, client);
+  } else if (status === "NO_SHOW") {
+    await reverseCommission(appointmentId, client);
+  }
+
+  return { ...updated, commission };
 }
 
 export { resolveScope, assertOwns };

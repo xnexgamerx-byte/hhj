@@ -130,8 +130,6 @@ export async function searchDoctors(search: DoctorSearch, client: PrismaClient =
         practices: doctor.practices.map((practice) => ({
           id: practice.id,
           feeAmount: practice.feeAmount,
-          // المريض يجب أن يعرف بالعربون قبل أن يحجز لا بعده
-          depositAmount: practice.depositAmount,
           bookingMode: practice.bookingMode,
           clinicName: practice.clinic.nameAr,
           landmark: practice.clinic.landmark,
@@ -191,7 +189,6 @@ export async function getDoctorProfile(doctorId: string, client: PrismaClient = 
     practices: doctor.practices.map((practice) => ({
       id: practice.id,
       feeAmount: practice.feeAmount,
-      depositAmount: practice.depositAmount,
       bookingMode: practice.bookingMode,
       slotMinutes: practice.slotMinutes,
       cancelCutoffMinutes: practice.cancelCutoffMinutes,
@@ -244,9 +241,6 @@ export async function getMyBookings(accountId: string, client: PrismaClient = de
     // حتى لو لم يمرّ وقتها بعد — وإلا لم يظهر للمريض زر تقييمها
     isUpcoming:
       b.lockKey === true && b.sessionEnd > now && b.status !== "COMPLETED" && b.status !== "NO_SHOW",
-    paymentStatus: b.paymentStatus,
-    depositAmount: b.depositAmount,
-    holdExpiresAt: b.holdExpiresAt?.toISOString() ?? null,
     canReview: b.status === "COMPLETED" && b.review === null,
     patientName: b.patient.fullName,
     doctorName: `${b.doctorClinic.doctor.title} ${b.doctorClinic.doctor.user.fullName}`,

@@ -15,9 +15,12 @@ import {
   setScopedAppointmentStatus,
   shiftSessionAppointments,
 } from "../src/modules/staff/staff.service.js";
-import { markPaidManually, setPaymentProvider, startPayment } from "../src/modules/payments/payments.service.js";
-import { ManualProvider } from "../src/modules/payments/provider.js";
-import { releaseExpiredHolds } from "../src/scheduler.js";
+import {
+  getCommissionSummary,
+  getDuesByClinic,
+  listSettlements,
+  settleClinic,
+} from "../src/modules/commissions/commissions.service.js";
 import { setWhatsAppProvider } from "../src/notifications/dispatch.js";
 import type { SendResult, WhatsAppProvider } from "../src/notifications/whatsapp/provider.js";
 import type { WhatsAppMessage } from "../src/notifications/whatsapp/templates.js";
@@ -44,10 +47,9 @@ class Recorder implements WhatsAppProvider {
 
 const recorder = new Recorder();
 setWhatsAppProvider(recorder);
-setPaymentProvider(new ManualProvider());
 
 /** يبني عيادة كاملة بجدول يغطي كل أيام الأسبوع */
-async function buildClinic(suffix: string, deposit = 0) {
+async function buildClinic(suffix: string, commission = 0) {
   const district = await prisma.district.findFirstOrThrow({ where: { slug: "karkh", governorate: { slug: "baghdad" } } });
   const specialty = await prisma.specialty.findFirstOrThrow({ where: { slug: "pediatrics" } });
 
@@ -65,7 +67,7 @@ async function buildClinic(suffix: string, deposit = 0) {
       doctorId: doctor.id,
       clinicId: clinic.id,
       feeAmount: 25000,
-      depositAmount: deposit,
+      commissionAmount: commission,
       bookingMode: "SLOT",
       slotMinutes: 20,
       bookingHorizonDays: 90,
@@ -276,50 +278,97 @@ async function main() {
     );
   }
 
-  // ═══ العربون ═════════════════════════════════════════════════
+  // ═══ العمولة ═════════════════════════════════════════════════
   {
-    const { practice } = await buildClinic(`p${suffix}`, 10000);
-    const { account, patient } = await buildPatient(`4${suffix.slice(1)}`);
-    recorder.sent.length = 0;
-
-    const booking = await createBooking(
-      { doctorClinicId: practice.id, patientId: patient.id, bookedByUserId: account.id, startAt: slotIn(6) },
-      prisma,
-    );
-    check(
-      "الحجز في عيادة تطلب عربوناً يُحجز مؤقتاً ولا يُشعَر الطبيب بعد",
-      booking.status === "HELD" && booking.depositAmount === 10000 && !booking.whatsapp.queued && !!booking.holdExpiresAt,
-      `الحالة ${booking.status} ومهلة الدفع حتى ${booking.holdExpiresAt?.slice(11, 16)} — والسبب: ${booking.whatsapp.reason}`,
-    );
-
-    const payment = await startPayment(account.id, booking.appointmentId, "http://localhost/my", prisma);
-    check("بدء الدفع ينشئ عملية بمبلغ العربون", payment.amount === 10000 && payment.provider === "manual");
-
-    await markPaidManually(account.id, booking.appointmentId, prisma);
-    const paid = await prisma.appointment.findUniqueOrThrow({ where: { id: booking.appointmentId } });
-    const notified = recorder.sent.some((m) => m.message.templateName === "new_booking");
-    check(
-      "دفع العربون يؤكّد الحجز ويرسل تفاصيله للطبيب",
-      paid.status === "CONFIRMED" && paid.paymentStatus === "PAID" && paid.holdExpiresAt === null && notified,
-      "الإشعار يُؤجَّل حتى الدفع فلا يصل الطبيب حجز لم يكتمل",
-    );
-
-    // حجز آخر لا يُدفع، ثم تنتهي مهلته
-    const stale = await createBooking(
-      { doctorClinicId: practice.id, patientId: patient.id, bookedByUserId: account.id, startAt: slotIn(7) },
-      prisma,
-    );
-    await prisma.appointment.update({
-      where: { id: stale.appointmentId },
-      data: { holdExpiresAt: new Date(Date.now() - 60_000) },
+    const owner = await prisma.user.create({
+      data: { email: `com.${suffix}@mawid.iq`, fullName: "مالك العمولات", role: "OWNER", passwordHash: await hashPassword("Owner12345") },
     });
-    const released = await releaseExpiredHolds();
-    const after = await prisma.appointment.findUniqueOrThrow({ where: { id: stale.appointmentId } });
-    check(
-      "الحجز غير المدفوع يُحرَّر بعد انتهاء مهلته",
-      released >= 1 && after.lockKey === null && after.cancelReason === "انتهت مهلة الدفع",
-      "الوقت عاد شاغراً لمريض آخر مع بقاء الصف في السجل",
+    const { practice, clinic } = await buildClinic(`c${suffix}`, 5000);
+    const { account, patient } = await buildPatient(`5${suffix.slice(1)}`);
+    const staff = await createStaffAccount(
+      owner.id,
+      { fullName: "سكرتير العمولات", email: `cs.${suffix}@clinic.iq`, clinicId: clinic.id },
+      prisma,
     );
+
+    const visit = await createBooking(
+      { doctorClinicId: practice.id, patientId: patient.id, bookedByUserId: account.id, startAt: slotIn(2) },
+      prisma,
+    );
+
+    const beforeArrival = await prisma.commission.count({ where: { appointmentId: visit.appointmentId } });
+    check(
+      "لا عمولة على حجز لم يحضر صاحبه بعد",
+      beforeArrival === 0,
+      "العيادة لا تدفع عن مريض لم يأتِ — وهذا ما يجعلها تقبل الاتفاق",
+    );
+
+    await setScopedAppointmentStatus(staff.userId, visit.appointmentId, "CONFIRMED", prisma);
+    const afterArrival = await prisma.commission.findFirst({ where: { appointmentId: visit.appointmentId } });
+    check(
+      "العمولة تُسجَّل لحظة تأشير الحضور",
+      afterArrival?.amount === 5000 && afterArrival.status === "DUE",
+      `${afterArrival?.amount} دينار مستحقة على العيادة`,
+    );
+
+    // «حضر» ثم «تم الكشف» نداءان متتاليان — يجب ألا يسجّلا عمولتين
+    await setScopedAppointmentStatus(staff.userId, visit.appointmentId, "COMPLETED", prisma);
+    const count = await prisma.commission.count({ where: { appointmentId: visit.appointmentId } });
+    check(
+      "تأشير الحضور ثم انتهاء الكشف لا يسجّل عمولتين",
+      count === 1,
+      "القيد الفريد على الزيارة يرفض الصف الثاني",
+    );
+
+    // تصحيح تأشير خاطئ يُلغي العمولة
+    await setScopedAppointmentStatus(staff.userId, visit.appointmentId, "NO_SHOW", prisma);
+    const afterReversal = await prisma.commission.count({ where: { appointmentId: visit.appointmentId } });
+    check("تصحيح التأشير إلى «لم يحضر» يُلغي العمولة", afterReversal === 0);
+
+    // زيارتان محسوبتان
+    await setScopedAppointmentStatus(staff.userId, visit.appointmentId, "CONFIRMED", prisma);
+    const second = await createBooking(
+      { doctorClinicId: practice.id, patientId: patient.id, bookedByUserId: account.id, startAt: slotIn(3) },
+      prisma,
+    );
+    await setScopedAppointmentStatus(staff.userId, second.appointmentId, "CONFIRMED", prisma);
+
+    const dues = await getDuesByClinic(prisma);
+    const mine = dues.find((row) => row.clinicId === clinic.id);
+    check(
+      "المالك يرى المستحق على كل عيادة مجمَّعاً",
+      mine?.visits === 2 && mine.amount === 10000,
+      `${mine?.clinicName}: ${mine?.visits} زيارة بـ${mine?.amount} دينار`,
+    );
+
+    const settlement = await settleClinic(owner.id, clinic.id, "تحصيل نقدي", prisma);
+    const afterSettle = await getDuesByClinic(prisma);
+    const settledRows = await prisma.commission.count({ where: { clinicId: clinic.id, status: "SETTLED" } });
+    check(
+      "تسجيل التحصيل يغلق عمولات العيادة دفعة واحدة",
+      settlement.amount === 10000 &&
+        settlement.count === 2 &&
+        settledRows === 2 &&
+        !afterSettle.some((row) => row.clinicId === clinic.id),
+      `قُبض ${settlement.amount} دينار عن ${settlement.count} زيارة، ولم يبقَ مستحق`,
+    );
+
+    const history = await listSettlements(prisma);
+    const summary = await getCommissionSummary(prisma);
+    check(
+      "سجل التحصيلات يحفظ ماذا قُبض ومتى ومن أي عيادة",
+      history.some((row) => row.id === settlement.settlementId && row.amount === 10000) &&
+        summary.collectedThisMonth >= 10000,
+      `${history.length} تحصيل مسجَّل، والمقبوض هذا الشهر ${summary.collectedThisMonth}`,
+    );
+
+    let nothingDue = "";
+    try {
+      await settleClinic(owner.id, clinic.id, null, prisma);
+    } catch (error) {
+      if (error instanceof AppError) nothingDue = error.code;
+    }
+    check("لا يُسجَّل تحصيل على عيادة بلا مستحقات", nothingDue === "NOTHING_DUE", `رُفض بالرمز ${nothingDue}`);
   }
 
   const failed = results.filter((r) => !r.passed);

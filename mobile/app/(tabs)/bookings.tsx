@@ -3,7 +3,7 @@ import { Alert as RNAlert, Linking, Modal, Pressable, ScrollView, View } from "r
 import { useFocusEffect, useRouter } from "expo-router";
 import { Screen } from "@/components/Screen";
 import { Alert, Badge, Button, Card, EmptyState, Field, Input, Loading, Stars, T } from "@/components/ui";
-import { api, clearSession, getSession, type Booking, type PaymentStart, type SessionUser } from "@/lib/api";
+import { api, clearSession, getSession, type Booking, type SessionUser } from "@/lib/api";
 import { formatClock, formatDay, formatFee, STATUS_LABELS, toArabic } from "@/lib/format";
 import { radius, space, usePalette } from "@/theme";
 
@@ -14,7 +14,6 @@ export default function BookingsScreen() {
   const [error, setError] = useState<string | null>(null);
   const [cancelling, setCancelling] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
-  const [paying, setPaying] = useState<Booking | null>(null);
   const [reviewing, setReviewing] = useState<Booking | null>(null);
 
   const load = useCallback(() => {
@@ -105,7 +104,6 @@ export default function BookingsScreen() {
               key={booking.id}
               booking={booking}
               onCancel={() => askCancel(booking)}
-              onPay={() => setPaying(booking)}
               onReview={() => setReviewing(booking)}
               cancelling={cancelling === booking.id}
             />
@@ -134,69 +132,10 @@ export default function BookingsScreen() {
         }}
       />
 
-      {paying ? <PaySheet booking={paying} onClose={() => setPaying(null)} onDone={() => { setPaying(null); load(); }} /> : null}
       {reviewing ? (
         <ReviewSheet booking={reviewing} onClose={() => setReviewing(null)} onDone={() => { setReviewing(null); load(); }} />
       ) : null}
     </Screen>
-  );
-}
-
-/** دفع العربون — أو تعليمات الدفع في العيادة حين لا توجد بوابة إلكترونية. */
-function PaySheet({ booking, onClose, onDone }: { booking: Booking; onClose: () => void; onDone: () => void }) {
-  const palette = usePalette();
-  const [payment, setPayment] = useState<PaymentStart | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(true);
-
-  useEffect(() => {
-    api
-      .post<PaymentStart>(`/bookings/${booking.id}/pay`, {})
-      .then(setPayment)
-      .catch((e) => setError((e as Error).message))
-      .finally(() => setBusy(false));
-  }, [booking.id]);
-
-  return (
-    <Sheet onClose={onClose}>
-      <T size={18} weight="bold">
-        دفع العربون
-      </T>
-      <View style={{ backgroundColor: palette.warnSoft, borderRadius: radius.lg, padding: space(4), gap: 2 }}>
-        <T size={15} weight="bold" tone="warn">
-          {formatFee(booking.depositAmount)}
-        </T>
-        <T size={13} tone="warn">
-          يُخصم من أجرة الكشف عند حضورك، ولا يُسترد عند الغياب.
-        </T>
-      </View>
-
-      {busy ? <Loading label="جارٍ التجهيز…" /> : null}
-      {error ? <Alert message={error} /> : null}
-
-      {payment && !payment.checkoutUrl ? (
-        <>
-          <T size={14} tone="muted">
-            الدفع الإلكتروني غير مفعّل بعد. ادفع العربون في العيادة وستؤشّره لك، أو اتصل بهم لتأكيد حجزك.
-          </T>
-          {booking.clinicPhone ? (
-            <Button label="اتصال بالعيادة" full onPress={() => Linking.openURL(`tel:${booking.clinicPhone}`)} />
-          ) : null}
-        </>
-      ) : null}
-
-      {payment?.checkoutUrl ? (
-        <Button
-          label="متابعة الدفع"
-          variant="accent"
-          size="lg"
-          full
-          onPress={() => Linking.openURL(payment.checkoutUrl!)}
-        />
-      ) : null}
-
-      <Button label="تم" variant="outline" full onPress={onDone} />
-    </Sheet>
   );
 }
 
@@ -292,19 +231,16 @@ function Sheet({ children, onClose }: { children: React.ReactNode; onClose: () =
 function BookingCard({
   booking,
   onCancel,
-  onPay,
   onReview,
   cancelling,
 }: {
   booking: Booking;
   onCancel?: () => void;
-  onPay?: () => void;
   onReview?: () => void;
   cancelling?: boolean;
 }) {
   const palette = usePalette();
   const status = STATUS_LABELS[booking.status] ?? { label: booking.status, tone: "muted" as const };
-  const awaitingDeposit = booking.paymentStatus === "PENDING" && booking.depositAmount > 0;
 
   return (
     <Card style={{ gap: space(3) }}>
@@ -317,7 +253,7 @@ function BookingCard({
             {booking.clinicName}
           </T>
         </View>
-        <Badge tone={awaitingDeposit ? "warn" : status.tone} label={awaitingDeposit ? "بانتظار العربون" : status.label} />
+        <Badge tone={status.tone} label={status.label} />
       </View>
 
       <View style={{ borderTopWidth: 1, borderTopColor: palette.line, paddingTop: space(3), gap: space(1) }}>
@@ -344,15 +280,6 @@ function BookingCard({
           </T>
         </View>
       </View>
-
-      {awaitingDeposit && onPay ? (
-        <View style={{ backgroundColor: palette.warnSoft, borderRadius: radius.md, padding: space(3), gap: space(2) }}>
-          <T size={13} tone="warn">
-            ادفع {formatFee(booking.depositAmount)} لتثبيت حجزك، وإلا حُرِّر وقتك لمريض آخر.
-          </T>
-          <Button label="دفع العربون" variant="accent" size="sm" full onPress={onPay} />
-        </View>
-      ) : null}
 
       {booking.canReview && onReview ? (
         <Button label="قيّم هذه الزيارة" variant="outline" size="sm" full onPress={onReview} />

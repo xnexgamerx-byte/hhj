@@ -30,7 +30,14 @@ import {
   setStaffActive,
   shiftSessionAppointments,
 } from "../modules/staff/staff.service.js";
-import { markPaidManually, refreshPayment, startPayment } from "../modules/payments/payments.service.js";
+import {
+  getClinicDues,
+  getCommissionSummary,
+  getDuesByClinic,
+  listSettlements,
+  settleClinic,
+  waiveCommission,
+} from "../modules/commissions/commissions.service.js";
 import { runReminders } from "../modules/reminders/reminders.service.js";
 import { getAvailability } from "../modules/availability/availability.service.js";
 import { getOwnerSummary } from "../modules/owner/summary.service.js";
@@ -45,11 +52,9 @@ import {
 import type { ScheduleEntry } from "../modules/doctor/schedule.service.js";
 import {
   addException,
-  getMyAppointments,
   getMyPractices,
   listExceptions,
   removeException,
-  setAppointmentStatus,
   setWeeklySchedule,
   updateBookingSettings,
 } from "../modules/doctor/schedule.service.js";
@@ -235,8 +240,8 @@ export async function registerRoutes(app: FastifyInstance) {
       capacityPerSession?: number;
       autoConfirm?: boolean;
       whatsappNumber?: string | null;
-      /** عربون يُدفع لتثبيت الحجز. صفر = بلا عربون. */
-      depositAmount?: number;
+      /** عمولة المنصة على كل مريض يحضر. صفر = بلا عمولة. */
+      commissionAmount?: number;
       schedules?: { weekday: number; startTime: string; endTime: string; capacity?: number }[];
     };
   }>("/owner/doctors/:id/practices", ownerOnly, async (request, reply) => {
@@ -250,7 +255,7 @@ export async function registerRoutes(app: FastifyInstance) {
         slotMinutes: body.slotMinutes ?? 15,
         capacityPerSession: body.capacityPerSession ?? 20,
         autoConfirm: body.autoConfirm ?? true,
-        depositAmount: Math.max(0, body.depositAmount ?? 0),
+        commissionAmount: Math.max(0, body.commissionAmount ?? 0),
         whatsappNumber: body.whatsappNumber ? normalizeIraqiPhone(body.whatsappNumber) : null,
         schedules: body.schedules?.length
           ? { create: body.schedules.map((s) => ({ ...s })) }
@@ -301,6 +306,34 @@ export async function registerRoutes(app: FastifyInstance) {
 
   /** تشغيل التذكيرات يدوياً — للتجربة وللتعافي بعد توقف */
   app.post("/owner/reminders/run", ownerOnly, async () => runReminders());
+
+  // ── العمولات ──
+  app.get("/owner/commissions", ownerOnly, async () => ({
+    summary: await getCommissionSummary(),
+    dues: await getDuesByClinic(),
+  }));
+
+  app.get<{ Params: { id: string } }>("/owner/commissions/clinics/:id", ownerOnly, async (request) => {
+    return getClinicDues(request.params.id);
+  });
+
+  /** تسجيل تحصيل من عيادة — يغلق عمولاتها المستحقة دفعة واحدة */
+  app.post<{ Params: { id: string }; Body: { note?: string } }>(
+    "/owner/commissions/clinics/:id/settle",
+    ownerOnly,
+    async (request) => settleClinic(request.auth!.sub, request.params.id, request.body?.note ?? null),
+  );
+
+  app.post<{ Params: { id: string }; Body: { reason: string } }>(
+    "/owner/commissions/:id/waive",
+    ownerOnly,
+    async (request, reply) => {
+      await waiveCommission(request.auth!.sub, request.params.id, request.body.reason);
+      return reply.status(204).send();
+    },
+  );
+
+  app.get("/owner/settlements", ownerOnly, async () => listSettlements());
 
   /** سجل رسائل الواتساب — ليرى المالك ما وصل وما لم يصل */
   app.get("/owner/notifications", ownerOnly, async () => {
@@ -386,19 +419,7 @@ export async function registerRoutes(app: FastifyInstance) {
     },
   );
 
-  /** بدء دفع عربون حجز محجوز مؤقتاً */
-  app.post<{ Params: { id: string }; Body: { returnUrl?: string } }>(
-    "/bookings/:id/pay",
-    { preHandler: requireRole("PATIENT") },
-    async (request) => {
-      const returnUrl = request.body?.returnUrl ?? `${process.env.WEB_ORIGIN ?? ""}/my`;
-      return startPayment(request.auth!.sub, request.params.id, returnUrl);
-    },
-  );
 
-  app.get<{ Params: { id: string } }>("/payments/:id", { preHandler: requireRole("PATIENT") }, async (request) => {
-    return refreshPayment(request.params.id);
-  });
 
   app.post<{ Body: { fullName: string; birthYear?: number; gender?: "MALE" | "FEMALE" } }>(
     "/me/patients",
@@ -461,19 +482,6 @@ export async function registerRoutes(app: FastifyInstance) {
     return reply.status(204).send();
   });
 
-  app.get<{ Querystring: { date?: string } }>("/doctor/me/appointments", doctorOnly, async (request) => {
-    const date = request.query.date ?? new Date().toISOString().slice(0, 10);
-    return getMyAppointments(request.auth!.sub, date);
-  });
-
-  app.patch<{ Params: { id: string }; Body: { status: "CONFIRMED" | "NO_SHOW" | "COMPLETED" } }>(
-    "/doctor/me/appointments/:id/status",
-    doctorOnly,
-    async (request) => {
-      return setAppointmentStatus(request.auth!.sub, request.params.id, request.body.status);
-    },
-  );
-
   // ── عمليات اليوم: الطبيب والسكرتير معاً ───────────────────────
   const clinicStaff = { preHandler: requireRole("DOCTOR", "STAFF") };
 
@@ -503,10 +511,6 @@ export async function registerRoutes(app: FastifyInstance) {
     clinicStaff,
     async (request) => shiftSessionAppointments(request.auth!.sub, request.body),
   );
-
-  app.post<{ Params: { id: string } }>("/clinic/me/appointments/:id/mark-paid", clinicStaff, async (request) => {
-    return markPaidManually(request.auth!.sub, request.params.id);
-  });
 
   // ── الحجوزات ──────────────────────────────────────────────────
   app.post<{

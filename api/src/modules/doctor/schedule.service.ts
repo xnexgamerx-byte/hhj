@@ -63,7 +63,7 @@ export async function getMyPractices(userId: string, client: PrismaClient = defa
     governorate: practice.clinic.governorate.nameAr,
     district: practice.clinic.district.nameAr,
     feeAmount: practice.feeAmount,
-    depositAmount: practice.depositAmount,
+    commissionAmount: practice.commissionAmount,
     bookingMode: practice.bookingMode,
     slotMinutes: practice.slotMinutes,
     capacityPerSession: practice.capacityPerSession,
@@ -164,7 +164,6 @@ export async function updateBookingSettings(
     cancelCutoffMinutes?: number;
     bookingHorizonDays?: number;
     feeAmount?: number;
-    depositAmount?: number;
   },
   client: PrismaClient = defaultPrisma,
 ) {
@@ -175,17 +174,6 @@ export async function updateBookingSettings(
   }
   if (settings.capacityPerSession !== undefined && settings.capacityPerSession < 1) {
     throw badRequest("INVALID_CAPACITY", "عدد المرضى في الفترة يجب أن يكون واحداً على الأقل");
-  }
-  if (settings.depositAmount !== undefined && settings.depositAmount < 0) {
-    throw badRequest("INVALID_DEPOSIT", "العربون لا يكون بالسالب");
-  }
-  if (
-    settings.depositAmount !== undefined &&
-    settings.feeAmount !== undefined &&
-    settings.depositAmount > settings.feeAmount
-  ) {
-    // العربون يُخصم من أجرة الكشف، فتجاوزه لها يعني دفع المريض أكثر من السعر
-    throw badRequest("DEPOSIT_ABOVE_FEE", "العربون لا يتجاوز أجرة الكشف");
   }
 
   await client.doctorClinic.update({ where: { id: practiceId }, data: settings });
@@ -251,97 +239,4 @@ export async function removeException(
   if (!exception) throw notFound("EXCEPTION_NOT_FOUND", "الاستثناء غير موجود");
   await ownedPractice(userId, exception.doctorClinicId, client);
   await client.scheduleException.delete({ where: { id: exceptionId } });
-}
-
-/** حجوزات الطبيب في يوم معيّن، مرتبة كما يستقبلهم. */
-export async function getMyAppointments(
-  userId: string,
-  dateISO: string,
-  client: PrismaClient = defaultPrisma,
-) {
-  const doctor = await client.doctor.findUnique({ where: { userId }, select: { id: true } });
-  if (!doctor) throw notFound("DOCTOR_NOT_FOUND", "لا يوجد ملف طبيب لهذا الحساب");
-
-  const dayStart = new Date(`${dateISO}T00:00:00.000Z`);
-  dayStart.setUTCHours(dayStart.getUTCHours() - 12);
-  const dayEnd = new Date(dayStart.getTime() + 48 * 3_600_000);
-
-  const appointments = await client.appointment.findMany({
-    where: {
-      doctorClinic: { doctorId: doctor.id },
-      sessionStart: { gte: dayStart, lt: dayEnd },
-    },
-    orderBy: [{ slotStart: "asc" }, { queueNumber: "asc" }],
-    include: {
-      patient: { select: { fullName: true, phone: true, birthYear: true, gender: true, account: { select: { phone: true } } } },
-      doctorClinic: { select: { clinic: { select: { nameAr: true, timezone: true } } } },
-    },
-  });
-
-  return appointments
-    .filter((a) => a.slotStart.toISOString().slice(0, 10) === dateISO || sameZonedDate(a, dateISO))
-    .map((a) => ({
-      id: a.id,
-      reference: a.reference,
-      status: a.status,
-      bookingMode: a.bookingMode,
-      queueNumber: a.queueNumber,
-      slotStart: a.slotStart.toISOString(),
-      sessionStart: a.sessionStart.toISOString(),
-      sessionEnd: a.sessionEnd.toISOString(),
-      patientName: a.patient.fullName,
-      patientPhone: a.patient.phone ?? a.patient.account.phone,
-      patientNote: a.patientNote,
-      clinicName: a.doctorClinic.clinic.nameAr,
-      arrivedAt: a.arrivedAt?.toISOString() ?? null,
-    }));
-}
-
-function sameZonedDate(
-  appointment: { slotStart: Date; doctorClinic: { clinic: { timezone: string } } },
-  dateISO: string,
-): boolean {
-  return (
-    new Intl.DateTimeFormat("en-CA", {
-      timeZone: appointment.doctorClinic.clinic.timezone,
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-    }).format(appointment.slotStart) === dateISO
-  );
-}
-
-const ALLOWED_STATUSES: AppointmentStatus[] = ["CONFIRMED", "NO_SHOW", "COMPLETED"];
-
-/** تأشير الحضور — هذه البيانات هي ما يبني سمعة المريض والطبيب معاً. */
-export async function setAppointmentStatus(
-  userId: string,
-  appointmentId: string,
-  status: AppointmentStatus,
-  client: PrismaClient = defaultPrisma,
-) {
-  if (!ALLOWED_STATUSES.includes(status)) {
-    throw badRequest("INVALID_STATUS", "حالة غير مسموحة. للإلغاء استعمل مسار الإلغاء");
-  }
-
-  const appointment = await client.appointment.findUnique({
-    where: { id: appointmentId },
-    include: { doctorClinic: { select: { doctor: { select: { userId: true } } } } },
-  });
-  if (!appointment) throw notFound("APPOINTMENT_NOT_FOUND", "الحجز غير موجود");
-  if (appointment.doctorClinic.doctor.userId !== userId) {
-    throw forbidden("NOT_YOUR_APPOINTMENT", "هذا الحجز لا يخصك");
-  }
-  if (appointment.lockKey === null) throw badRequest("ALREADY_CANCELLED", "هذا الحجز ملغى");
-
-  const now = new Date();
-  return client.appointment.update({
-    where: { id: appointmentId },
-    data: {
-      status,
-      arrivedAt: status === "CONFIRMED" ? (appointment.arrivedAt ?? now) : appointment.arrivedAt,
-      completedAt: status === "COMPLETED" ? now : null,
-    },
-    select: { id: true, status: true },
-  });
 }

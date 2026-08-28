@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { Header } from "@/components/Header";
 import { Alert, Badge, Button, Card, Dialog, EmptyState, Field, Input, Loading, SectionTitle, Select, StatTile } from "@/components/ui";
 import { api, getSession } from "@/lib/api";
-import { formatClock, formatDay, statNumber, toArabic } from "@/lib/format";
+import { formatClock, formatDay, formatFee, statNumber, toArabic, WEEKDAYS } from "@/lib/format";
 
 type Summary = {
   doctors: { total: number; active: number; awaitingFirstLogin: number; withoutWhatsApp: number; withoutSchedule: number };
@@ -41,7 +41,7 @@ type DoctorRow = {
   _count: { practices: number };
 };
 
-type Tab = "overview" | "doctors" | "staff" | "reviews" | "messages";
+type Tab = "overview" | "doctors" | "staff" | "commissions" | "reviews" | "messages";
 
 export default function OwnerDashboard() {
   const router = useRouter();
@@ -69,6 +69,7 @@ export default function OwnerDashboard() {
               ["overview", "نظرة عامة"],
               ["doctors", "الأطباء"],
               ["staff", "السكرتيرون"],
+              ["commissions", "العمولات"],
               ["reviews", "التقييمات"],
               ["messages", "رسائل الواتساب"],
             ] as [Tab, string][]
@@ -92,6 +93,7 @@ export default function OwnerDashboard() {
         {tab === "overview" && <OverviewTab />}
         {tab === "doctors" && <DoctorsTab />}
         {tab === "staff" && <StaffTab />}
+        {tab === "commissions" && <CommissionsTab />}
         {tab === "reviews" && <ReviewsTab />}
         {tab === "messages" && <MessagesTab />}
       </main>
@@ -298,6 +300,7 @@ function DoctorsTab() {
   const [rows, setRows] = useState<DoctorRow[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
+  const [linking, setLinking] = useState<DoctorRow | null>(null);
   const [created, setCreated] = useState<{ fullName: string; email: string; temporaryPassword: string } | null>(null);
 
   const load = useCallback(() => {
@@ -382,6 +385,9 @@ function DoctorsTab() {
             </div>
 
             <div className="flex gap-2 mt-3 flex-wrap">
+              <Button variant="accent" size="sm" onClick={() => setLinking(row)}>
+                {row._count.practices === 0 ? "إعداد العيادة" : "+ عيادة أخرى"}
+              </Button>
               <Button variant="outline" size="sm" onClick={() => resetPassword(row.id, row.user.fullName)}>
                 باسوورد جديد
               </Button>
@@ -407,7 +413,224 @@ function DoctorsTab() {
           }}
         />
       )}
+
+      {linking && (
+        <SetupClinicDialog
+          doctor={linking}
+          onClose={() => setLinking(null)}
+          onDone={() => {
+            setLinking(null);
+            load();
+          }}
+        />
+      )}
     </>
+  );
+}
+
+/**
+ * إعداد عيادة الطبيب: الموقع والسعر والعمولة والدوام في خطوة واحدة.
+ * فصلها إلى خطوات يترك أطباء نصف مُعدّين لا يستطيع أحد الحجز عندهم.
+ */
+function SetupClinicDialog({
+  doctor,
+  onClose,
+  onDone,
+}: {
+  doctor: DoctorRow;
+  onClose: () => void;
+  onDone: () => void;
+}) {
+  const [governorates, setGovernorates] = useState<{ id: number; nameAr: string }[]>([]);
+  const [districts, setDistricts] = useState<{ id: number; nameAr: string }[]>([]);
+  const [governorateId, setGovernorateId] = useState("");
+  const [districtId, setDistrictId] = useState("");
+  const [nameAr, setNameAr] = useState("");
+  const [landmark, setLandmark] = useState("");
+  const [phone, setPhone] = useState("");
+  const [feeAmount, setFeeAmount] = useState("25000");
+  const [commissionAmount, setCommissionAmount] = useState("2000");
+  const [bookingMode, setBookingMode] = useState<"SLOT" | "QUEUE">("QUEUE");
+  const [slotMinutes, setSlotMinutes] = useState(20);
+  const [capacity, setCapacity] = useState(20);
+  const [days, setDays] = useState<number[]>([0, 1, 2, 3, 4]);
+  const [startTime, setStartTime] = useState("16:00");
+  const [endTime, setEndTime] = useState("19:00");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    api.get<{ id: number; nameAr: string }[]>("/locations/governorates").then(setGovernorates).catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    if (!governorateId) return;
+    setDistrictId("");
+    api
+      .get<{ id: number; nameAr: string }[]>(`/locations/governorates/${governorateId}/districts`)
+      .then(setDistricts)
+      .catch(() => {});
+  }, [governorateId]);
+
+  async function submit() {
+    setBusy(true);
+    setError(null);
+    try {
+      const clinic = await api.post<{ id: string }>("/owner/clinics", {
+        nameAr,
+        governorateId: Number(governorateId),
+        districtId: Number(districtId),
+        landmark: landmark || undefined,
+        phone: phone || undefined,
+      });
+      await api.post(`/owner/doctors/${doctor.id}/practices`, {
+        clinicId: clinic.id,
+        feeAmount: Number(feeAmount),
+        commissionAmount: Number(commissionAmount),
+        bookingMode,
+        slotMinutes,
+        capacityPerSession: capacity,
+        schedules: days.map((weekday) => ({ weekday, startTime, endTime })),
+      });
+      onDone();
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Dialog
+      title={`إعداد عيادة ${doctor.title} ${doctor.user.fullName}`}
+      hint="الموقع والسعر والعمولة والدوام — يستطيع الطبيب تعديل دوامه لاحقاً من لوحته."
+      onClose={onClose}
+    >
+      {error && (
+        <div className="mb-3">
+          <Alert>{error}</Alert>
+        </div>
+      )}
+
+      <div className="grid gap-3">
+        <Field label="اسم العيادة">
+          <Input value={nameAr} onChange={(e) => setNameAr(e.target.value)} placeholder="عيادة النور" />
+        </Field>
+
+        <div className="grid grid-cols-2 gap-2">
+          <Field label="المحافظة">
+            <Select value={governorateId} onChange={(e) => setGovernorateId(e.target.value)}>
+              <option value="">اختر</option>
+              {governorates.map((g) => (
+                <option key={g.id} value={g.id}>
+                  {g.nameAr}
+                </option>
+              ))}
+            </Select>
+          </Field>
+          <Field label="القضاء">
+            <Select value={districtId} onChange={(e) => setDistrictId(e.target.value)} disabled={!governorateId}>
+              <option value="">اختر</option>
+              {districts.map((d) => (
+                <option key={d.id} value={d.id}>
+                  {d.nameAr}
+                </option>
+              ))}
+            </Select>
+          </Field>
+        </div>
+
+        <Field label="العلامة المميزة" hint="يصل بها المريض أكثر من الخريطة">
+          <Input value={landmark} onChange={(e) => setLandmark(e.target.value)} placeholder="مقابل مستشفى اليرموك" />
+        </Field>
+
+        <Field label="هاتف العيادة" hint="اختياري">
+          <Input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="07801112233" />
+        </Field>
+
+        <div className="grid grid-cols-2 gap-2">
+          <Field label="أجرة الكشف" hint="يدفعها المريض للعيادة">
+            <Input value={feeAmount} onChange={(e) => setFeeAmount(e.target.value)} type="number" className="tnum" />
+          </Field>
+          <Field label="عمولتك لكل مريض" hint="تُستحق عند الحضور">
+            <Input
+              value={commissionAmount}
+              onChange={(e) => setCommissionAmount(e.target.value)}
+              type="number"
+              className="tnum"
+            />
+          </Field>
+        </div>
+
+        <Field label="طريقة استقبال المرضى">
+          <Select value={bookingMode} onChange={(e) => setBookingMode(e.target.value as "SLOT" | "QUEUE")}>
+            <option value="QUEUE">رقم دور ضمن فترة</option>
+            <option value="SLOT">موعد بوقت محدد</option>
+          </Select>
+        </Field>
+
+        {bookingMode === "SLOT" ? (
+          <Field label="مدة الكشف">
+            <Select value={slotMinutes} onChange={(e) => setSlotMinutes(Number(e.target.value))}>
+              {[10, 15, 20, 30, 45, 60].map((m) => (
+                <option key={m} value={m}>
+                  {toArabic(m)} دقيقة
+                </option>
+              ))}
+            </Select>
+          </Field>
+        ) : (
+          <Field label="عدد المرضى في الفترة">
+            <Input value={capacity} onChange={(e) => setCapacity(Number(e.target.value))} type="number" className="tnum" />
+          </Field>
+        )}
+
+        <Field label="أيام الدوام">
+          <div className="flex flex-wrap gap-1.5">
+            {WEEKDAYS.map((name, weekday) => {
+              const on = days.includes(weekday);
+              return (
+                <button
+                  key={weekday}
+                  onClick={() => setDays((c) => (on ? c.filter((d) => d !== weekday) : [...c, weekday]))}
+                  className="px-2.5 py-1.5 rounded-[8px] text-[12.5px] font-semibold"
+                  style={{
+                    background: on ? "var(--primary)" : "var(--surface-2)",
+                    color: on ? "var(--on-primary)" : "var(--muted)",
+                    border: `1px solid ${on ? "var(--primary)" : "var(--line)"}`,
+                  }}
+                  aria-pressed={on}
+                >
+                  {name}
+                </button>
+              );
+            })}
+          </div>
+        </Field>
+
+        <div className="grid grid-cols-2 gap-2">
+          <Field label="من">
+            <Input value={startTime} onChange={(e) => setStartTime(e.target.value)} type="time" className="tnum" />
+          </Field>
+          <Field label="إلى">
+            <Input value={endTime} onChange={(e) => setEndTime(e.target.value)} type="time" className="tnum" />
+          </Field>
+        </div>
+
+        <Button
+          size="lg"
+          full
+          loading={busy}
+          disabled={!nameAr || !governorateId || !districtId || days.length === 0}
+          onClick={submit}
+        >
+          حفظ العيادة
+        </Button>
+        <Button variant="ghost" full onClick={onClose}>
+          إلغاء
+        </Button>
+      </div>
+    </Dialog>
   );
 }
 
@@ -771,6 +994,253 @@ function AddStaffDialog({
         </Button>
         <Button variant="ghost" full onClick={onClose}>
           إلغاء
+        </Button>
+      </div>
+    </Dialog>
+  );
+}
+
+/* ── العمولات ───────────────────────────────────────────────── */
+
+type CommissionData = {
+  summary: { dueAmount: number; dueVisits: number; collectedThisMonth: number; practicesWithoutRate: number };
+  dues: {
+    clinicId: string;
+    clinicName: string;
+    governorate: string;
+    phone: string | null;
+    visits: number;
+    amount: number;
+    firstVisitAt: string | null;
+    lastVisitAt: string | null;
+  }[];
+};
+
+type ClinicDue = {
+  id: string;
+  amount: number;
+  earnedAt: string;
+  reference: string;
+  patientName: string;
+  doctorName: string;
+};
+
+type SettlementRow = {
+  id: string;
+  clinicName: string;
+  governorate: string;
+  amount: number;
+  count: number;
+  note: string | null;
+  collectedBy: string;
+  createdAt: string;
+};
+
+function CommissionsTab() {
+  const [data, setData] = useState<CommissionData | null>(null);
+  const [history, setHistory] = useState<SettlementRow[]>([]);
+  const [detail, setDetail] = useState<CommissionData["dues"][number] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const load = useCallback(() => {
+    api.get<CommissionData>("/owner/commissions").then(setData).catch((e) => setError(e.message));
+    api.get<SettlementRow[]>("/owner/settlements").then(setHistory).catch(() => {});
+  }, []);
+  useEffect(load, [load]);
+
+  if (error) return <Alert>{error}</Alert>;
+  if (!data) return <Loading />;
+
+  return (
+    <>
+      <div className="grid gap-3 grid-cols-2 lg:grid-cols-4 mb-5">
+        <StatTile
+          label="المستحق على العيادات"
+          value={formatFee(data.summary.dueAmount)}
+          tone="accent"
+          sub={`${statNumber(data.summary.dueVisits)} زيارة`}
+        />
+        <StatTile label="المقبوض هذا الشهر" value={formatFee(data.summary.collectedThisMonth)} tone="ok" />
+        <StatTile label="عيادات لها مستحقات" value={statNumber(data.dues.length)} />
+        <StatTile
+          label="ممارسات بلا عمولة"
+          value={statNumber(data.summary.practicesWithoutRate)}
+          tone={data.summary.practicesWithoutRate > 0 ? "warn" : "muted"}
+          sub={data.summary.practicesWithoutRate > 0 ? "لن تُحتسب لها عمولة" : undefined}
+        />
+      </div>
+
+      <SectionTitle>المستحق على كل عيادة</SectionTitle>
+      {data.dues.length === 0 ? (
+        <Card>
+          <EmptyState
+            title="لا توجد عمولات مستحقة"
+            hint="تُسجَّل العمولة لحظة تأشير حضور المريض — لا عند الحجز."
+          />
+        </Card>
+      ) : (
+        <div className="grid gap-2.5 mb-8">
+          {data.dues.map((row) => (
+            <Card key={row.clinicId}>
+              <div className="flex items-start justify-between gap-3 flex-wrap">
+                <div className="min-w-0">
+                  <p className="text-[15.5px] font-bold">{row.clinicName}</p>
+                  <p className="text-[13px] mt-0.5" style={{ color: "var(--muted)" }}>
+                    {row.governorate} · {toArabic(row.visits)} زيارة
+                    {row.lastVisitAt && ` · آخرها ${formatDay(row.lastVisitAt.slice(0, 10))}`}
+                  </p>
+                </div>
+                <span className="text-[20px] font-bold tnum" style={{ color: "var(--accent)" }}>
+                  {formatFee(row.amount)}
+                </span>
+              </div>
+
+              <div className="flex gap-2 mt-3 flex-wrap">
+                <Button variant="outline" size="sm" onClick={() => setDetail(row)}>
+                  تفصيل الزيارات
+                </Button>
+                {row.phone && (
+                  <a href={`tel:${row.phone}`}>
+                    <Button variant="ghost" size="sm">
+                      اتصال بالعيادة
+                    </Button>
+                  </a>
+                )}
+              </div>
+            </Card>
+          ))}
+        </div>
+      )}
+
+      <SectionTitle>سجل التحصيلات</SectionTitle>
+      {history.length === 0 ? (
+        <Card>
+          <EmptyState title="لم تسجّل تحصيلاً بعد" hint="عند قبضك من عيادة، سجّله هنا ليُغلق مستحقّها." />
+        </Card>
+      ) : (
+        <Card padded={false}>
+          <div className="scroll-x">
+            <table className="w-full text-[13.5px] min-w-[520px]">
+              <thead>
+                <tr style={{ color: "var(--faint)", background: "var(--surface-2)" }}>
+                  <th className="text-start font-medium px-4 py-2.5">العيادة</th>
+                  <th className="text-start font-medium px-4 py-2.5">المبلغ</th>
+                  <th className="text-start font-medium px-4 py-2.5">الزيارات</th>
+                  <th className="text-start font-medium px-4 py-2.5">التاريخ</th>
+                </tr>
+              </thead>
+              <tbody>
+                {history.map((row) => (
+                  <tr key={row.id} style={{ borderTop: "1px solid var(--line)" }}>
+                    <td className="px-4 py-2.5 font-semibold">{row.clinicName}</td>
+                    <td className="px-4 py-2.5 tnum" style={{ color: "var(--ok)" }}>
+                      {formatFee(row.amount)}
+                    </td>
+                    <td className="px-4 py-2.5 tnum" style={{ color: "var(--muted)" }}>
+                      {toArabic(row.count)}
+                    </td>
+                    <td className="px-4 py-2.5 tnum" style={{ color: "var(--muted)" }}>
+                      {formatDay(row.createdAt.slice(0, 10))}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+      )}
+
+      {detail && (
+        <ClinicDuesDialog
+          clinic={detail}
+          onClose={() => setDetail(null)}
+          onSettled={() => {
+            setDetail(null);
+            load();
+          }}
+        />
+      )}
+    </>
+  );
+}
+
+function ClinicDuesDialog({
+  clinic,
+  onClose,
+  onSettled,
+}: {
+  clinic: CommissionData["dues"][number];
+  onClose: () => void;
+  onSettled: () => void;
+}) {
+  const [rows, setRows] = useState<ClinicDue[] | null>(null);
+  const [note, setNote] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    api
+      .get<ClinicDue[]>(`/owner/commissions/clinics/${clinic.clinicId}`)
+      .then(setRows)
+      .catch((e) => setError(e.message));
+  }, [clinic.clinicId]);
+
+  async function settle() {
+    if (!confirm(`تأكيد قبض ${formatFee(clinic.amount)} من ${clinic.clinicName}؟`)) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await api.post(`/owner/commissions/clinics/${clinic.clinicId}/settle`, { note: note.trim() || undefined });
+      onSettled();
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Dialog
+      title={clinic.clinicName}
+      hint={`${toArabic(clinic.visits)} زيارة · ${formatFee(clinic.amount)} مستحقة`}
+      onClose={onClose}
+    >
+      {error && (
+        <div className="mb-3">
+          <Alert>{error}</Alert>
+        </div>
+      )}
+
+      {rows === null ? (
+        <Loading />
+      ) : (
+        <div className="max-h-64 overflow-y-auto -mx-1 px-1 mb-4">
+          {/* تفصيل الزيارات: المالك يطالب العيادة بمريض بعينه لا بمبلغ مجمَّع */}
+          {rows.map((row) => (
+            <div key={row.id} className="py-2.5 text-[13px]" style={{ borderBottom: "1px solid var(--line)" }}>
+              <div className="flex items-center justify-between gap-2">
+                <span className="font-semibold">{row.patientName}</span>
+                <span className="tnum">{formatFee(row.amount)}</span>
+              </div>
+              <div className="flex items-center gap-2 mt-0.5" style={{ color: "var(--muted)" }}>
+                <span>{row.doctorName}</span>
+                <span className="tnum">· {formatDay(row.earnedAt.slice(0, 10))}</span>
+                <span className="tnum">· {row.reference}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div className="grid gap-3">
+        <Field label="ملاحظة على التحصيل" hint="اختياري — مثل «نقداً» أو «تحويل»">
+          <Input value={note} onChange={(e) => setNote(e.target.value)} placeholder="نقداً" />
+        </Field>
+        <Button variant="accent" size="lg" full loading={busy} onClick={settle}>
+          تسجيل قبض {formatFee(clinic.amount)}
+        </Button>
+        <Button variant="ghost" full onClick={onClose}>
+          إغلاق
         </Button>
       </div>
     </Dialog>
