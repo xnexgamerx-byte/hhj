@@ -1,5 +1,5 @@
 /**
- * التحقق من التذكيرات والتقييمات ولوحة السكرتير والعربون.
+ * التحقق من التذكيرات والتقييمات ولوحة السكرتير والعمولات.
  * التشغيل: npx tsx scripts/verify-features.ts
  */
 import { PrismaClient } from "@prisma/client";
@@ -21,6 +21,7 @@ import {
   listSettlements,
   settleClinic,
 } from "../src/modules/commissions/commissions.service.js";
+import { timeToMinutes, utcToZonedTime } from "../src/lib/timezone.js";
 import { setWhatsAppProvider } from "../src/notifications/dispatch.js";
 import type { SendResult, WhatsAppProvider } from "../src/notifications/whatsapp/provider.js";
 import type { WhatsAppMessage } from "../src/notifications/whatsapp/templates.js";
@@ -84,10 +85,22 @@ async function buildPatient(suffix: string, name = "علي حسن") {
   return { account, patient };
 }
 
-/** أقرب فترة متاحة على شبكة العشرين دقيقة، بعد ساعات محددة من الآن */
+const SLOT_MINUTES = 20;
+const DAY_END = timeToMinutes("23:59");
+
+/**
+ * أقرب فترة متاحة على شبكة العشرين دقيقة، بعد ساعات محددة من الآن.
+ *
+ * دوام العيادة الاختبارية ٠٠:٠٠–٢٣:٥٩، فالفترة التي تبدأ ٢٣:٤٠ لا تتّسع قبل
+ * منتصف الليل والمحرّك يستبعدها. نتخطّاها إلى أول فترة في اليوم التالي كي لا
+ * تتعلّق نتيجة الاختبار بالساعة التي شُغّل فيها.
+ */
 function slotIn(hours: number): Date {
   const at = new Date(Date.now() + hours * 3_600_000);
-  at.setUTCMinutes(Math.ceil(at.getUTCMinutes() / 20) * 20, 0, 0);
+  at.setUTCMinutes(Math.ceil(at.getUTCMinutes() / SLOT_MINUTES) * SLOT_MINUTES, 0, 0);
+  while (timeToMinutes(utcToZonedTime(at, TZ)) + SLOT_MINUTES > DAY_END) {
+    at.setUTCMinutes(at.getUTCMinutes() + SLOT_MINUTES);
+  }
   return at;
 }
 

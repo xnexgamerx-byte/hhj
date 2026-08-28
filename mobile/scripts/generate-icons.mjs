@@ -8,7 +8,8 @@
  *   npx playwright install chromium   # مرّة واحدة
  *   node scripts/generate-icons.mjs
  *
- * إن كان في الجهاز كروميوم جاهز فمرّره بـ CHROMIUM_PATH بدل تنزيل نسخة أخرى.
+ * إن كان في الجهاز كروميوم جاهز فمرّره بـ CHROME_PATH بدل تنزيل نسخة أخرى
+ * (نفس المتغيّر الذي تستعمله اختبارات المتصفّح).
  * يُشغَّل يدوياً عند تغيّر ألوان الهوية فقط، ونتائجه محفوظة في المستودع.
  */
 import { chromium } from "playwright";
@@ -137,7 +138,7 @@ const assets = [
 
 // ── التوليد ──────────────────────────────────────────────────────────────────
 const browser = await chromium.launch({
-  executablePath: process.env.CHROMIUM_PATH || undefined,
+  executablePath: process.env.CHROME_PATH || undefined,
 });
 const page = await browser.newPage();
 
