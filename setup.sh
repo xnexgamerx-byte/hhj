@@ -14,13 +14,11 @@ OWNER_GIVEN="${OWNER_EMAIL:-}${OWNER_PASSWORD:-}"
 OWNER_EMAIL="${OWNER_EMAIL:-owner@mawid.iq}"
 OWNER_PASSWORD="${OWNER_PASSWORD:-MawidOwner2026}"
 
+command -v node >/dev/null || die "لم أجد Node.js — ثبّته أولاً من nodejs.org"
+
 # الفحص قبل أي عمل: الباسوورد القصير كان يُكتشف بعد التنصيب والتعبئة كلّها،
-# فيضيع الوقت وتبقى القاعدة بلا حساب مالك.
-# العدّ ببايثون لا بـ${#var}: الأخيرة تعدّ البايتات في بعض الإعدادات، فباسوورد
-# عربي من خمسة أحرف يمرّ هنا ثم يرفضه الخادم الذي يعدّ الأحرف.
-PASS_LEN=$(OWNER_PASSWORD="$OWNER_PASSWORD" python3 -c 'import os; print(len(os.environ["OWNER_PASSWORD"]))')
-[ "$PASS_LEN" -ge 10 ] || die "OWNER_PASSWORD قصير: $PASS_LEN حرفاً، والمطلوب ١٠ على الأقل."
-case "$OWNER_EMAIL" in *@*.*) ;; *) die "OWNER_EMAIL لا يبدو إيميلاً: $OWNER_EMAIL" ;; esac
+# فيضيع الوقت وتبقى القاعدة بلا حساب مالك
+OWNER_EMAIL="$OWNER_EMAIL" OWNER_PASSWORD="$OWNER_PASSWORD" node api/scripts/setup-env.mjs --check || exit 1
 
 say "١/٥ · تشغيل قاعدة البيانات"
 if command -v docker >/dev/null && docker compose version >/dev/null 2>&1; then
@@ -40,48 +38,9 @@ fi
 
 say "٢/٥ · إعداد الخادم"
 cd api
-[ -f .env ] || {
-  cp .env.example .env
-  SECRET=$(openssl rand -base64 48 2>/dev/null || head -c 36 /dev/urandom | base64)
-  # sed -i يختلف بين لينكس وماك، فنكتب الملف بدلاً منه
-  python3 - "$SECRET" "$OWNER_EMAIL" "$OWNER_PASSWORD" <<'PY'
-import sys, pathlib
-secret, owner_email, owner_password = sys.argv[1], sys.argv[2], sys.argv[3]
-p = pathlib.Path(".env")
-lines = []
-for line in p.read_text(encoding="utf-8").splitlines():
-    if line.startswith("JWT_SECRET="):
-        line = f'JWT_SECRET="{secret}"'
-    elif line.startswith("DATABASE_URL="):
-        line = 'DATABASE_URL="postgresql://mawid:mawid@localhost:5432/mawid?schema=public"'
-    elif line.startswith("OWNER_EMAIL="):
-        line = f'OWNER_EMAIL="{owner_email}"'
-    elif line.startswith("OWNER_PASSWORD="):
-        line = f'OWNER_PASSWORD="{owner_password}"'
-    lines.append(line)
-p.write_text("\n".join(lines) + "\n", encoding="utf-8")
-PY
-  echo "أُنشئ api/.env بسر توقيع عشوائي — حساب المالك: $OWNER_EMAIL"
-}
-
-# ملف موجود من تشغيل سابق: نحدّث سطرَي المالك وحدهما إن مُرّرا صراحةً.
-# لا نلمس JWT_SECRET ولا DATABASE_URL كي لا تبطل الجلسات ولا يضيع الاتصال.
-if [ -n "$OWNER_GIVEN" ]; then
-  python3 - "$OWNER_EMAIL" "$OWNER_PASSWORD" <<'ENVFIX'
-import sys, pathlib
-email, password = sys.argv[1], sys.argv[2]
-path = pathlib.Path(".env")
-lines = []
-for line in path.read_text(encoding="utf-8").splitlines():
-    if line.startswith("OWNER_EMAIL="):
-        line = f'OWNER_EMAIL="{email}"'
-    elif line.startswith("OWNER_PASSWORD="):
-        line = f'OWNER_PASSWORD="{password}"'
-    lines.append(line)
-path.write_text("\n".join(lines) + "\n", encoding="utf-8")
-ENVFIX
-  echo "حُدِّث حساب المالك في api/.env: $OWNER_EMAIL"
-fi
+# إنشاء الملف أو تحديث سطرَي المالك — بالـNode كي يعمل على ويندوز أيضاً
+OWNER_EMAIL="$OWNER_EMAIL" OWNER_PASSWORD="$OWNER_PASSWORD" OWNER_GIVEN="$OWNER_GIVEN" \
+  node scripts/setup-env.mjs
 npm install --silent
 npm run db:push --silent
 npm run db:seed

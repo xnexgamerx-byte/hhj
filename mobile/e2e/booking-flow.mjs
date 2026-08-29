@@ -148,22 +148,37 @@ await page.getByRole("button", { name: "احجز موعد" }).click();
 await page.waitForTimeout(3000);
 await shot("m3b-book");
 
-// العدد المتوقّع من الخادم لا رقماً ثابتاً: شبّاك الدوام ٤–٧ مساءً، فتشغيل
-// الاختبار داخله يجعل بعض فتراته ماضية والعدد أقل من تسع
-const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Baghdad" }).format(new Date());
+// نختار الغد من التقويم صراحةً بدل الاعتماد على اليوم المختار تلقائياً:
+// شبّاك الدوام ٤–٧ مساءً، فتشغيل الاختبار داخله يترك اليوم بفترة أو فترتين،
+// أما الغد فشبّاكه كامل دائماً. وفي ذلك تغطية للتقويم الجديد أيضاً.
+const toArabic = (value) => String(value).replace(/\d/g, (d) => "٠١٢٣٤٥٦٧٨٩"[Number(d)]);
+const clinicDate = (offset) =>
+  new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Baghdad" }).format(new Date(Date.now() + offset * 86_400_000));
+
+const today = clinicDate(0);
+const tomorrow = clinicDate(1);
 const availability = await callApi(`/practices/${practice.id}/availability?from=${today}`);
-const firstOpen = availability.find((d) => d.freeCount > 0);
-const expected = firstOpen ? firstOpen.sessions.reduce((n, session) => n + session.slots.length, 0) : 0;
+const target = availability.find((d) => d.date === tomorrow);
+const expected = target ? target.sessions.reduce((n, session) => n + session.slots.length, 0) : 0;
+
+// لو وقع الغد في شهر تالٍ فالتقويم يعرض الشهر الحالي، فننتقل خطوة
+if (tomorrow.slice(0, 7) !== today.slice(0, 7)) {
+  await page.getByRole("button", { name: "الشهر التالي" }).click();
+  await page.waitForTimeout(800);
+}
+const dayNumber = toArabic(Number(tomorrow.slice(8, 10)));
+await page.getByRole("button", { name: new RegExp(`^${dayNumber}\\s`) }).first().click();
+await page.waitForTimeout(1500);
 
 const slots = page.getByRole("button").filter({ hasText: /^[٠-٩]+:[٠-٩]+ [صم]$/ });
 const before = await slots.count();
 check(
-  "شبكة الأوقات تعرض ما يقوله الخادم من فترات شاغرة",
+  "التقويم يفتح الغد وشبكة الأوقات تطابق ما يقوله الخادم",
   before === expected && before > 2,
-  `${before} فترة، والخادم يقول ${expected} ليوم ${firstOpen?.date ?? "—"}`,
+  `${before} فترة، والخادم يقول ${expected} ليوم ${tomorrow}`,
 );
 
-const target = (await slots.nth(2).textContent()).trim();
+const pickedLabel = (await slots.nth(2).textContent()).trim();
 await slots.nth(2).click();
 await page.waitForTimeout(800);
 
@@ -190,11 +205,11 @@ await shot("m5-done");
 await page.getByRole("button", { name: "إغلاق", exact: true }).click();
 await page.waitForTimeout(3000);
 const after = await slots.count();
-const still = await slots.filter({ hasText: target }).count();
+const still = await slots.filter({ hasText: pickedLabel }).count();
 check(
   "الوقت المحجوز يختفي فوراً من التطبيق",
   after === before - 1 && still === 0,
-  `كانت ${before} فترة وصارت ${after} — والفترة ${target} لم تعد معروضة`,
+  `كانت ${before} فترة وصارت ${after} — والفترة ${pickedLabel} لم تعد معروضة`,
 );
 
 await page.goto(`${APP}/bookings`, { waitUntil: "networkidle" });

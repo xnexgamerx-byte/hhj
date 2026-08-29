@@ -44,7 +44,13 @@ export default function BookScreen() {
       .get<Day[]>(`/practices/${p}/availability?from=${todayISO()}`)
       .then((data) => {
         setDays(data);
-        setActiveDate(data.find((d) => d.freeCount > 0)?.date ?? data[0]?.date ?? null);
+        // نحفظ اليوم الذي اختاره المريض عبر إعادة التحميل بعد الحجز؛ القفز إلى
+        // أول يوم فيه أماكن كان يبدّل الشاشة تحت يده بلا سبب
+        setActiveDate((current) =>
+          current && data.some((d) => d.date === current)
+            ? current
+            : (data.find((d) => d.freeCount > 0)?.date ?? data[0]?.date ?? null),
+        );
       })
       .catch((e) => setError(e.message));
   }, []);

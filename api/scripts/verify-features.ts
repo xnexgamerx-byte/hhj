@@ -110,7 +110,8 @@ async function main() {
   // ═══ التذكيرات ═══════════════════════════════════════════════
   {
     const { practice } = await buildClinic(`r${suffix}`);
-    const { account, patient } = await buildPatient(`1${suffix.slice(1)}`);
+    const phone = `1${suffix.slice(1)}`;
+    const { account, patient } = await buildPatient(phone);
 
     const startAt = slotIn(24);
     await createBooking(
@@ -121,11 +122,15 @@ async function main() {
 
     // نُشغّل المجدوِل كأن الآن قبل الموعد بأربع وعشرين ساعة
     const first = await runReminders(new Date(startAt.getTime() - 24 * 3_600_000), prisma);
-    const reminder = recorder.sent.find((m) => m.message.templateName === "appointment_reminder");
+    // نعدّ تذكيرات هذا المريض وحده: العدّاد العام يشمل حجوزات تشغيلات سابقة
+    // تقع في نفس نافذة العشر دقائق، فيسقط الاختبار على قاعدة فيها بيانات
+    const mine = recorder.sent.filter(
+      (m) => m.to.includes(phone) && m.message.templateName === "appointment_reminder",
+    );
     check(
       "التذكير يُرسل قبل الموعد بيوم",
-      first.delivered === 1 && !!reminder && reminder.message.body.includes("غداً"),
-      `أُرسل ${first.delivered} · القالب ${reminder?.message.templateName} · «${reminder?.message.body.split("\n")[0]}»`,
+      mine.length === 1 && mine[0].message.body.includes("غداً") && first.delivered >= 1,
+      `أُرسل لهذا المريض ${mine.length} من ${first.delivered} · «${mine[0]?.message.body.split("\n")[0]}»`,
     );
 
     const second = await runReminders(new Date(startAt.getTime() - 24 * 3_600_000), prisma);
@@ -135,11 +140,13 @@ async function main() {
       `أُرسل ${second.delivered} ومُرسَل سابقاً ${second.skipped.alreadySent} — القيد الفريد رفض الصف الثاني`,
     );
 
+    recorder.sent.length = 0;
     const twoHour = await runReminders(new Date(startAt.getTime() - 2 * 3_600_000), prisma);
+    const mineTwoHour = recorder.sent.filter((m) => m.to.includes(phone));
     check(
       "تذكير الساعتين يُرسل منفصلاً عن تذكير اليوم",
-      twoHour.delivered === 1,
-      "نوعان مختلفان فلا يتعارضان مع القيد",
+      mineTwoHour.length === 1 && twoHour.delivered >= 1,
+      `نوعان مختلفان فلا يتعارضان مع القيد — أُرسل لهذا المريض ${mineTwoHour.length}`,
     );
   }
 
