@@ -16,7 +16,9 @@ export default function TabsLayout() {
   // ارتفاع المحتوى ثابت، والمنطقة الآمنة تُضاف فوقه.
   // تثبيت الارتفاع الكلي يبتلع المنطقة الآمنة فيقع الشريط تحت شريط الإيماءات،
   // وتركه للحساب التلقائي يعطي شريطاً يضغط التسمية العربية حتى تختفي.
-  const CONTENT_HEIGHT = 70;
+  // المتاح للأيقونة والتسمية هو CONTENT_HEIGHT ناقص حشوَي ٦ بكسل.
+  // القرص ٣٨ + سطر التسمية ١٩ = ٥٧، فـ٧٨ تترك فسحة بدل التلاصق.
+  const CONTENT_HEIGHT = 78;
 
   return (
     <Tabs
@@ -28,12 +30,12 @@ export default function TabsLayout() {
           backgroundColor: palette.surface,
           borderTopWidth: 0,
           height: CONTENT_HEIGHT + insets.bottom,
-          paddingTop: 8,
+          paddingTop: 6,
           paddingBottom: insets.bottom + 6,
           ...shadow(2, palette.shadowTint),
         },
         // ارتفاع السطر يتّسع لنزول الحروف العربية — «مواعيدي» تُقصّ بدونه
-        tabBarLabelStyle: { fontFamily: font.semibold, fontSize: 12, lineHeight: 18, paddingBottom: 2 },
+        tabBarLabelStyle: { fontFamily: font.semibold, fontSize: 11.5, lineHeight: 17, paddingBottom: 2 },
         tabBarIconStyle: { marginTop: 0, marginBottom: 0 },
       }}
     >
@@ -43,7 +45,7 @@ export default function TabsLayout() {
           title: "احجز",
           tabBarIcon: ({ focused }) => (
             <TabIcon focused={focused}>
-              <Icon.search size={21} color={focused ? palette.primary : palette.faint} weight={focused ? 2.1 : 1.7} />
+              <Icon.search size={21} color={focused ? palette.onPrimary : palette.faint} weight={focused ? 2 : 1.7} />
             </TabIcon>
           ),
         }}
@@ -54,7 +56,7 @@ export default function TabsLayout() {
           title: "مواعيدي",
           tabBarIcon: ({ focused }) => (
             <TabIcon focused={focused}>
-              <Icon.calendar size={21} color={focused ? palette.primary : palette.faint} weight={focused ? 2.1 : 1.7} />
+              <Icon.calendar size={21} color={focused ? palette.onPrimary : palette.faint} weight={focused ? 2 : 1.7} />
             </TabIcon>
           ),
         }}
@@ -63,18 +65,20 @@ export default function TabsLayout() {
   );
 }
 
-/** التبويب النشط يجلس على وسادة خضراء — أوضح من تغيير اللون وحده */
+/** التبويب النشط قرص ممتلئ بالزمرّدي — أوضح من تغيير اللون وحده */
 function TabIcon({ focused, children }: { focused: boolean; children: React.ReactNode }) {
   const palette = usePalette();
   return (
     <View
       style={{
-        width: 54,
-        height: 32,
-        borderRadius: radius.pill,
+        // ٣٨ لا ٤٤: الارتفاع المتاح للأيقونة هو CONTENT_HEIGHT ناقص الحشو
+        // وسطر التسمية، والقرص الأكبر يزحف فوق «احجز»
+        width: 38,
+        height: 38,
+        borderRadius: 19,
         alignItems: "center",
         justifyContent: "center",
-        backgroundColor: focused ? palette.primarySoft : "transparent",
+        backgroundColor: focused ? palette.primary : "transparent",
       }}
     >
       {children}

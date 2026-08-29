@@ -111,12 +111,12 @@ await shot("m1-home");
 
 check(
   "الشاشة الرئيسية تفتح على محافظة المستخدم وتخصصاتها",
-  (await page.getByText("احجز موعدك عند طبيبك").isVisible().catch(() => false)) &&
+  (await page.getByText("التخصصات").first().isVisible().catch(() => false)) &&
     (await page.getByText(specialties[0].nameAr).first().isVisible().catch(() => false)),
 );
 
 const meta = await page.evaluate(() => {
-  const el = [...document.querySelectorAll("div")].find((d) => d.textContent?.trim() === "احجز موعدك عند طبيبك");
+  const el = [...document.querySelectorAll("div")].find((d) => d.textContent?.trim() === "التخصصات");
   return {
     dir: document.documentElement.dir,
     lang: document.documentElement.lang,
@@ -137,13 +137,28 @@ await page.goto(`${APP}/doctor/${doctor.doctorId}`, { waitUntil: "networkidle" }
 await page.waitForTimeout(2800);
 await shot("m3-profile");
 
+check(
+  "صفحة الطبيب تعرض التعريف وزر الحجز",
+  (await page.getByText(`طبيبة الاختبار ${stamp}`).first().isVisible().catch(() => false)) &&
+    (await page.getByRole("button", { name: "احجز موعد" }).isVisible().catch(() => false)),
+);
+
+// الحجز صار شاشة مستقلّة: تقويم شهري ثم شبكة الأوقات
+await page.getByRole("button", { name: "احجز موعد" }).click();
+await page.waitForTimeout(3000);
+await shot("m3b-book");
+
 const slots = page.getByRole("button").filter({ hasText: /^[٠-٩]+:[٠-٩]+ [صم]$/ });
 const before = await slots.count();
 check("شبكة الأوقات تعرض الشاغر فقط", before === 9, `${before} فترة من ٤:٠٠ إلى ٦:٤٠`);
 
 const target = (await slots.nth(2).textContent()).trim();
 await slots.nth(2).click();
-await page.waitForTimeout(1000);
+await page.waitForTimeout(800);
+
+// اللمس يختار الوقت فقط؛ نافذة التأكيد تُفتح بالزر السفلي
+await page.getByRole("button", { name: "متابعة الحجز" }).click();
+await page.waitForTimeout(1200);
 
 await page.getByPlaceholder("07701234567").fill(`077${stamp}`);
 await page.getByRole("button", { name: "إرسال الرمز" }).click();
@@ -173,7 +188,12 @@ check(
 
 await page.goto(`${APP}/bookings`, { waitUntil: "networkidle" });
 await page.waitForTimeout(2500);
-check("شاشة مواعيدي تعرض الموعد القادم", await page.getByText("المواعيد القادمة").isVisible().catch(() => false));
+check(
+  "شاشة مواعيدي تعرض تبويب القادمة والموعد فيه",
+  (await page.getByRole("tab", { name: /القادمة/ }).isVisible().catch(() => false)) &&
+    (await page.getByText("تم تثبيت", { exact: false }).isVisible().catch(() => false)) === false &&
+    (await page.getByText(`طبيبة الاختبار ${stamp}`).first().isVisible().catch(() => false)),
+);
 await shot("m6-bookings");
 
 // ── التقييم: نُنهي الزيارة عبر الخادم ثم نقيّمها من التطبيق ──
@@ -217,6 +237,10 @@ if (todays.length > 0) {
 
   await page.reload({ waitUntil: "networkidle" });
   await page.waitForTimeout(2500);
+
+  // الزيارة المنتهية تنتقل إلى تبويب «السابقة»، فنفتحه قبل البحث عن زر التقييم
+  await page.getByRole("tab", { name: /السابقة/ }).click();
+  await page.waitForTimeout(1200);
 
   const reviewButton = page.getByRole("button", { name: "قيّم هذه الزيارة" });
   const canReview = await reviewButton.first().isVisible().catch(() => false);

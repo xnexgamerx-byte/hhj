@@ -1,13 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
-import { Pressable, RefreshControl, ScrollView, TextInput, View } from "react-native";
+import { Pressable, RefreshControl, ScrollView, View } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { GradientHeader } from "@/components/GradientHeader";
+import { PlainHeader, SearchField } from "@/components/PlainHeader";
 import { DoctorRow } from "@/components/DoctorRow";
 import { Icon } from "@/components/icons";
 import { Alert, Button, Card, EmptyState, Loading, T } from "@/components/ui";
 import { api, type DoctorCard, type Specialty } from "@/lib/api";
 import { toArabic } from "@/lib/format";
-import { font, radius, shadow, space, usePalette } from "@/theme";
+import { radius, shadow, space, usePalette } from "@/theme";
 
 type SortKey = "soonest" | "rating" | "fee";
 
@@ -68,50 +68,17 @@ export default function DoctorsScreen() {
 
   return (
     <View style={{ flex: 1, backgroundColor: palette.bg }}>
-      <GradientHeader back title={activeSpecialty ? activeSpecialty.nameAr : "الأطباء"}>
-        <View
-          style={{
-            flexDirection: "row",
-            alignItems: "center",
-            gap: space(2.5),
-            backgroundColor: "rgba(255,255,255,0.17)",
-            borderRadius: radius.md,
-            paddingHorizontal: space(3.5),
-            height: 48,
+      <PlainHeader back title={activeSpecialty ? activeSpecialty.nameAr : "كل الأطباء"}>
+        <SearchField
+          value={query}
+          onChangeText={setQuery}
+          onSubmit={() => setSubmitted(query)}
+          onClear={() => {
+            setQuery("");
+            setSubmitted("");
           }}
-        >
-          <Icon.search size={19} color="rgba(255,255,255,0.75)" />
-          <TextInput
-            value={query}
-            onChangeText={setQuery}
-            onSubmitEditing={() => setSubmitted(query)}
-            returnKeyType="search"
-            placeholder="ابحث باسم الطبيب أو التخصص"
-            placeholderTextColor="rgba(255,255,255,0.65)"
-            style={{
-              flex: 1,
-              fontFamily: font.regular,
-              fontSize: 14.5,
-              color: "#FFFFFF",
-              textAlign: "right",
-              height: "100%",
-            }}
-          />
-          {query ? (
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="مسح البحث"
-              hitSlop={8}
-              onPress={() => {
-                setQuery("");
-                setSubmitted("");
-              }}
-            >
-              <Icon.close size={17} color="rgba(255,255,255,0.8)" />
-            </Pressable>
-          ) : null}
-        </View>
-      </GradientHeader>
+        />
+      </PlainHeader>
 
       <ScrollView
         showsVerticalScrollIndicator={false}
@@ -123,7 +90,7 @@ export default function DoctorsScreen() {
       >
         {/* ── مرشّح التخصص ── */}
         {specialties.length > 0 ? (
-          <View style={{ paddingTop: space(4) }}>
+          <View style={{ paddingTop: space(3), backgroundColor: palette.surface, paddingBottom: space(3) }}>
             <ScrollView
               horizontal
               showsHorizontalScrollIndicator={false}

@@ -1,20 +1,24 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Modal, Pressable, RefreshControl, ScrollView, TextInput, View } from "react-native";
+import { Modal, Pressable, RefreshControl, ScrollView, View, useColorScheme } from "react-native";
 import { useFocusEffect, useRouter } from "expo-router";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { GradientHeader, HeaderButton } from "@/components/GradientHeader";
+import { LinearGradient } from "expo-linear-gradient";
+import { SearchField } from "@/components/PlainHeader";
+import { DoctorRow } from "@/components/DoctorRow";
 import { Icon, SpecialtyIcon } from "@/components/icons";
 import { Alert, Button, Card, EmptyState, IconTile, Loading, SectionHeader, T } from "@/components/ui";
-import { DoctorRow } from "@/components/DoctorRow";
 import { api, getSession, type DoctorCard, type Governorate, type SessionUser, type Specialty } from "@/lib/api";
 import { toArabic } from "@/lib/format";
-import { font, radius, shadow, space, usePalette } from "@/theme";
+import { radius, shadow, space, tintFor, usePalette } from "@/theme";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 const GOVERNORATE_KEY = "mawid.governorate";
-const PREVIEW_COUNT = 9;
+const PREVIEW_COUNT = 8;
 
 export default function HomeScreen() {
   const palette = usePalette();
+  const isDark = useColorScheme() === "dark";
+  const insets = useSafeAreaInsets();
   const router = useRouter();
 
   const [governorates, setGovernorates] = useState<Governorate[]>([]);
@@ -22,7 +26,7 @@ export default function HomeScreen() {
   const [picking, setPicking] = useState(false);
   const [specialties, setSpecialties] = useState<Specialty[] | null>(null);
   const [featured, setFeatured] = useState<DoctorCard[] | null>(null);
-  const [showAllSpecialties, setShowAllSpecialties] = useState(false);
+  const [showAll, setShowAll] = useState(false);
   const [query, setQuery] = useState("");
   const [user, setUser] = useState<SessionUser | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -40,16 +44,14 @@ export default function HomeScreen() {
   }, []);
 
   const load = useCallback(
-    (id: number) => {
-      setError(null);
-      return Promise.all([
+    (id: number) =>
+      Promise.all([
         api.get<Specialty[]>(`/specialties/available?governorateId=${id}`).then(setSpecialties),
         api
           .get<DoctorCard[]>(`/doctors?governorateId=${id}`)
-          .then((list) => setFeatured(list.slice(0, 6)))
+          .then((list) => setFeatured(list.slice(0, 5)))
           .catch(() => setFeatured([])),
-      ]).catch((e) => setError(e.message));
-    },
+      ]).catch((e) => setError(e.message)),
     [],
   );
 
@@ -58,7 +60,8 @@ export default function HomeScreen() {
     AsyncStorage.setItem(GOVERNORATE_KEY, String(governorateId)).catch(() => {});
     setSpecialties(null);
     setFeatured(null);
-    setShowAllSpecialties(false);
+    setShowAll(false);
+    setError(null);
     load(governorateId);
   }, [governorateId, load]);
 
@@ -70,12 +73,12 @@ export default function HomeScreen() {
 
   const governorateName = governorates.find((g) => g.id === governorateId)?.nameAr ?? "…";
 
-  // الأكثر أطباءً أولاً: التخصص الفارغ في المعاينة يضيّع صفاً بلا فائدة
+  // الأكثر أطباءً أولاً: التخصص الفارغ في المعاينة يضيّع خانة بلا فائدة
   const ordered = useMemo(
     () => (specialties ? [...specialties].sort((a, b) => b.doctorCount - a.doctorCount) : null),
     [specialties],
   );
-  const shown = ordered ? (showAllSpecialties ? ordered : ordered.slice(0, PREVIEW_COUNT)) : null;
+  const shown = ordered ? (showAll ? ordered : ordered.slice(0, PREVIEW_COUNT)) : null;
 
   const goSearch = () => {
     const q = query.trim();
@@ -83,11 +86,11 @@ export default function HomeScreen() {
   };
 
   return (
-    <View style={{ flex: 1, backgroundColor: palette.bg }}>
+    <View style={{ flex: 1, backgroundColor: palette.surface }}>
       <ScrollView
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
-        contentContainerStyle={{ paddingBottom: space(8) }}
+        contentContainerStyle={{ paddingTop: insets.top + space(3), paddingBottom: space(8) }}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -100,141 +103,164 @@ export default function HomeScreen() {
           />
         }
       >
-        {/* ── الترويسة ── */}
-        <GradientHeader overlap={34}>
-          <View style={{ flexDirection: "row", alignItems: "center", gap: space(3) }}>
-            <View style={{ flex: 1 }}>
-              <T size={13.5} tone="onPrimary" style={{ opacity: 0.82 }}>
-                {user ? `هلا ${user.fullName.split(" ")[0]} 👋` : "هلا بالزين 👋"}
-              </T>
-              <T size={21} weight="bold" tone="onPrimary">
-                احجز موعدك عند طبيبك
-              </T>
-            </View>
-            <HeaderButton label="حسابي" onPress={() => router.push("/bookings")}>
-              <Icon.user size={20} color="#FFFFFF" />
-            </HeaderButton>
-          </View>
-
-          {/* اختيار المحافظة */}
+        {/* ── الموقع والحساب ── */}
+        <View style={{ flexDirection: "row", alignItems: "center", gap: space(3), paddingHorizontal: space(4) }}>
           <Pressable
             accessibilityRole="button"
             accessibilityLabel={`المحافظة: ${governorateName}. اضغط للتغيير`}
             onPress={() => setPicking(true)}
-            style={{
-              flexDirection: "row",
-              alignItems: "center",
-              gap: space(1.5),
-              alignSelf: "flex-start",
-              backgroundColor: "rgba(255,255,255,0.16)",
-              borderRadius: radius.pill,
-              paddingHorizontal: space(3),
-              paddingVertical: space(1.5),
-            }}
+            style={{ flex: 1 }}
           >
-            <Icon.pin size={15} color={palette.goldBright} />
-            <T size={13.5} weight="semibold" tone="onPrimary">
-              {governorateName}
+            <T size={12.5} tone="faint">
+              {user ? `هلا ${user.fullName.split(" ")[0]} 👋` : "موقعك"}
             </T>
-            <Icon.chevronDown size={14} color="#FFFFFF" />
+            <View style={{ flexDirection: "row", alignItems: "center", gap: space(1.5), marginTop: 1 }}>
+              <Icon.pin size={17} color={palette.primary} />
+              <T size={16} weight="bold">
+                {governorateName}
+              </T>
+              <Icon.chevronDown size={15} color={palette.muted} />
+            </View>
           </Pressable>
-        </GradientHeader>
 
-        {/* ── البحث: يعلو على الترويسة ── */}
-        <View style={{ marginTop: -34, paddingHorizontal: space(4) }}>
-          <View
-            style={{
-              flexDirection: "row",
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="مواعيدي"
+            onPress={() => router.push("/bookings")}
+            style={({ pressed }) => ({
+              width: 42,
+              height: 42,
+              borderRadius: 21,
               alignItems: "center",
-              gap: space(2.5),
-              backgroundColor: palette.surface,
-              borderRadius: radius.md,
-              paddingHorizontal: space(4),
-              height: 56,
-              ...shadow(2, palette.shadowTint),
-            }}
+              justifyContent: "center",
+              backgroundColor: pressed ? palette.surface3 : palette.surface2,
+            })}
           >
-            <Icon.search size={20} color={palette.faint} />
-            <TextInput
-              value={query}
-              onChangeText={setQuery}
-              onSubmitEditing={goSearch}
-              returnKeyType="search"
-              placeholder="ابحث باسم الطبيب أو التخصص"
-              placeholderTextColor={palette.faint}
-              style={{
-                flex: 1,
-                fontFamily: font.regular,
-                fontSize: 14.5,
-                color: palette.ink,
-                textAlign: "right",
-                height: "100%",
-              }}
-            />
-          </View>
+            <Icon.bell size={20} color={palette.ink} />
+          </Pressable>
         </View>
 
-        <View style={{ paddingHorizontal: space(4), paddingTop: space(6), gap: space(6) }}>
-          {error ? <Alert message={error} /> : null}
+        {/* ── البحث ── */}
+        <View style={{ paddingHorizontal: space(4), paddingTop: space(4) }}>
+          <SearchField value={query} onChangeText={setQuery} onSubmit={goSearch} onClear={() => setQuery("")} />
+        </View>
 
-          {/* ── التخصصات ── */}
-          <View style={{ gap: space(4) }}>
-            <SectionHeader
-              title="التخصصات"
-              actionLabel={ordered && ordered.length > PREVIEW_COUNT ? (showAllSpecialties ? "أقل" : "عرض الكل") : undefined}
-              onAction={
-                ordered && ordered.length > PREVIEW_COUNT ? () => setShowAllSpecialties((v) => !v) : undefined
-              }
-            />
+        {/* ── لافتة ترويجية ── */}
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={`عرض كل الأطباء في ${governorateName}`}
+          onPress={() => router.push(`/doctors?governorateId=${governorateId}`)}
+          style={{ paddingHorizontal: space(4), paddingTop: space(4) }}
+        >
+          <LinearGradient
+            colors={[palette.primaryLift, palette.primary, palette.primaryDeep]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={{
+              borderRadius: radius.lg,
+              padding: space(5),
+              flexDirection: "row",
+              alignItems: "center",
+              gap: space(3),
+              overflow: "hidden",
+            }}
+          >
+            <View style={{ flex: 1, gap: space(1.5) }}>
+              <T size={18} weight="bold" tone="onPrimary" lineHeight={26}>
+                تدور على طبيب{"\n"}اختصاص؟
+              </T>
+              <T size={12.5} tone="onPrimary" style={{ opacity: 0.85 }} lineHeight={19}>
+                أوقات محدّثة من الطبيب نفسه، وحجز مثبّت برقم مرجعي.
+              </T>
+            </View>
+            {/* الأيقونة الكبيرة تملأ الفراغ الذي تشغله صورة الطبيب في الكيت */}
+            <View style={{ opacity: 0.22, marginLeft: -space(2) }}>
+              <Icon.calendar size={92} color="#FFFFFF" weight={1.4} />
+            </View>
+          </LinearGradient>
+        </Pressable>
 
-            {specialties === null && !error ? <Loading label="جارٍ جلب التخصصات…" /> : null}
+        {error ? (
+          <View style={{ paddingHorizontal: space(4), paddingTop: space(4) }}>
+            <Alert message={error} />
+          </View>
+        ) : null}
 
-            {specialties?.length === 0 ? (
-              <Card>
-                <EmptyState
-                  icon={(c, s) => <Icon.pin size={s} color={c} />}
-                  title="لا يوجد أطباء في هذه المحافظة بعد"
-                  hint="جرّب محافظة أخرى — نضيف أطباء جدداً باستمرار."
-                  action={<Button label="تغيير المحافظة" variant="soft" onPress={() => setPicking(true)} />}
-                />
-              </Card>
-            ) : null}
+        {/* ── التخصصات ── */}
+        <View style={{ paddingHorizontal: space(4), paddingTop: space(6), gap: space(4) }}>
+          <SectionHeader
+            title="التخصصات"
+            actionLabel={ordered && ordered.length > PREVIEW_COUNT ? (showAll ? "أقل" : "عرض الكل") : undefined}
+            onAction={ordered && ordered.length > PREVIEW_COUNT ? () => setShowAll((v) => !v) : undefined}
+          />
 
-            <View style={{ flexDirection: "row", flexWrap: "wrap", gap: space(3) }}>
-              {shown?.map((specialty) => (
-                <SpecialtyTile
+          {specialties === null && !error ? <Loading label="جارٍ جلب التخصصات…" /> : null}
+
+          {specialties?.length === 0 ? (
+            <Card>
+              <EmptyState
+                icon={(c, s) => <Icon.pin size={s} color={c} />}
+                title="لا يوجد أطباء في هذه المحافظة بعد"
+                hint="جرّب محافظة أخرى — نضيف أطباء جدداً باستمرار."
+                action={<Button label="تغيير المحافظة" variant="soft" onPress={() => setPicking(true)} />}
+              />
+            </Card>
+          ) : null}
+
+          <View style={{ flexDirection: "row", flexWrap: "wrap", rowGap: space(4) }}>
+            {shown?.map((specialty) => {
+              const tint = tintFor(specialty.slug, isDark);
+              return (
+                <Pressable
                   key={specialty.id}
-                  specialty={specialty}
+                  accessibilityRole="button"
+                  accessibilityLabel={`${specialty.nameAr} — ${toArabic(specialty.doctorCount)} طبيب`}
                   onPress={() =>
                     router.push(`/doctors?governorateId=${governorateId}&specialtyId=${specialty.id}`)
                   }
-                />
+                  style={({ pressed }) => ({
+                    width: "25%",
+                    alignItems: "center",
+                    gap: space(2),
+                    opacity: pressed ? 0.75 : 1,
+                  })}
+                >
+                  <View
+                    style={{
+                      width: 62,
+                      height: 62,
+                      borderRadius: radius.md,
+                      backgroundColor: tint.bg,
+                      alignItems: "center",
+                      justifyContent: "center",
+                    }}
+                  >
+                    <SpecialtyIcon slug={specialty.slug} size={30} color={tint.fg} />
+                  </View>
+                  <T size={11.5} weight="semibold" align="center" numberOfLines={2} lineHeight={15}>
+                    {specialty.nameAr}
+                  </T>
+                </Pressable>
+              );
+            })}
+          </View>
+        </View>
+
+        {/* ── الأطباء ── */}
+        {featured && featured.length > 0 ? (
+          <View style={{ paddingHorizontal: space(4), paddingTop: space(7), gap: space(4) }}>
+            <SectionHeader
+              title="أطباء متاحون قريباً"
+              actionLabel="عرض الكل"
+              onAction={() => router.push(`/doctors?governorateId=${governorateId}`)}
+            />
+            <View style={{ gap: space(3) }}>
+              {featured.map((doctor) => (
+                <DoctorRow key={doctor.id} doctor={doctor} onPress={() => router.push(`/doctor/${doctor.id}`)} />
               ))}
             </View>
           </View>
-
-          {/* ── الأطباء ── */}
-          {featured && featured.length > 0 ? (
-            <View style={{ gap: space(4) }}>
-              <SectionHeader
-                title="أطباء متاحون قريباً"
-                actionLabel="عرض الكل"
-                onAction={() => router.push(`/doctors?governorateId=${governorateId}`)}
-              />
-              <View style={{ gap: space(3) }}>
-                {featured.map((doctor) => (
-                  <DoctorRow key={doctor.id} doctor={doctor} onPress={() => router.push(`/doctor/${doctor.id}`)} />
-                ))}
-              </View>
-              <Button
-                label={`عرض كل الأطباء في ${governorateName}`}
-                variant="soft"
-                full
-                onPress={() => router.push(`/doctors?governorateId=${governorateId}`)}
-              />
-            </View>
-          ) : null}
-        </View>
+        ) : null}
       </ScrollView>
 
       <GovernoratePicker
@@ -248,41 +274,6 @@ export default function HomeScreen() {
         onClose={() => setPicking(false)}
       />
     </View>
-  );
-}
-
-/* ── بطاقة التخصص ────────────────────────────────────────────── */
-
-function SpecialtyTile({ specialty, onPress }: { specialty: Specialty; onPress: () => void }) {
-  const palette = usePalette();
-  return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityLabel={`${specialty.nameAr} — ${toArabic(specialty.doctorCount)} طبيب`}
-      onPress={onPress}
-      style={({ pressed }) => ({
-        width: "31%",
-        backgroundColor: palette.surface,
-        borderRadius: radius.md,
-        paddingVertical: space(3.5),
-        paddingHorizontal: space(2),
-        alignItems: "center",
-        gap: space(2),
-        opacity: pressed ? 0.9 : 1,
-        transform: [{ scale: pressed ? 0.97 : 1 }],
-        ...shadow(1, palette.shadowTint),
-      })}
-    >
-      <IconTile size={46} round bg={palette.primaryTint}>
-        <SpecialtyIcon slug={specialty.slug} size={25} color={palette.primary} />
-      </IconTile>
-      <T size={12} weight="semibold" align="center" numberOfLines={2} lineHeight={16}>
-        {specialty.nameAr}
-      </T>
-      <T size={10.5} tone="faint" align="center">
-        {toArabic(specialty.doctorCount)} طبيب
-      </T>
-    </Pressable>
   );
 }
 

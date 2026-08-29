@@ -81,6 +81,45 @@ const dark: typeof light = {
   shadowTint: "#000000",
 };
 
+/**
+ * ألوان بطاقات التخصصات.
+ *
+ * التخصصات ٢٨ ولون واحد يجعل الشبكة جداراً رتيباً، فنوزّعها على ثماني درجات
+ * هادئة. الدرجة تُشتقّ من اسم التخصص لا من ترتيبه، كي لا يتبدّل لون «الأسنان»
+ * حين يظهر طبيب جديد في تخصص قبله.
+ */
+const tints = [
+  { bg: "#DCE9E0", fg: "#2A6549" },
+  { bg: "#D6E7E9", fg: "#1C5D68" },
+  { bg: "#F0E6D2", fg: "#755919" },
+  { bg: "#F2DFD8", fg: "#8A4531" },
+  { bg: "#E3DFEF", fg: "#4E3E82" },
+  { bg: "#D9E6F2", fg: "#26527B" },
+  { bg: "#F1DEE4", fg: "#853853" },
+  { bg: "#E4E9D4", fg: "#4F5D26" },
+] as const;
+
+const tintsDark = [
+  { bg: "#163024", fg: "#7FC7A2" },
+  { bg: "#132C31", fg: "#74C0CC" },
+  { bg: "#2E2717", fg: "#D8BC7A" },
+  { bg: "#2F2019", fg: "#E0A38C" },
+  { bg: "#221E33", fg: "#B0A2E0" },
+  { bg: "#16232F", fg: "#93BCE2" },
+  { bg: "#2C1B22", fg: "#DFA0B4" },
+  { bg: "#242817", fg: "#BCC98A" },
+] as const;
+
+export type Tint = { bg: string; fg: string };
+
+/** بصمة نصّية ثابتة → فهرس درجة. نفس المفتاح يعطي نفس اللون دائماً. */
+export function tintFor(key: string, isDark = false): Tint {
+  let hash = 0;
+  for (let i = 0; i < key.length; i++) hash = (hash * 31 + key.charCodeAt(i)) >>> 0;
+  const set = isDark ? tintsDark : tints;
+  return set[hash % set.length];
+}
+
 export type Palette = typeof light;
 
 export function usePalette(): Palette {

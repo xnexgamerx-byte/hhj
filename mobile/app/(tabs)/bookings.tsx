@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
 import { Alert as RNAlert, Linking, Modal, Pressable, RefreshControl, ScrollView, View } from "react-native";
 import { useFocusEffect, useRouter } from "expo-router";
-import { GradientHeader } from "@/components/GradientHeader";
+import { PlainHeader } from "@/components/PlainHeader";
+import { Tabs } from "@/components/Stats";
 import { Icon } from "@/components/icons";
 import { Alert, Badge, Button, Card, EmptyState, Field, IconTile, Input, Loading, T } from "@/components/ui";
 import { api, clearSession, getSession, type Booking, type SessionUser } from "@/lib/api";
@@ -17,6 +18,7 @@ export default function BookingsScreen() {
   const [cancelling, setCancelling] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [reviewing, setReviewing] = useState<Booking | null>(null);
+  const [tab, setTab] = useState<"upcoming" | "past">("upcoming");
 
   const load = useCallback(() => {
     setError(null);
@@ -58,11 +60,7 @@ export default function BookingsScreen() {
   if (!user || user.role !== "PATIENT") {
     return (
       <View style={{ flex: 1, backgroundColor: palette.bg }}>
-        <GradientHeader title="مواعيدي">
-          <T size={13.5} tone="onPrimary" style={{ opacity: 0.82 }}>
-            حجوزاتك كلها في مكان واحد
-          </T>
-        </GradientHeader>
+        <PlainHeader title="مواعيدي" />
         <View style={{ padding: space(4) }}>
           <Card>
             <EmptyState
@@ -82,21 +80,16 @@ export default function BookingsScreen() {
 
   return (
     <View style={{ flex: 1, backgroundColor: palette.bg }}>
-      <GradientHeader title="مواعيدي">
-        <View style={{ flexDirection: "row", alignItems: "center", gap: space(3) }}>
-          <View style={{ flex: 1 }}>
-            <T size={13.5} tone="onPrimary" style={{ opacity: 0.82 }}>
-              {user.fullName}
-            </T>
-            <T size={15} weight="semibold" tone="onPrimary">
-              {upcoming.length > 0 ? `${toArabic(upcoming.length)} موعد قادم` : "لا مواعيد قادمة"}
-            </T>
-          </View>
-          <IconTile size={44} round bg="rgba(255,255,255,0.16)">
-            <Icon.calendar size={21} color="#FFFFFF" />
-          </IconTile>
-        </View>
-      </GradientHeader>
+      <PlainHeader title="مواعيدي">
+        <Tabs
+          tabs={[
+            { key: "upcoming" as const, label: "القادمة", count: upcoming.length },
+            { key: "past" as const, label: "السابقة", count: past.length },
+          ]}
+          active={tab}
+          onPick={setTab}
+        />
+      </PlainHeader>
 
       <ScrollView
         showsVerticalScrollIndicator={false}
@@ -127,32 +120,44 @@ export default function BookingsScreen() {
         </Card>
       ) : null}
 
-      {upcoming.length > 0 ? (
-        <View style={{ gap: space(3) }}>
-          <T size={17} weight="bold">
-            المواعيد القادمة
-          </T>
-          {upcoming.map((booking) => (
-            <BookingCard
-              key={booking.id}
-              booking={booking}
-              onCancel={() => askCancel(booking)}
-              onReview={() => setReviewing(booking)}
-              cancelling={cancelling === booking.id}
+      {/* التبويب يحكم المعروض؛ القوائم مبنيّة مرة واحدة أعلاه */}
+      {tab === "upcoming" ? (
+        upcoming.length > 0 ? (
+          <View style={{ gap: space(3) }}>
+            {upcoming.map((booking) => (
+              <BookingCard
+                key={booking.id}
+                booking={booking}
+                onCancel={() => askCancel(booking)}
+                onReview={() => setReviewing(booking)}
+                cancelling={cancelling === booking.id}
+              />
+            ))}
+          </View>
+        ) : bookings && bookings.length > 0 ? (
+          <Card>
+            <EmptyState
+              icon={(c, sz) => <Icon.calendar size={sz} color={c} />}
+              title="لا مواعيد قادمة"
+              hint="كل مواعيدك السابقة في التبويب الثاني."
+              action={<Button label="ابحث عن طبيب" onPress={() => router.replace("/")} />}
             />
-          ))}
-        </View>
-      ) : null}
-
-      {past.length > 0 ? (
+          </Card>
+        ) : null
+      ) : past.length > 0 ? (
         <View style={{ gap: space(3) }}>
-          <T size={17} weight="bold">
-            السابقة
-          </T>
           {past.map((booking) => (
             <BookingCard key={booking.id} booking={booking} onReview={() => setReviewing(booking)} />
           ))}
         </View>
+      ) : bookings && bookings.length > 0 ? (
+        <Card>
+          <EmptyState
+            icon={(c, sz) => <Icon.clock size={sz} color={c} />}
+            title="لا مواعيد سابقة"
+            hint="ستظهر هنا الزيارات بعد انتهائها."
+          />
+        </Card>
       ) : null}
 
       <Button
