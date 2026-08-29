@@ -168,6 +168,19 @@ export const api = {
 export type Governorate = { id: number; slug: string; nameAr: string };
 export type Specialty = { id: number; slug: string; nameAr: string; doctorCount: number };
 
+export type ClinicCard = {
+  id: string;
+  nameAr: string;
+  landmark: string | null;
+  governorate: string;
+  district: string;
+  doctorCount: number;
+  specialties: string[];
+  minFee: number;
+  ratingAvg: number;
+  ratingCount: number;
+};
+
 export type DoctorCard = {
   id: string;
   title: string;

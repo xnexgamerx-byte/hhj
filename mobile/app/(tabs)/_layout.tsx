@@ -2,20 +2,16 @@ import { Tabs } from "expo-router";
 import { View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Icon } from "@/components/icons";
-import { font, radius, shadow, usePalette } from "@/theme";
+import { font, shadow, usePalette } from "@/theme";
 
 /**
- * تبويبان فقط: البحث والحجوزات.
- * تبويب لكل شيء يجعل الشريط مزدحماً وبلا معنى — والمريض يفعل شيئين لا أكثر:
- * يبحث عن طبيب، ويتابع مواعيده.
+ * أربعة تبويبات كما في الكيت المرجعي: بحث، عيادات، مواعيد، حساب.
+ * لكل واحد شاشة بمحتوى حقيقي — تبويب فارغ يعِد بما لا يوجد.
  */
 export default function TabsLayout() {
   const palette = usePalette();
   const insets = useSafeAreaInsets();
 
-  // ارتفاع المحتوى ثابت، والمنطقة الآمنة تُضاف فوقه.
-  // تثبيت الارتفاع الكلي يبتلع المنطقة الآمنة فيقع الشريط تحت شريط الإيماءات،
-  // وتركه للحساب التلقائي يعطي شريطاً يضغط التسمية العربية حتى تختفي.
   // المتاح للأيقونة والتسمية هو CONTENT_HEIGHT ناقص حشوَي ٦ بكسل.
   // القرص ٣٨ + سطر التسمية ١٩ = ٥٧، فـ٧٨ تترك فسحة بدل التلاصق.
   const CONTENT_HEIGHT = 78;
@@ -35,7 +31,7 @@ export default function TabsLayout() {
           ...shadow(2, palette.shadowTint),
         },
         // ارتفاع السطر يتّسع لنزول الحروف العربية — «مواعيدي» تُقصّ بدونه
-        tabBarLabelStyle: { fontFamily: font.semibold, fontSize: 11.5, lineHeight: 17, paddingBottom: 2 },
+        tabBarLabelStyle: { fontFamily: font.semibold, fontSize: 11, lineHeight: 17, paddingBottom: 2 },
         tabBarIconStyle: { marginTop: 0, marginBottom: 0 },
       }}
     >
@@ -45,7 +41,18 @@ export default function TabsLayout() {
           title: "احجز",
           tabBarIcon: ({ focused }) => (
             <TabIcon focused={focused}>
-              <Icon.search size={21} color={focused ? palette.onPrimary : palette.faint} weight={focused ? 2 : 1.7} />
+              <Icon.search size={20} color={focused ? palette.onPrimary : palette.faint} weight={focused ? 2 : 1.7} />
+            </TabIcon>
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="clinics"
+        options={{
+          title: "العيادات",
+          tabBarIcon: ({ focused }) => (
+            <TabIcon focused={focused}>
+              <Icon.pin size={20} color={focused ? palette.onPrimary : palette.faint} weight={focused ? 2 : 1.7} />
             </TabIcon>
           ),
         }}
@@ -56,7 +63,18 @@ export default function TabsLayout() {
           title: "مواعيدي",
           tabBarIcon: ({ focused }) => (
             <TabIcon focused={focused}>
-              <Icon.calendar size={21} color={focused ? palette.onPrimary : palette.faint} weight={focused ? 2 : 1.7} />
+              <Icon.calendar size={20} color={focused ? palette.onPrimary : palette.faint} weight={focused ? 2 : 1.7} />
+            </TabIcon>
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="profile"
+        options={{
+          title: "حسابي",
+          tabBarIcon: ({ focused }) => (
+            <TabIcon focused={focused}>
+              <Icon.user size={20} color={focused ? palette.onPrimary : palette.faint} weight={focused ? 2 : 1.7} />
             </TabIcon>
           ),
         }}
@@ -65,14 +83,12 @@ export default function TabsLayout() {
   );
 }
 
-/** التبويب النشط قرص ممتلئ بالزمرّدي — أوضح من تغيير اللون وحده */
+/** التبويب النشط قرص ممتلئ بالكحلي — أوضح من تغيير اللون وحده */
 function TabIcon({ focused, children }: { focused: boolean; children: React.ReactNode }) {
   const palette = usePalette();
   return (
     <View
       style={{
-        // ٣٨ لا ٤٤: الارتفاع المتاح للأيقونة هو CONTENT_HEIGHT ناقص الحشو
-        // وسطر التسمية، والقرص الأكبر يزحف فوق «احجز»
         width: 38,
         height: 38,
         borderRadius: 19,

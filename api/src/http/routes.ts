@@ -46,6 +46,7 @@ import {
   getDoctorProfile,
   getMyBookings,
   getMyPatients,
+  listClinics,
   listSpecialtiesWithCounts,
   searchDoctors,
 } from "../modules/discovery/discovery.service.js";
@@ -365,15 +366,29 @@ export async function registerRoutes(app: FastifyInstance) {
   });
 
   app.get<{
-    Querystring: { governorateId?: string; districtId?: string; specialtyId?: string; q?: string };
+    Querystring: {
+      governorateId?: string;
+      districtId?: string;
+      specialtyId?: string;
+      clinicId?: string;
+      q?: string;
+    };
   }>("/doctors", async (request) => {
     const q = request.query;
     return searchDoctors({
       governorateId: q.governorateId ? Number(q.governorateId) : null,
       districtId: q.districtId ? Number(q.districtId) : null,
       specialtyId: q.specialtyId ? Number(q.specialtyId) : null,
+      clinicId: q.clinicId ?? null,
       q: q.q ?? null,
     });
+  });
+
+  app.get<{ Querystring: { governorateId?: string; limit?: string } }>("/clinics", async (request) => {
+    return listClinics(
+      request.query.governorateId ? Number(request.query.governorateId) : null,
+      request.query.limit ? Number(request.query.limit) : undefined,
+    );
   });
 
   app.get<{ Params: { id: string } }>("/doctors/:id", async (request) => {

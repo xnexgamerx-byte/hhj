@@ -79,7 +79,7 @@ const clinic = await callApi("/owner/clinics", {
   },
 });
 
-await callApi(`/owner/doctors/${doctor.doctorId}/practices`, {
+const practice = await callApi(`/owner/doctors/${doctor.doctorId}/practices`, {
   method: "POST",
   token: owner.accessToken,
   body: { clinicId: clinic.id, feeAmount: 25000, bookingMode: "SLOT", slotMinutes: 20 },
@@ -129,9 +129,20 @@ patient.on("pageerror", (e) => pageErrors.push(`patient: ${e.message}`));
 await patient.goto(`${WEB}/doctors/${doctor.doctorId}`, { waitUntil: "networkidle" });
 await patient.waitForTimeout(2200);
 
+// العدد المتوقّع من الخادم لا رقماً ثابتاً: لو صادف التشغيل يوم دوام داخل
+// شبّاك ٤–٧ مساءً لصارت بعض الفترات ماضية والعدد أقل من تسع
+const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Baghdad" }).format(new Date());
+const availability = await callApi(`/practices/${practice.id}/availability?from=${today}`);
+const firstOpen = availability.find((d) => d.freeCount > 0);
+const expected = firstOpen ? firstOpen.sessions.reduce((n, session) => n + session.slots.length, 0) : 0;
+
 const slots = patient.locator("button").filter({ hasText: /^[٠-٩]+:[٠-٩]+ [صم]$/ });
 const before = await slots.count();
-check("ملف الطبيبة يعرض الأوقات الشاغرة فقط", before === 9, `${before} فترة من ٤:٠٠ إلى ٦:٤٠`);
+check(
+  "ملف الطبيبة يعرض ما يقوله الخادم من فترات شاغرة",
+  before === expected && before > 2,
+  `${before} فترة، والخادم يقول ${expected} ليوم ${firstOpen?.date ?? "—"}`,
+);
 
 const target = (await slots.nth(2).textContent()).trim();
 await slots.nth(2).click();

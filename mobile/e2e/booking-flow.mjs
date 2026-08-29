@@ -77,7 +77,7 @@ const clinic = await callApi("/owner/clinics", {
     landmark: "مقابل مستشفى الاختبار",
   },
 });
-await callApi(`/owner/doctors/${doctor.doctorId}/practices`, {
+const practice = await callApi(`/owner/doctors/${doctor.doctorId}/practices`, {
   method: "POST",
   token: owner.accessToken,
   body: {
@@ -148,9 +148,20 @@ await page.getByRole("button", { name: "احجز موعد" }).click();
 await page.waitForTimeout(3000);
 await shot("m3b-book");
 
+// العدد المتوقّع من الخادم لا رقماً ثابتاً: شبّاك الدوام ٤–٧ مساءً، فتشغيل
+// الاختبار داخله يجعل بعض فتراته ماضية والعدد أقل من تسع
+const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Baghdad" }).format(new Date());
+const availability = await callApi(`/practices/${practice.id}/availability?from=${today}`);
+const firstOpen = availability.find((d) => d.freeCount > 0);
+const expected = firstOpen ? firstOpen.sessions.reduce((n, session) => n + session.slots.length, 0) : 0;
+
 const slots = page.getByRole("button").filter({ hasText: /^[٠-٩]+:[٠-٩]+ [صم]$/ });
 const before = await slots.count();
-check("شبكة الأوقات تعرض الشاغر فقط", before === 9, `${before} فترة من ٤:٠٠ إلى ٦:٤٠`);
+check(
+  "شبكة الأوقات تعرض ما يقوله الخادم من فترات شاغرة",
+  before === expected && before > 2,
+  `${before} فترة، والخادم يقول ${expected} ليوم ${firstOpen?.date ?? "—"}`,
+);
 
 const target = (await slots.nth(2).textContent()).trim();
 await slots.nth(2).click();

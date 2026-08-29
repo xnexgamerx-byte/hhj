@@ -5,7 +5,7 @@ import { PlainHeader } from "@/components/PlainHeader";
 import { Tabs } from "@/components/Stats";
 import { Icon } from "@/components/icons";
 import { Alert, Badge, Button, Card, EmptyState, Field, IconTile, Input, Loading, T } from "@/components/ui";
-import { api, clearSession, getSession, type Booking, type SessionUser } from "@/lib/api";
+import { api, getSession, type Booking, type SessionUser } from "@/lib/api";
 import { formatClock, formatDay, formatFee, STATUS_LABELS, toArabic } from "@/lib/format";
 import { radius, space, usePalette } from "@/theme";
 
@@ -159,16 +159,6 @@ export default function BookingsScreen() {
           />
         </Card>
       ) : null}
-
-      <Button
-        label="تسجيل الخروج"
-        variant="ghost"
-        full
-        onPress={async () => {
-          await clearSession();
-          router.replace("/");
-        }}
-      />
 
       </ScrollView>
 

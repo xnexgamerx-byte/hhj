@@ -2,12 +2,21 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Modal, Pressable, RefreshControl, ScrollView, View, useColorScheme } from "react-native";
 import { useFocusEffect, useRouter } from "expo-router";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { LinearGradient } from "expo-linear-gradient";
+import { Banner, DEFAULT_SLIDES } from "@/components/Banner";
+import { ClinicCard } from "@/components/ClinicCard";
 import { SearchField } from "@/components/PlainHeader";
 import { DoctorRow } from "@/components/DoctorRow";
 import { Icon, SpecialtyIcon } from "@/components/icons";
 import { Alert, Button, Card, EmptyState, IconTile, Loading, SectionHeader, T } from "@/components/ui";
-import { api, getSession, type DoctorCard, type Governorate, type SessionUser, type Specialty } from "@/lib/api";
+import {
+  api,
+  getSession,
+  type ClinicCard as Clinic,
+  type DoctorCard,
+  type Governorate,
+  type SessionUser,
+  type Specialty,
+} from "@/lib/api";
 import { toArabic } from "@/lib/format";
 import { radius, shadow, space, tintFor, usePalette } from "@/theme";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -26,6 +35,7 @@ export default function HomeScreen() {
   const [picking, setPicking] = useState(false);
   const [specialties, setSpecialties] = useState<Specialty[] | null>(null);
   const [featured, setFeatured] = useState<DoctorCard[] | null>(null);
+  const [clinics, setClinics] = useState<Clinic[] | null>(null);
   const [showAll, setShowAll] = useState(false);
   const [query, setQuery] = useState("");
   const [user, setUser] = useState<SessionUser | null>(null);
@@ -51,6 +61,10 @@ export default function HomeScreen() {
           .get<DoctorCard[]>(`/doctors?governorateId=${id}`)
           .then((list) => setFeatured(list.slice(0, 5)))
           .catch(() => setFeatured([])),
+        api
+          .get<Clinic[]>(`/clinics?governorateId=${id}&limit=8`)
+          .then(setClinics)
+          .catch(() => setClinics([])),
       ]).catch((e) => setError(e.message)),
     [],
   );
@@ -60,6 +74,7 @@ export default function HomeScreen() {
     AsyncStorage.setItem(GOVERNORATE_KEY, String(governorateId)).catch(() => {});
     setSpecialties(null);
     setFeatured(null);
+    setClinics(null);
     setShowAll(false);
     setError(null);
     load(governorateId);
@@ -123,6 +138,22 @@ export default function HomeScreen() {
             </View>
           </Pressable>
 
+          <View
+            style={{
+              width: 36,
+              height: 36,
+              borderRadius: radius.sm,
+              backgroundColor: palette.brand,
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          >
+            {/* العلامة زمرّدية وحدها: نفس لون أيقونة التطبيق على الشاشة الرئيسية */}
+            <T size={17} weight="bold" tone="onPrimary" align="center">
+              م
+            </T>
+          </View>
+
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="مواعيدي"
@@ -145,40 +176,13 @@ export default function HomeScreen() {
           <SearchField value={query} onChangeText={setQuery} onSubmit={goSearch} onClear={() => setQuery("")} />
         </View>
 
-        {/* ── لافتة ترويجية ── */}
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={`عرض كل الأطباء في ${governorateName}`}
-          onPress={() => router.push(`/doctors?governorateId=${governorateId}`)}
-          style={{ paddingHorizontal: space(4), paddingTop: space(4) }}
-        >
-          <LinearGradient
-            colors={[palette.primaryLift, palette.primary, palette.primaryDeep]}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={{
-              borderRadius: radius.lg,
-              padding: space(5),
-              flexDirection: "row",
-              alignItems: "center",
-              gap: space(3),
-              overflow: "hidden",
-            }}
-          >
-            <View style={{ flex: 1, gap: space(1.5) }}>
-              <T size={18} weight="bold" tone="onPrimary" lineHeight={26}>
-                تدور على طبيب{"\n"}اختصاص؟
-              </T>
-              <T size={12.5} tone="onPrimary" style={{ opacity: 0.85 }} lineHeight={19}>
-                أوقات محدّثة من الطبيب نفسه، وحجز مثبّت برقم مرجعي.
-              </T>
-            </View>
-            {/* الأيقونة الكبيرة تملأ الفراغ الذي تشغله صورة الطبيب في الكيت */}
-            <View style={{ opacity: 0.22, marginLeft: -space(2) }}>
-              <Icon.calendar size={92} color="#FFFFFF" weight={1.4} />
-            </View>
-          </LinearGradient>
-        </Pressable>
+        {/* ── لافتة منزلقة بنقاط ── */}
+        <View style={{ paddingHorizontal: space(4), paddingTop: space(4) }}>
+          <Banner
+            slides={DEFAULT_SLIDES()}
+            onPress={() => router.push(`/doctors?governorateId=${governorateId}`)}
+          />
+        </View>
 
         {error ? (
           <View style={{ paddingHorizontal: space(4), paddingTop: space(4) }}>
@@ -245,6 +249,35 @@ export default function HomeScreen() {
             })}
           </View>
         </View>
+
+        {/* ── العيادات القريبة ── */}
+        {clinics && clinics.length > 0 ? (
+          <View style={{ paddingTop: space(7), gap: space(4) }}>
+            <View style={{ paddingHorizontal: space(4) }}>
+              <SectionHeader
+                title="عيادات في محافظتك"
+                actionLabel="عرض الكل"
+                onAction={() => router.push("/clinics")}
+              />
+            </View>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={{ paddingHorizontal: space(4), gap: space(3) }}
+            >
+              {clinics.map((clinic) => (
+                <ClinicCard
+                  key={clinic.id}
+                  clinic={clinic}
+                  wide
+                  onPress={() =>
+                    router.push(`/doctors?clinicId=${clinic.id}&title=${encodeURIComponent(clinic.nameAr)}`)
+                  }
+                />
+              ))}
+            </ScrollView>
+          </View>
+        ) : null}
 
         {/* ── الأطباء ── */}
         {featured && featured.length > 0 ? (

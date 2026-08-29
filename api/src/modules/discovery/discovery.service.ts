@@ -52,10 +52,78 @@ export async function listSpecialtiesWithCounts(
     .filter((s) => s.doctorCount > 0);
 }
 
+/**
+ * العيادات التي فيها أطباء متاحون، مع تخصصاتها وعدد أطبائها.
+ * عيادة بلا طبيب منشور لا تُعرض — وجودها في القائمة يوحي بموعد لا يوجد.
+ */
+export async function listClinics(
+  governorateId: number | null,
+  limit = 20,
+  client: PrismaClient = defaultPrisma,
+) {
+  const clinics = await client.clinic.findMany({
+    where: {
+      isActive: true,
+      ...(governorateId ? { governorateId } : {}),
+      practices: {
+        some: { isActive: true, doctor: { isActive: true, isPublished: true } },
+      },
+    },
+    take: limit,
+    select: {
+      id: true,
+      nameAr: true,
+      landmark: true,
+      governorate: { select: { nameAr: true } },
+      district: { select: { nameAr: true } },
+      practices: {
+        where: { isActive: true, doctor: { isActive: true, isPublished: true } },
+        select: {
+          feeAmount: true,
+          doctor: {
+            select: {
+              ratingAvg: true,
+              ratingCount: true,
+              specialties: { select: { specialty: { select: { nameAr: true } } } },
+            },
+          },
+        },
+      },
+    },
+  });
+
+  return clinics
+    .map((clinic) => {
+      const doctors = clinic.practices;
+      // تخصصات فريدة بترتيب ظهورها — Set يحفظ الترتيب في جافاسكربت
+      const specialties = [
+        ...new Set(doctors.flatMap((p) => p.doctor.specialties.map((s) => s.specialty.nameAr))),
+      ];
+      const rated = doctors.filter((p) => p.doctor.ratingCount > 0);
+      return {
+        id: clinic.id,
+        nameAr: clinic.nameAr,
+        landmark: clinic.landmark,
+        governorate: clinic.governorate.nameAr,
+        district: clinic.district.nameAr,
+        doctorCount: doctors.length,
+        specialties: specialties.slice(0, 3),
+        minFee: doctors.length ? Math.min(...doctors.map((p) => p.feeAmount)) : 0,
+        ratingAvg: rated.length
+          ? rated.reduce((sum, p) => sum + p.doctor.ratingAvg, 0) / rated.length
+          : 0,
+        ratingCount: rated.reduce((sum, p) => sum + p.doctor.ratingCount, 0),
+      };
+    })
+    .sort((a, b) => b.doctorCount - a.doctorCount);
+}
+
 export type DoctorSearch = {
   governorateId?: number | null;
   districtId?: number | null;
   specialtyId?: number | null;
+  /** أطباء عيادة بعينها — يُستعمل عند فتح عيادة من قائمة العيادات */
+  clinicId?: string | null;
   /** بحث نصي في اسم الطبيب وأسماء التخصصات الشائعة */
   q?: string | null;
   limit?: number;
@@ -71,6 +139,7 @@ export async function searchDoctors(search: DoctorSearch, client: PrismaClient =
       practices: {
         some: {
           isActive: true,
+          ...(search.clinicId ? { clinicId: search.clinicId } : {}),
           clinic: {
             isActive: true,
             ...(search.governorateId ? { governorateId: search.governorateId } : {}),

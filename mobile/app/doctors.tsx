@@ -20,7 +20,13 @@ const SORTS: { key: SortKey; label: string }[] = [
 export default function DoctorsScreen() {
   const palette = usePalette();
   const router = useRouter();
-  const params = useLocalSearchParams<{ governorateId?: string; specialtyId?: string; q?: string }>();
+  const params = useLocalSearchParams<{
+    governorateId?: string;
+    specialtyId?: string;
+    clinicId?: string;
+    title?: string;
+    q?: string;
+  }>();
 
   const [doctors, setDoctors] = useState<DoctorCard[] | null>(null);
   const [specialties, setSpecialties] = useState<Specialty[]>([]);
@@ -42,6 +48,7 @@ export default function DoctorsScreen() {
   useEffect(() => {
     const search = new URLSearchParams();
     if (params.governorateId) search.set("governorateId", params.governorateId);
+    if (params.clinicId) search.set("clinicId", params.clinicId);
     if (specialtyId) search.set("specialtyId", specialtyId);
     if (submitted.trim()) search.set("q", submitted.trim());
 
@@ -51,7 +58,7 @@ export default function DoctorsScreen() {
       .get<DoctorCard[]>(`/doctors?${search.toString()}`)
       .then(setDoctors)
       .catch((e) => setError(e.message));
-  }, [params.governorateId, specialtyId, submitted, refreshing]);
+  }, [params.governorateId, params.clinicId, specialtyId, submitted, refreshing]);
 
   // الترتيب في الواجهة لا في الخادم: القائمة صغيرة، وتبديل الترتيب يجب أن يكون فورياً
   const sorted = useMemo(() => {
@@ -68,7 +75,7 @@ export default function DoctorsScreen() {
 
   return (
     <View style={{ flex: 1, backgroundColor: palette.bg }}>
-      <PlainHeader back title={activeSpecialty ? activeSpecialty.nameAr : "كل الأطباء"}>
+      <PlainHeader back title={params.title ?? activeSpecialty?.nameAr ?? "كل الأطباء"}>
         <SearchField
           value={query}
           onChangeText={setQuery}

@@ -1,113 +1,117 @@
 import { Platform, useColorScheme } from "react-native";
 
 /**
- * هوية «موعد»: زمرّدي عميق للثقة، وذهبي دافئ للفخامة.
+ * هوية «موعد» على نظام كيت فيغما المرجعي.
  *
- * الزمرّدي بدل الفيروزي السابق لأنه أعمق وأهدأ للعين في شاشة يفتحها المريض
- * وهو قلق. والذهبي محصور في التمييز (طبيب مميّز، تقييم، شارة) — لو دخل في
- * الأزرار لفقد معناه.
- *
- * لكل لون درجتان: واحدة تُقرأ على الفاتح وأخرى على الزمرّدي الداكن. خلطهما
- * يعطي نصاً باهتاً على أحد السطحين دائماً.
+ * الأساس كحلي داكن #1C2A3A مع سلّم رمادي محايد — هذا ما يعطي الشاشات مظهر
+ * الكيت. والزمرّدي بقي علامةً فقط: الأيقونة والشعار وشاشة البداية، فالهوية
+ * لا تُبنى على لون الأزرار وحده.
  */
 const light = {
-  bg: "#F3F7F4",
+  bg: "#F9FAFB",
   surface: "#FFFFFF",
-  surface2: "#EDF3EF",
-  surface3: "#E0EAE4",
-  ink: "#0C1F19",
-  muted: "#576B63",
-  faint: "#7F918A",
-  line: "#E3EBE6",
-  lineStrong: "#C8D6CF",
+  surface2: "#F3F4F6",
+  surface3: "#E5E7EB",
+  ink: "#1C2A3A",
+  muted: "#4B5563",
+  faint: "#78828F",
+  line: "#E5E7EB",
+  lineStrong: "#D1D5DB",
 
-  /** الزمرّدي: عميق للأزرار، وطرفا التدرّج للترويسات */
-  primary: "#0E5140",
-  primaryDeep: "#073328",
-  primaryLift: "#1A7C61",
-  primarySoft: "#E3EFE9",
-  primaryTint: "#F0F7F3",
+  /** الكحلي: الأزرار والعناوين وكل فعل أساسي */
+  primary: "#1C2A3A",
+  primaryDeep: "#101A24",
+  primaryLift: "#2E4257",
+  primarySoft: "#EEF1F4",
+  primaryTint: "#F5F7F8",
   onPrimary: "#FFFFFF",
 
-  /** الذهبي: درجة داكنة للنص على الأبيض، وفاتحة للنص على الزمرّدي */
+  /** الزمرّدي: العلامة وحدها — الأيقونة والشعار وشاشة البداية */
+  brand: "#0E5140",
+  brandSoft: "#E3EFE9",
+
+  /** الذهبي: التمييز — طبيب مميّز، تقييم، نظام أدوار */
   gold: "#8B6316",
   goldBright: "#E7C069",
-  goldSoft: "#F8EFDA",
+  goldSoft: "#FBF3E2",
   onGold: "#3A2A06",
 
-  ok: "#186B49",
-  okSoft: "#DFF0E7",
-  warn: "#8A5D0C",
-  warnSoft: "#FBEFD9",
-  danger: "#A82F23",
-  dangerSoft: "#FBE6E3",
+  ok: "#15803D",
+  okSoft: "#DCFCE7",
+  warn: "#92580A",
+  warnSoft: "#FEF3C7",
+  danger: "#B91C1C",
+  dangerSoft: "#FEE2E2",
 
-  overlay: "rgba(6, 26, 20, 0.5)",
-  /** ظل ملوّن بالهوية بدل الأسود — الأسود يجعل البطاقة متّسخة على خلفية خضراء */
-  shadowTint: "#0A2E24",
+  overlay: "rgba(17, 24, 39, 0.5)",
+  /** ظل رمادي محايد كما في الكيت — الظل الملوّن يشدّ الخلفية نحو لونه */
+  shadowTint: "#111827",
 };
 
 const dark: typeof light = {
-  bg: "#081310",
-  surface: "#0F1D18",
-  surface2: "#152722",
-  surface3: "#1E332C",
-  ink: "#E7EFEA",
-  muted: "#9BACA5",
-  faint: "#7C8D87",
-  line: "#22352E",
-  lineStrong: "#33473F",
+  bg: "#0B1116",
+  surface: "#141C24",
+  surface2: "#1B242E",
+  surface3: "#26313D",
+  ink: "#E7ECF1",
+  muted: "#9FADBC",
+  faint: "#7D8B9A",
+  line: "#26313D",
+  lineStrong: "#37434F",
 
-  primary: "#3FA383",
-  primaryDeep: "#0B241C",
-  primaryLift: "#4FB994",
-  primarySoft: "#12291F",
-  primaryTint: "#0E211A",
-  onPrimary: "#04170F",
+  primary: "#7FA3C4",
+  primaryDeep: "#0E161D",
+  primaryLift: "#9BB9D4",
+  primarySoft: "#18242F",
+  primaryTint: "#131C24",
+  onPrimary: "#0B1116",
+
+  brand: "#3FA383",
+  brandSoft: "#12291F",
 
   gold: "#E7C069",
   goldBright: "#F0D18C",
   goldSoft: "#2A2213",
   onGold: "#241A04",
 
-  ok: "#4FBB8B",
-  okSoft: "#0F2A1F",
-  warn: "#DFAE54",
+  ok: "#4ADE80",
+  okSoft: "#0F2A1B",
+  warn: "#FBBF24",
   warnSoft: "#2A2113",
-  danger: "#EF8A7C",
-  dangerSoft: "#2C1714",
+  danger: "#F87171",
+  dangerSoft: "#2C1615",
 
-  overlay: "rgba(0, 0, 0, 0.62)",
+  overlay: "rgba(0, 0, 0, 0.65)",
   shadowTint: "#000000",
 };
 
 /**
- * ألوان بطاقات التخصصات.
+ * ألوان بطاقات التخصصات — الباستيل الذي يعطي شبكة الكيت حيويتها.
  *
- * التخصصات ٢٨ ولون واحد يجعل الشبكة جداراً رتيباً، فنوزّعها على ثماني درجات
- * هادئة. الدرجة تُشتقّ من اسم التخصص لا من ترتيبه، كي لا يتبدّل لون «الأسنان»
- * حين يظهر طبيب جديد في تخصص قبله.
+ * التخصصات ٢٨ ولون واحد يجعل الشبكة جداراً رتيباً. الدرجة تُشتقّ من اسم
+ * التخصص لا من ترتيبه، كي لا يتبدّل لون «الأسنان» حين يظهر طبيب جديد في
+ * تخصص قبله.
  */
 const tints = [
-  { bg: "#DCE9E0", fg: "#2A6549" },
-  { bg: "#D6E7E9", fg: "#1C5D68" },
-  { bg: "#F0E6D2", fg: "#755919" },
-  { bg: "#F2DFD8", fg: "#8A4531" },
-  { bg: "#E3DFEF", fg: "#4E3E82" },
-  { bg: "#D9E6F2", fg: "#26527B" },
-  { bg: "#F1DEE4", fg: "#853853" },
-  { bg: "#E4E9D4", fg: "#4F5D26" },
+  { bg: "#FDE4E9", fg: "#A32F49" },
+  { bg: "#D8F0E1", fg: "#1B7440" },
+  { bg: "#FCE6D2", fg: "#94530F" },
+  { bg: "#E9E2F8", fg: "#553BA3" },
+  { bg: "#D2EDEA", fg: "#12706A" },
+  { bg: "#DCE6FB", fg: "#25438F" },
+  { bg: "#FBEFD0", fg: "#835E0C" },
+  { bg: "#D9EBFA", fg: "#155C88" },
 ] as const;
 
 const tintsDark = [
-  { bg: "#163024", fg: "#7FC7A2" },
-  { bg: "#132C31", fg: "#74C0CC" },
-  { bg: "#2E2717", fg: "#D8BC7A" },
-  { bg: "#2F2019", fg: "#E0A38C" },
-  { bg: "#221E33", fg: "#B0A2E0" },
-  { bg: "#16232F", fg: "#93BCE2" },
-  { bg: "#2C1B22", fg: "#DFA0B4" },
-  { bg: "#242817", fg: "#BCC98A" },
+  { bg: "#2E1B21", fg: "#F0A3B4" },
+  { bg: "#13291C", fg: "#7FD3A0" },
+  { bg: "#2D2016", fg: "#E5B183" },
+  { bg: "#221D33", fg: "#B7A5EA" },
+  { bg: "#122A29", fg: "#7FD1CA" },
+  { bg: "#161F33", fg: "#9FB8EE" },
+  { bg: "#2A2415", fg: "#E0C378" },
+  { bg: "#132430", fg: "#8FC4E6" },
 ] as const;
 
 export type Tint = { bg: string; fg: string };
