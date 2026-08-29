@@ -5,6 +5,22 @@ set -euo pipefail
 
 cd "$(dirname "$0")"
 say() { printf "\n\033[1;36m%s\033[0m\n" "$1"; }
+die() { printf "\n\033[1;31m%s\033[0m\n" "$1" >&2; exit 1; }
+
+# حساب المالك: مرّر إيميلك وباسووردك ليصيرا حسابك من أول تشغيل
+#   OWNER_EMAIL=you@example.com OWNER_PASSWORD='...' bash setup.sh
+# نتذكّر هل مُرّرا صراحةً، كي نحدّث ملفاً موجوداً من تشغيل سابق
+OWNER_GIVEN="${OWNER_EMAIL:-}${OWNER_PASSWORD:-}"
+OWNER_EMAIL="${OWNER_EMAIL:-owner@mawid.iq}"
+OWNER_PASSWORD="${OWNER_PASSWORD:-MawidOwner2026}"
+
+# الفحص قبل أي عمل: الباسوورد القصير كان يُكتشف بعد التنصيب والتعبئة كلّها،
+# فيضيع الوقت وتبقى القاعدة بلا حساب مالك.
+# العدّ ببايثون لا بـ${#var}: الأخيرة تعدّ البايتات في بعض الإعدادات، فباسوورد
+# عربي من خمسة أحرف يمرّ هنا ثم يرفضه الخادم الذي يعدّ الأحرف.
+PASS_LEN=$(OWNER_PASSWORD="$OWNER_PASSWORD" python3 -c 'import os; print(len(os.environ["OWNER_PASSWORD"]))')
+[ "$PASS_LEN" -ge 10 ] || die "OWNER_PASSWORD قصير: $PASS_LEN حرفاً، والمطلوب ١٠ على الأقل."
+case "$OWNER_EMAIL" in *@*.*) ;; *) die "OWNER_EMAIL لا يبدو إيميلاً: $OWNER_EMAIL" ;; esac
 
 say "١/٥ · تشغيل قاعدة البيانات"
 if command -v docker >/dev/null && docker compose version >/dev/null 2>&1; then
@@ -27,10 +43,6 @@ cd api
 [ -f .env ] || {
   cp .env.example .env
   SECRET=$(openssl rand -base64 48 2>/dev/null || head -c 36 /dev/urandom | base64)
-  # حساب المالك: مرّر إيميلك وباسووردك ليصيرا حسابك من أول تشغيل
-  #   OWNER_EMAIL=you@example.com OWNER_PASSWORD='...' bash setup.sh
-  OWNER_EMAIL="${OWNER_EMAIL:-owner@mawid.iq}"
-  OWNER_PASSWORD="${OWNER_PASSWORD:-MawidOwner2026}"
   # sed -i يختلف بين لينكس وماك، فنكتب الملف بدلاً منه
   python3 - "$SECRET" "$OWNER_EMAIL" "$OWNER_PASSWORD" <<'PY'
 import sys, pathlib
@@ -51,6 +63,25 @@ p.write_text("\n".join(lines) + "\n", encoding="utf-8")
 PY
   echo "أُنشئ api/.env بسر توقيع عشوائي — حساب المالك: $OWNER_EMAIL"
 }
+
+# ملف موجود من تشغيل سابق: نحدّث سطرَي المالك وحدهما إن مُرّرا صراحةً.
+# لا نلمس JWT_SECRET ولا DATABASE_URL كي لا تبطل الجلسات ولا يضيع الاتصال.
+if [ -n "$OWNER_GIVEN" ]; then
+  python3 - "$OWNER_EMAIL" "$OWNER_PASSWORD" <<'ENVFIX'
+import sys, pathlib
+email, password = sys.argv[1], sys.argv[2]
+path = pathlib.Path(".env")
+lines = []
+for line in path.read_text(encoding="utf-8").splitlines():
+    if line.startswith("OWNER_EMAIL="):
+        line = f'OWNER_EMAIL="{email}"'
+    elif line.startswith("OWNER_PASSWORD="):
+        line = f'OWNER_PASSWORD="{password}"'
+    lines.append(line)
+path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+ENVFIX
+  echo "حُدِّث حساب المالك في api/.env: $OWNER_EMAIL"
+fi
 npm install --silent
 npm run db:push --silent
 npm run db:seed
