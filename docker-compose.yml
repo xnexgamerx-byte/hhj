@@ -12,7 +12,9 @@ services:
       # ترتيب عربي صحيح في الفرز
       LANG: ar_IQ.utf8
     ports:
-      - "5432:5432"
+      # منفذ المضيف قابل للتغيير: DB_PORT=5433 docker compose up -d
+      # لو كان عندك بوستغرس آخر يشغّل ٥٤٣٢ فلن يقلع هذا بدونه
+      - "${DB_PORT:-5432}:5432"
     volumes:
       - mawid-data:/var/lib/postgresql/data
     healthcheck:

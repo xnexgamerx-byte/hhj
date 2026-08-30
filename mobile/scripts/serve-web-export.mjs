@@ -6,6 +6,9 @@ import { createServer } from "node:http";
 import { readFile } from "node:fs/promises";
 import { join, extname } from "node:path";
 
+// منفذ قابل للتغيير: DIST_PORT=3012 npm run serve:web
+const PORT = Number(process.env.DIST_PORT ?? 3002);
+
 const ROOT = new URL("../dist/", import.meta.url).pathname;
 const TYPES = { ".html": "text/html", ".js": "text/javascript", ".json": "application/json",
   ".png": "image/png", ".ttf": "font/ttf", ".css": "text/css", ".svg": "image/svg+xml" };
@@ -20,4 +23,4 @@ createServer(async (req, res) => {
     } catch { /* نجرّب التالي */ }
   }
   res.writeHead(404).end("not found");
-}).listen(3002, () => console.log("dist على 3002"));
+}).listen(PORT, () => console.log(`dist على ${PORT}`));

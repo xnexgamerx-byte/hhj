@@ -9,6 +9,7 @@
     "db:migrate": "prisma migrate dev",
     "db:push": "prisma db push",
     "db:seed": "tsx prisma/seed/index.ts",
+    "db:demo": "tsx prisma/seed/demo.ts",
     "db:studio": "prisma studio",
     "db:validate": "prisma validate",
     "db:format": "prisma format",
