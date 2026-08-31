@@ -17,14 +17,16 @@
     "react": "19.2.3",
     "react-dom": "^19.2.3",
     "react-native": "0.86.3",
+    "react-native-gesture-handler": "~2.32.0",
+    "react-native-reanimated": "4.5.1",
     "react-native-safe-area-context": "~5.7.0",
     "react-native-screens": "~4.26.0",
     "react-native-svg": "^15.15.4",
-    "react-native-web": "^0.21.2"
+    "react-native-web": "^0.21.2",
+    "react-native-worklets": "0.10.1"
   },
   "devDependencies": {
     "@types/react": "~19.2.2",
-    "eas-cli": "^23.1.0",
     "playwright": "^1.62.1",
     "typescript": "~6.0.3"
   },
@@ -37,10 +39,11 @@
     "typecheck": "tsc --noEmit",
     "serve:web": "node scripts/serve-web-export.mjs",
     "e2e": "node e2e/booking-flow.mjs",
-    "build:dev": "eas build --profile development --platform android",
-    "build:apk": "eas build --profile preview --platform android",
-    "eas:login": "eas login",
-    "eas:whoami": "eas whoami"
+    "build:dev": "npx eas-cli@latest build --profile development --platform android",
+    "build:apk": "npx eas-cli@latest build --profile preview --platform android",
+    "eas:login": "npx eas-cli@latest login",
+    "eas:whoami": "npx eas-cli@latest whoami",
+    "check:native": "node scripts/check-native-versions.mjs"
   },
   "private": true
 }
