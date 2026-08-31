@@ -19,6 +19,8 @@ import * as SecureStore from "expo-secure-store";
  * ٣٠٠٠. بدونه يشير localhost داخل الهاتف إلى الهاتف نفسه لا إلى حاسوبك،
  * وهو أكثر ما يُربك في أول تجربة.
  */
+const API_PORT = process.env.EXPO_PUBLIC_API_PORT ?? "3000";
+
 function inferDevHost(): string | null {
   const hostUri =
     Constants.expoConfig?.hostUri ??
@@ -27,12 +29,27 @@ function inferDevHost(): string | null {
 
   const host = hostUri.split(":")[0];
   if (!host || host === "localhost" || host === "127.0.0.1") return null;
-  return `http://${host}:${process.env.EXPO_PUBLIC_API_PORT ?? "3000"}`;
+  return `http://${host}:${API_PORT}`;
+}
+
+/**
+ * على الويب: الخادم على نفس الجهاز الذي جاءت منه الصفحة.
+ *
+ * يهمّ حين تُفتح النسخة المصدَّرة من متصفّح الهاتف عبر الشبكة المحلية —
+ * وهي طريق تجربة التطبيق على جهاز حقيقي دون Expo Go. لولاه لقصد localhost
+ * الهاتفَ نفسه ولما وصل طلبٌ واحد.
+ */
+function inferWebHost(): string | null {
+  if (Platform.OS !== "web") return null;
+  const host = typeof window === "undefined" ? null : window.location?.hostname;
+  if (!host) return null;
+  return `http://${host}:${API_PORT}`;
 }
 
 const BASE: string =
   process.env.EXPO_PUBLIC_API_URL ??
   inferDevHost() ??
+  inferWebHost() ??
   (Constants.expoConfig?.extra as { apiUrl?: string } | undefined)?.apiUrl ??
   "http://localhost:3000";
 

@@ -24,8 +24,21 @@ export async function buildServer() {
   // الواجهة تعمل على أصل مختلف عن الخادم، فبدون CORS لا يصلها شيء.
   // في الإنتاج تُحصر القائمة بنطاق الموقع الحقيقي عبر WEB_ORIGIN.
   const allowed = (process.env.WEB_ORIGIN ?? "http://localhost:3001").split(",").map((o) => o.trim());
+  const isProduction = process.env.NODE_ENV === "production";
+
+  // في التطوير وحده: أصلٌ على شبكة محلية خاصة مسموح مهما كان منفذه. بدونه
+  // لا تُجرَّب النسخة المصدَّرة من متصفّح الهاتف — أصلها عنوان الحاسوب على
+  // الشبكة، ولا يعرفه أحد سلفاً ليكتبه في WEB_ORIGIN. ولا يتّسع هذا للإنتاج:
+  // هناك تبقى القائمة وحدها هي الحَكَم.
+  const PRIVATE_LAN = /^https?:\/\/(10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)[\d.]+(:\d+)?$/;
+
   await app.register(cors, {
-    origin: allowed.includes("*") ? true : allowed,
+    origin(origin, callback) {
+      // الطلبات بلا أصل (تطبيق أصيل، curl، فحص صحة) لا يحكمها CORS
+      if (!origin || allowed.includes("*") || allowed.includes(origin)) return callback(null, true);
+      if (!isProduction && PRIVATE_LAN.test(origin)) return callback(null, true);
+      callback(null, false);
+    },
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE"],
     credentials: false,
   });
