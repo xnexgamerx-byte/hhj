@@ -6,7 +6,7 @@
  * على الويب تُستعمل localStorage لأن الحافظة الآمنة غير متاحة هناك.
  */
 import Constants from "expo-constants";
-import { NativeModules, Platform } from "react-native";
+import { NativeModules, Platform, TurboModuleRegistry } from "react-native";
 import * as SecureStore from "expo-secure-store";
 
 /**
@@ -22,36 +22,59 @@ import * as SecureStore from "expo-secure-store";
 const API_PORT = process.env.EXPO_PUBLIC_API_PORT ?? "3000";
 
 /**
- * عنوان الحاسوب كما جاءت منه الشفرة فعلاً.
+ * يستخرج المضيف من عنوان، ويردّ null لما لا يدلّ على حاسوبٍ في الشبكة.
  *
- * أوثق من بيانات المنشور: الحزمة نُزّلت من خادم Metro، فعنوانه هو عنوان
- * الحاسوب يقيناً لا استنتاجاً. وبيانات المنشور قد تغيب في بناء التطوير أو
- * تعود بـlocalhost، فيقع التطبيق على localhost:3000 — وهو داخل الهاتف
- * الهاتفُ نفسه، فيعلّق الطلب بلا أثر ظاهر.
+ * المخطّط يُفحص لا يُتخطّى: عنوانٌ كـfile:///…/index.android.bundle يعني حزمة
+ * مضمّنة لا خادم تطوير، وتخطّي المخطّط يجعل "file" نفسه يبدو اسم مضيف.
+ */
+function hostFrom(url: string | null | undefined): string | null {
+  if (!url) return null;
+
+  let host: string | null;
+  const scheme = /^([a-z][a-z0-9+.-]*):\/\//i.exec(url)?.[1]?.toLowerCase();
+  if (scheme) {
+    // http وhttps عنوانا Metro، وexp وexps عنوانا إكسبو. ما عداهما ليس خادماً
+    if (!["http", "https", "exp", "exps"].includes(scheme)) return null;
+    host = /^[a-z][a-z0-9+.-]*:\/\/([^/:?#]+)/i.exec(url)?.[1] ?? null;
+  } else {
+    // بلا مخطّط: نقبل "مضيف" أو "مضيف:منفذ" فقط. الاكتفاء بأول مقطع يجعل
+    // بادئة مخطّطٍ مركّب مثل jar:file://… تبدو اسم مضيف
+    host = /^([^/:?#]+)(?::\d+)?(?:[/?#]|$)/.exec(url)?.[1] ?? null;
+  }
+
+  if (!host || host === "localhost" || host === "127.0.0.1") return null;
+  return `http://${host}:${API_PORT}`;
+}
+
+/**
+ * عنوان الحاسوب كما رواه المشغّل الأصيل: من أين نُزّلت الشفرة فعلاً.
+ *
+ * أوثق مصدر على الإطلاق — الحزمة جاءت من خادم Metro، فعنوانه هو عنوان
+ * الحاسوب يقيناً لا استنتاجاً.
+ *
+ * يُقرأ عبر TurboModuleRegistry لا NativeModules: المعمارية الجديدة
+ * (newArchEnabled) تعمل بلا جسر، فـNativeModules.SourceCode فيها غير معرّف
+ * وترجع الدالة null صامتة — فينزلق التسلسل إلى localhost، وهو داخل الهاتف
+ * الهاتفُ نفسه. وهذا بالضبط ما وقع.
  */
 function inferFromBundleUrl(): string | null {
   if (Platform.OS === "web") return null;
   try {
-    const source = (NativeModules as { SourceCode?: { scriptURL?: string; getConstants?: () => { scriptURL?: string } } })
-      .SourceCode;
-    const url = source?.getConstants?.().scriptURL ?? source?.scriptURL;
-    const host = url ? /^https?:\/\/([^/:]+)/.exec(url)?.[1] : null;
-    if (!host || host === "localhost" || host === "127.0.0.1") return null;
-    return `http://${host}:${API_PORT}`;
+    const turbo = TurboModuleRegistry.get<{ getConstants: () => { scriptURL?: string } }>("SourceCode");
+    const legacy = (NativeModules as { SourceCode?: { scriptURL?: string } }).SourceCode;
+    return hostFrom(turbo?.getConstants?.().scriptURL ?? legacy?.scriptURL);
   } catch {
     return null; // وحدة أصيلة غائبة يجب ألّا تُسقط التطبيق عند التحميل
   }
 }
 
+/** بيانات المنشور — تعمل في Expo Go، وقد تغيب في بناء التطوير */
 function inferDevHost(): string | null {
-  const hostUri =
+  return hostFrom(
     Constants.expoConfig?.hostUri ??
-    (Constants.expoGoConfig as { debuggerHost?: string } | undefined)?.debuggerHost;
-  if (!hostUri) return null;
-
-  const host = hostUri.split(":")[0];
-  if (!host || host === "localhost" || host === "127.0.0.1") return null;
-  return `http://${host}:${API_PORT}`;
+      (Constants.expoGoConfig as { debuggerHost?: string } | undefined)?.debuggerHost ??
+      Constants.experienceUrl,
+  );
 }
 
 /**
@@ -63,9 +86,7 @@ function inferDevHost(): string | null {
  */
 function inferWebHost(): string | null {
   if (Platform.OS !== "web") return null;
-  const host = typeof window === "undefined" ? null : window.location?.hostname;
-  if (!host) return null;
-  return `http://${host}:${API_PORT}`;
+  return typeof window === "undefined" ? null : hostFrom(window.location?.hostname);
 }
 
 // نصّ فارغ في متغيّر البيئة أسوأ من غيابه: `??` تمرّره فتنقطع سلسلة
@@ -80,14 +101,28 @@ const BASE: string =
   (Constants.expoConfig?.extra as { apiUrl?: string } | undefined)?.apiUrl ??
   "http://localhost:3000";
 
+// على جهاز حقيقي، localhost يعني الجهاز نفسه — فبلوغُه هنا يقين خطأ لا احتمال.
+// نرفعه إلى السطح بدل أن يظهر بعد حين كـ«تعذّر الاتصال» يُبحث له عن سبب في
+// الشبكة وجدار الحماية، وهي رحلة لا تنتهي عند أحد.
+const LOST = Platform.OS !== "web" && /^https?:\/\/(localhost|127\.0\.0\.1)\b/.test(BASE);
+
 // ١٥ ثانية: سخيّة لشبكة بطيئة، وقصيرة بما يكفي ألّا يظنّ أحد أنّ التطبيق معطّل
 const REQUEST_TIMEOUT_MS = 15_000;
 
-// طباعته في التطوير تختصر تشخيصاً كاملاً: من يرى الدوّارة لا يعرف إن كان
-// التطبيق يقصد حاسوبه أم يقصد الهاتف نفسه
-if (__DEV__) console.log(`[موعد] عنوان الخادم: ${BASE}`);
+if (__DEV__) {
+  console.log(`[موعد] عنوان الخادم: ${BASE}`);
+  if (LOST) {
+    console.warn(
+      "[موعد] تعذّر معرفة عنوان حاسوبك، وlocalhost داخل الهاتف يعني الهاتف نفسه.\n" +
+        "        اكتب العنوان يدوياً في mobile/.env ثم أعد تشغيل Metro:\n" +
+        "          EXPO_PUBLIC_API_URL=http://<عنوان-حاسوبك>:" +
+        API_PORT,
+    );
+  }
+}
 
 const ACCESS_KEY = "mawid.access";
+
 const REFRESH_KEY = "mawid.refresh";
 const USER_KEY = "mawid.user";
 
@@ -173,15 +208,22 @@ export async function clearSession(): Promise<void> {
 const SLOW_FAILURE_MS = 4000;
 
 function networkFailure(error: Error, elapsedMs: number): ApiError {
-  const where = __DEV__ ? ` (${BASE})` : "";
-  const swallowed = error?.name === "AbortError" || elapsedMs >= SLOW_FAILURE_MS;
-
   if (!__DEV__) {
     return new ApiError(0, "NETWORK", "تعذّر الاتصال. تحقق من الإنترنت");
   }
+  // عنوانٌ ضائع سببٌ قائم بذاته: لا معنى لاتهام الخادم ولا جدار الحماية وقد
+  // كان الطلب ذاهباً إلى الهاتف نفسه من البداية
+  if (LOST) {
+    return new ApiError(
+      0,
+      "NO_HOST",
+      `تعذّر معرفة عنوان حاسوبك، فقُصد ${BASE} — وهو الهاتف نفسه. اكتب العنوان في mobile/.env: EXPO_PUBLIC_API_URL`,
+    );
+  }
+  const swallowed = error?.name === "AbortError" || elapsedMs >= SLOW_FAILURE_MS;
   return swallowed
-    ? new ApiError(0, "TIMEOUT", `لم يصل الطلب${where} — جدار الحماية يحجب المنفذ على الأرجح.`)
-    : new ApiError(0, "NETWORK", `رُفض الاتصال${where} — الخادم لا يعمل على الأرجح.`);
+    ? new ApiError(0, "TIMEOUT", `لم يصل الطلب (${BASE}) — جدار الحماية يحجب المنفذ على الأرجح.`)
+    : new ApiError(0, "NETWORK", `رُفض الاتصال (${BASE}) — الخادم لا يعمل على الأرجح.`);
 }
 
 async function request<T>(path: string, init: RequestInit = {}, retry = true): Promise<T> {
