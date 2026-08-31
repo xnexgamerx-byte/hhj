@@ -7,3 +7,8 @@ web-build/
 expo-env.d.ts
 .env
 *.tsbuildinfo
+
+# مجلّدا البناء الأصيل: يولّدهما expo prebuild عند الحاجة. إيداعهما ينقل
+# المشروع إلى نمط "bare" فيصير صيانتهما علينا، وEAS يتوقّف عن توليدهما
+android/
+ios/

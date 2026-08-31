@@ -20,7 +20,6 @@
     },
     "android": {
       "package": "iq.mawid.app",
-      "edgeToEdgeEnabled": true,
       "adaptiveIcon": {
         "foregroundImage": "./assets/android-icon-foreground.png",
         "backgroundImage": "./assets/android-icon-background.png",
