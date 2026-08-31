@@ -31,7 +31,14 @@ export async function buildServer() {
 async function start() {
   // فشل مبكر وواضح خير من خادم يعمل بلا سر توقيع
   if (!process.env.JWT_SECRET || process.env.JWT_SECRET.length < 32) {
-    console.error("JWT_SECRET مفقود أو أقصر من ٣٢ خانة. راجع ملف ‎.env");
+    // الرسالة تقول ما يُفعل لا ما حدث فقط: من يراها أول مرة لا يعرف
+    // أنّ السرّ يُولَّد بأمر واحد، فيظنّ العطل في المشروع
+    console.error(
+      [
+        "JWT_SECRET مفقود أو أقصر من ٣٢ خانة في api/.env",
+        "  ولّده بأمر واحد:  npm run env:fix",
+      ].join("\n"),
+    );
     process.exit(1);
   }
 
