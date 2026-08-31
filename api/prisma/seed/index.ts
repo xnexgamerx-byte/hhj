@@ -148,6 +148,7 @@ async function seedOwner() {
   const existing = await prisma.user.findUnique({ where: { email }, select: { id: true } });
   if (existing) {
     console.log(`  المالك:     موجود مسبقاً (${email}) — لم يُمسّ باسووردهُ`);
+    console.log(`              إن لم يعد باسوورد .env يفتحه، شغّل: npm run owner:reset`);
     return;
   }
 

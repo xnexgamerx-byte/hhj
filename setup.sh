@@ -51,6 +51,20 @@ npm install --silent
 npm run db:push --silent
 npm run db:seed
 
+# هل يفتح باسوورد .env حسابَ المالك فعلاً؟ عند إعادة التشغيل بعد تغيير
+# الباسوورد من الواجهة يصير الملفّ يقول شيئاً والقاعدةُ شيئاً آخر — فلا نطبع
+# اعتماداتٍ لا تعمل، بل نطبع طريقة إصلاحها.
+OWNER_CHECK=0
+npm run --silent owner:reset -- --check >/dev/null 2>&1 || OWNER_CHECK=$?
+case $OWNER_CHECK in
+  0) OWNER_NOTE="دخول المالك:  ${SHOW_EMAIL}  /  ${SHOW_PASS}
+سيُطلب منك تغيير الباسوورد أول دخول." ;;
+  2) OWNER_NOTE="دخول المالك:  ${SHOW_EMAIL}  /  ${SHOW_PASS}" ;;
+  *) OWNER_NOTE="دخول المالك:  ${SHOW_EMAIL}
+باسوورد api/.env لم يعد يفتح الحساب — غُيّر من الواجهة على الأرجح.
+لإعادته إلى ما في الملف:  cd api && npm run owner:reset" ;;
+esac
+
 say "٣/٥ · إعداد لوحات الويب"
 cd ../web && npm install --silent
 
@@ -66,7 +80,6 @@ cat <<DONE
   cd web    && npm run dev     اللوحات على ٣٠٠١
   cd mobile && npm start       التطبيق — امسح رمز QR بتطبيق Expo Go
 
-دخول المالك:  ${SHOW_EMAIL:-owner@mawid.iq}  /  ${SHOW_PASS:-MawidOwner2026}
-سيُطلب منك تغيير الباسوورد أول دخول.
+${OWNER_NOTE}
 
 DONE

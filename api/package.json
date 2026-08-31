@@ -20,7 +20,8 @@
     "verify:owner": "tsx scripts/verify-owner-and-whatsapp.ts",
     "verify": "npm run typecheck && npm run verify:booking && npm run verify:owner && npm run verify:availability && npm run verify:features",
     "verify:availability": "tsx scripts/verify-availability.ts",
-    "verify:features": "tsx scripts/verify-features.ts"
+    "verify:features": "tsx scripts/verify-features.ts",
+    "owner:reset": "tsx scripts/reset-owner.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed/index.ts"
