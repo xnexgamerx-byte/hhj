@@ -160,6 +160,30 @@ export async function clearSession(): Promise<void> {
 }
 
 // ── الطلبات ─────────────────────────────────────────────────────
+/**
+ * يفرّق بين أشكال فشل الشبكة بزمن الفشل، لا بنوع الخطأ وحده.
+ *
+ * طبقة HTTP في أندرويد تُسقِط الطلب بمهلتها الخاصة قبل مهلتنا، فترمي خطأ
+ * شبكة عادياً لا AbortError — فيتساوى في الرسالة منفذٌ مرفوض فوراً ومنفذٌ
+ * تُبتلع حزمه بصمت، وهما عطلان مختلفان تماماً:
+ *
+ *   فشلٌ سريع  ⇐ وصل الطلب ورُفض: لا شيء يستمع على المنفذ (الخادم متوقف)
+ *   فشلٌ بطيء  ⇐ لم يصل جواب أصلاً: جدار حماية يحجب المنفذ
+ */
+const SLOW_FAILURE_MS = 4000;
+
+function networkFailure(error: Error, elapsedMs: number): ApiError {
+  const where = __DEV__ ? ` (${BASE})` : "";
+  const swallowed = error?.name === "AbortError" || elapsedMs >= SLOW_FAILURE_MS;
+
+  if (!__DEV__) {
+    return new ApiError(0, "NETWORK", "تعذّر الاتصال. تحقق من الإنترنت");
+  }
+  return swallowed
+    ? new ApiError(0, "TIMEOUT", `لم يصل الطلب${where} — جدار الحماية يحجب المنفذ على الأرجح.`)
+    : new ApiError(0, "NETWORK", `رُفض الاتصال${where} — الخادم لا يعمل على الأرجح.`);
+}
+
 async function request<T>(path: string, init: RequestInit = {}, retry = true): Promise<T> {
   const token = await readKey(ACCESS_KEY);
   const headers = new Headers(init.headers);
@@ -171,22 +195,13 @@ async function request<T>(path: string, init: RequestInit = {}, retry = true): P
   // أمام دوّارة لا تنتهي ولا يعرف أن شيئاً تعطّل.
   const abort = new AbortController();
   const timer = setTimeout(() => abort.abort(), REQUEST_TIMEOUT_MS);
+  const startedAt = Date.now();
 
   let response: Response;
   try {
     response = await fetch(`${BASE}${path}`, { ...init, headers, signal: abort.signal });
   } catch (error) {
-    const timedOut = (error as Error)?.name === "AbortError";
-    // في التطوير نذكر العنوان: أكثر ما يعطّل أول تجربة على هاتف حقيقي هو
-    // جدار الحماية على منفذ الخادم، ولا يُخمَّن ذلك من "تعذّر الاتصال"
-    const where = __DEV__ ? ` (${BASE})` : "";
-    throw new ApiError(
-      0,
-      timedOut ? "TIMEOUT" : "NETWORK",
-      timedOut
-        ? `لم يستجب الخادم${where}. تأكد أنه يعمل وأن جدار الحماية لا يحجب منفذه.`
-        : `تعذّر الاتصال${where}. تحقق من الإنترنت`,
-    );
+    throw networkFailure(error as Error, Date.now() - startedAt);
   } finally {
     clearTimeout(timer);
   }
