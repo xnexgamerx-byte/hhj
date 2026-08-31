@@ -46,8 +46,12 @@ function inferWebHost(): string | null {
   return `http://${host}:${API_PORT}`;
 }
 
+// نصّ فارغ في متغيّر البيئة أسوأ من غيابه: `??` تمرّره فتنقطع سلسلة
+// الاستنتاج كلّها ويبقى العنوان فارغاً
+const ENV_URL = process.env.EXPO_PUBLIC_API_URL?.trim() || null;
+
 const BASE: string =
-  process.env.EXPO_PUBLIC_API_URL ??
+  ENV_URL ??
   inferDevHost() ??
   inferWebHost() ??
   (Constants.expoConfig?.extra as { apiUrl?: string } | undefined)?.apiUrl ??
