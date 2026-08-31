@@ -6,7 +6,7 @@
  * على الويب تُستعمل localStorage لأن الحافظة الآمنة غير متاحة هناك.
  */
 import Constants from "expo-constants";
-import { Platform } from "react-native";
+import { NativeModules, Platform } from "react-native";
 import * as SecureStore from "expo-secure-store";
 
 /**
@@ -20,6 +20,28 @@ import * as SecureStore from "expo-secure-store";
  * وهو أكثر ما يُربك في أول تجربة.
  */
 const API_PORT = process.env.EXPO_PUBLIC_API_PORT ?? "3000";
+
+/**
+ * عنوان الحاسوب كما جاءت منه الشفرة فعلاً.
+ *
+ * أوثق من بيانات المنشور: الحزمة نُزّلت من خادم Metro، فعنوانه هو عنوان
+ * الحاسوب يقيناً لا استنتاجاً. وبيانات المنشور قد تغيب في بناء التطوير أو
+ * تعود بـlocalhost، فيقع التطبيق على localhost:3000 — وهو داخل الهاتف
+ * الهاتفُ نفسه، فيعلّق الطلب بلا أثر ظاهر.
+ */
+function inferFromBundleUrl(): string | null {
+  if (Platform.OS === "web") return null;
+  try {
+    const source = (NativeModules as { SourceCode?: { scriptURL?: string; getConstants?: () => { scriptURL?: string } } })
+      .SourceCode;
+    const url = source?.getConstants?.().scriptURL ?? source?.scriptURL;
+    const host = url ? /^https?:\/\/([^/:]+)/.exec(url)?.[1] : null;
+    if (!host || host === "localhost" || host === "127.0.0.1") return null;
+    return `http://${host}:${API_PORT}`;
+  } catch {
+    return null; // وحدة أصيلة غائبة يجب ألّا تُسقط التطبيق عند التحميل
+  }
+}
 
 function inferDevHost(): string | null {
   const hostUri =
@@ -52,6 +74,7 @@ const ENV_URL = process.env.EXPO_PUBLIC_API_URL?.trim() || null;
 
 const BASE: string =
   ENV_URL ??
+  inferFromBundleUrl() ??
   inferDevHost() ??
   inferWebHost() ??
   (Constants.expoConfig?.extra as { apiUrl?: string } | undefined)?.apiUrl ??
@@ -59,6 +82,10 @@ const BASE: string =
 
 // ١٥ ثانية: سخيّة لشبكة بطيئة، وقصيرة بما يكفي ألّا يظنّ أحد أنّ التطبيق معطّل
 const REQUEST_TIMEOUT_MS = 15_000;
+
+// طباعته في التطوير تختصر تشخيصاً كاملاً: من يرى الدوّارة لا يعرف إن كان
+// التطبيق يقصد حاسوبه أم يقصد الهاتف نفسه
+if (__DEV__) console.log(`[موعد] عنوان الخادم: ${BASE}`);
 
 const ACCESS_KEY = "mawid.access";
 const REFRESH_KEY = "mawid.refresh";
