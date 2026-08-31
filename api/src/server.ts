@@ -1,3 +1,4 @@
+import { networkInterfaces } from "node:os";
 import { pathToFileURL } from "node:url";
 import Fastify from "fastify";
 import cors from "@fastify/cors";
@@ -9,7 +10,13 @@ import { startScheduler, stopScheduler } from "./scheduler.js";
 
 export async function buildServer() {
   const app = Fastify({
-    logger: { level: process.env.LOG_LEVEL ?? "info" },
+    logger: {
+      level: process.env.LOG_LEVEL ?? "info",
+      // عبر process.stdout لا عبر الواصف الخام: pino يكتب البايتات مباشرة
+      // إلى fd 1، وطرفية ويندوز تفسّرها بترميز صفحتها فينهار كل نصّ عربي في
+      // السجل إلى رموز. أما stdout فيمرّ بتحويل نود إلى WriteConsoleW فيسلم.
+      stream: process.stdout,
+    },
     // الأسماء والعناوين العربية تجعل الأجسام أطول من المعتاد
     bodyLimit: 1_048_576,
   });
@@ -26,6 +33,25 @@ export async function buildServer() {
   app.setErrorHandler(errorHandler);
   await registerRoutes(app);
   return app;
+}
+
+/**
+ * عناوين الحاسوب على الشبكة المحلية — ما يستعمله الهاتف عبر Expo Go.
+ *
+ * localhost داخل الهاتف يشير إلى الهاتف نفسه، وهو أكثر ما يُربك في أول
+ * تجربة. وطباعتها هنا تتيح فتحها من متصفّح الهاتف للتأكد قبل اتهام التطبيق:
+ * جدار حماية ويندوز يحجب المنفذ افتراضياً عند أول تشغيل.
+ */
+function lanAddresses(): string[] {
+  const out: string[] = [];
+  for (const entries of Object.values(networkInterfaces())) {
+    for (const entry of entries ?? []) {
+      if (entry.family !== "IPv4" || entry.internal) continue;
+      // الشبكات الخاصة وحدها: البقية عناوين محوّلات وهمية أو شبكات خاصة افتراضية
+      if (/^(10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/.test(entry.address)) out.push(entry.address);
+    }
+  }
+  return out;
 }
 
 async function start() {
@@ -62,6 +88,7 @@ async function start() {
 
   const app = await buildServer();
   const port = Number(process.env.PORT ?? 3000);
+  const lan = lanAddresses();
 
   try {
     await app.listen({ port, host: "0.0.0.0" });
@@ -71,6 +98,13 @@ async function start() {
         "",
         "  موعد · الخادم جاهز",
         `  http://localhost:${port}`,
+        // أكثر من عنوان يعني محوّلات وهمية إلى جانب الشبكة الحقيقية، ولا سبيل
+        // للجزم أيّها شبكة الواي-فاي — فنعرضها ونترك الاختيار لمن يرى هاتفه
+        ...(lan.length === 1
+          ? [`  من الهاتف:   http://${lan[0]}:${port}`]
+          : lan.length > 1
+            ? ["  من الهاتف — جرّب ما يوافق شبكة الواي-فاي:", ...lan.map((ip) => `      http://${ip}:${port}`)]
+            : []),
         `  واتساب: ${getWhatsAppProvider().name}`,
         "",
       ].join("\n"),
