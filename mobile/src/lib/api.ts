@@ -57,6 +57,9 @@ const BASE: string =
   (Constants.expoConfig?.extra as { apiUrl?: string } | undefined)?.apiUrl ??
   "http://localhost:3000";
 
+// ١٥ ثانية: سخيّة لشبكة بطيئة، وقصيرة بما يكفي ألّا يظنّ أحد أنّ التطبيق معطّل
+const REQUEST_TIMEOUT_MS = 15_000;
+
 const ACCESS_KEY = "mawid.access";
 const REFRESH_KEY = "mawid.refresh";
 const USER_KEY = "mawid.user";
@@ -136,11 +139,29 @@ async function request<T>(path: string, init: RequestInit = {}, retry = true): P
   if (init.body) headers.set("Content-Type", "application/json");
   if (token) headers.set("Authorization", `Bearer ${token}`);
 
+  // مهلة صريحة: fetch بلا مهلة يعلّق إلى الأبد حين تُبتلع الحزم بصمت —
+  // جدار حماية يحجب المنفذ، أو شبكة تسقط في منتصف الطلب — فيبقى المستخدم
+  // أمام دوّارة لا تنتهي ولا يعرف أن شيئاً تعطّل.
+  const abort = new AbortController();
+  const timer = setTimeout(() => abort.abort(), REQUEST_TIMEOUT_MS);
+
   let response: Response;
   try {
-    response = await fetch(`${BASE}${path}`, { ...init, headers });
-  } catch {
-    throw new ApiError(0, "NETWORK", "تعذّر الاتصال. تحقق من الإنترنت");
+    response = await fetch(`${BASE}${path}`, { ...init, headers, signal: abort.signal });
+  } catch (error) {
+    const timedOut = (error as Error)?.name === "AbortError";
+    // في التطوير نذكر العنوان: أكثر ما يعطّل أول تجربة على هاتف حقيقي هو
+    // جدار الحماية على منفذ الخادم، ولا يُخمَّن ذلك من "تعذّر الاتصال"
+    const where = __DEV__ ? ` (${BASE})` : "";
+    throw new ApiError(
+      0,
+      timedOut ? "TIMEOUT" : "NETWORK",
+      timedOut
+        ? `لم يستجب الخادم${where}. تأكد أنه يعمل وأن جدار الحماية لا يحجب منفذه.`
+        : `تعذّر الاتصال${where}. تحقق من الإنترنت`,
+    );
+  } finally {
+    clearTimeout(timer);
   }
 
   if (response.status === 401 && retry && (await tryRefresh())) {
