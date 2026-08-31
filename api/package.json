@@ -22,7 +22,8 @@
     "verify:availability": "tsx scripts/verify-availability.ts",
     "verify:features": "tsx scripts/verify-features.ts",
     "owner:reset": "tsx scripts/reset-owner.ts",
-    "env:fix": "node scripts/setup-env.mjs"
+    "env:fix": "node scripts/setup-env.mjs",
+    "check:phone": "node scripts/check-phone-reach.mjs"
   },
   "prisma": {
     "seed": "tsx prisma/seed/index.ts"
