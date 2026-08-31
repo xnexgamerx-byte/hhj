@@ -107,9 +107,10 @@
 
 ## التشغيل
 
+حساب المالك يصير حسابك من أول تشغيل، والباسوورد عشرة أحرف فأكثر:
+
 ```bash
-# حساب المالك يصير حسابك من أول تشغيل — الباسوورد ١٠ أحرف فأكثر
-OWNER_EMAIL=you@example.com OWNER_PASSWORD='باسوورد لا يقل عن ١٠ أحرف' bash setup.sh
+OWNER_EMAIL=you@example.com OWNER_PASSWORD=ChangeMe12345 bash setup.sh
 ```
 
 يشغّل قاعدة البيانات بدوكر، وينشئ `api/.env` بسر توقيع عشوائي، ويعبّئ
@@ -119,13 +120,29 @@ OWNER_EMAIL=you@example.com OWNER_PASSWORD='باسوورد لا يقل عن ١٠
 `api/.env` موجوداً من تشغيل سابق، يُحدَّث سطرا المالك وحدهما ويبقى سرّ التوقيع
 ورابط القاعدة كما هما.
 
-ثم كلٌّ في نافذة طرفية مستقلة:
+ثم كلٌّ في **نافذة طرفية مستقلة** — الثلاثة معاً في نافذة واحدة لا تعمل، لأن
+كل أمر يبقى مشغّلاً ولأن `cd` نسبيّ فيفشل الثاني والثالث:
+
+الخادم على ٣٠٠٠:
 
 ```bash
-cd api    && npm run dev     # الخادم على ٣٠٠٠
-cd web    && npm run dev     # اللوحات على ٣٠٠١
-cd mobile && npm start       # التطبيق — امسح رمز QR بتطبيق Expo Go
+cd ~/hhj/api && npm run dev
 ```
+
+اللوحات على ٣٠٠١:
+
+```bash
+cd ~/hhj/web && npm run dev
+```
+
+التطبيق — يطبع رمز QR تمسحه بـExpo Go:
+
+```bash
+cd ~/hhj/mobile && npm start
+```
+
+> لا تضع تعليقاً عربياً داخل سطر أوامر: نسخه يجرّ معه علامات اتجاه غير مرئية
+> تكسر الأمر عند اللصق.
 
 **دخول المالك:** ما وضعته في `OWNER_EMAIL` و`OWNER_PASSWORD` — ويُطلب تغيير
 الباسوورد أول دخول.
@@ -162,10 +179,21 @@ cd api && npm run db:demo
 
 ```bash
 DB_PORT=5433 docker compose up -d
-# ثم في api/.env: PORT=3010 وWEB_ORIGIN يذكر ٣٠١١، وDATABASE_URL على ٥٤٣٣
-cd api    && npm run dev
-cd web    && WEB_PORT=3011 npm run dev
-cd mobile && EXPO_PUBLIC_API_PORT=3010 npm start -- --port 8082
+```
+
+ثم في `api/.env`: `PORT=3010`، و`WEB_ORIGIN` يذكر ٣٠١١، و`DATABASE_URL` على
+٥٤٣٣. وكلٌّ في نافذة:
+
+```bash
+cd ~/hhj/api && npm run dev
+```
+
+```bash
+cd ~/hhj/web && WEB_PORT=3011 npm run dev
+```
+
+```bash
+cd ~/hhj/mobile && EXPO_PUBLIC_API_PORT=3010 npm start -- --port 8082
 ```
 
 المنفذان اللذان يجب أن يتطابقا: `WEB_ORIGIN` في `api/.env` يجب أن يذكر منفذ
@@ -175,7 +203,7 @@ cd mobile && EXPO_PUBLIC_API_PORT=3010 npm start -- --port 8082
 
 ١. ثبّت **Expo Go** من متجر هاتفك.
 ٢. اربط الهاتف والحاسوب بنفس شبكة الواي فاي.
-٣. `cd mobile && npm start` ثم امسح رمز QR الظاهر.
+٣. `cd ~/hhj/mobile && npm start` ثم امسح رمز QR الظاهر.
 
 التطبيق **يستنتج عنوان حاسوبك تلقائياً** من خادم Expo ويستعمل المنفذ ٣٠٠٠،
 فلا تحتاج معرفة عنوان الشبكة. لو كان الخادم على جهاز أو منفذ آخر، عيّن
@@ -192,16 +220,23 @@ cd mobile && EXPO_PUBLIC_API_PORT=3010 npm start -- --port 8082
 
 ## الاختبارات
 
+فحص الأنواع و٥٥ اختباراً على قاعدة بيانات حقيقية:
+
 ```bash
-cd api    && npm run verify      # فحص أنواع + ٥٥ اختباراً على قاعدة بيانات حقيقية
-cd web    && npm run typecheck
-cd mobile && npm run typecheck
+cd ~/hhj/api && npm run verify
+cd ~/hhj/web && npm run typecheck
+cd ~/hhj/mobile && npm run typecheck
+```
 
-# مسار كامل في متصفح حقيقي — كلاهما يجهّز بياناته بنفسه:
-cd web && OWNER_EMAIL=... OWNER_PASSWORD=... npm run e2e
+المسار الكامل في متصفح حقيقي — كلا الاختبارين يجهّز بياناته بنفسه:
 
-cd mobile && npm run export:web && npm run serve:web &
-cd mobile && OWNER_EMAIL=... OWNER_PASSWORD=... npm run e2e
+```bash
+cd ~/hhj/web && OWNER_EMAIL=... OWNER_PASSWORD=... npm run e2e
+```
+
+```bash
+cd ~/hhj/mobile && npm run export:web && npm run serve:web &
+cd ~/hhj/mobile && OWNER_EMAIL=... OWNER_PASSWORD=... npm run e2e
 ```
 
 اختبارات المتصفّح تنزّل متصفّحها بنفسها؛ إن كان عندك واحد جاهز مرّره بـ
