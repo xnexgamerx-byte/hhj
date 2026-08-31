@@ -31,13 +31,12 @@ function check(name: string, passed: boolean, detail: string) {
 }
 
 /** أقرب تاريخ قادم يقع في يوم الأسبوع المطلوب (٠ = الأحد) */
-function nextWeekday(weekday: number, offsetWeeks = 0): string {
+function nextWeekday(weekday: number): string {
   const date = new Date();
   date.setUTCHours(12, 0, 0, 0);
   do {
     date.setUTCDate(date.getUTCDate() + 1);
   } while (date.getUTCDay() !== weekday);
-  date.setUTCDate(date.getUTCDate() + offsetWeeks * 7);
   return date.toISOString().slice(0, 10);
 }
 
@@ -96,9 +95,11 @@ async function main() {
     prisma,
   );
 
+  // الأيام تُشتقّ من إثنين المرساة لا من اليوم الحالي: لو شُغّل الفحص يوم إثنين
+  // لعاد nextWeekday(2) بثلاثاءٍ يسبق الإثنين القادم — أي خارج المدى المسؤول عنه.
   const monday = nextWeekday(1);
-  const tuesday = nextWeekday(2);
-  const wednesday = nextWeekday(3);
+  const tuesday = addDaysISO(monday, 1);
+  const wednesday = addDaysISO(monday, 2);
 
   const twoWeeks = await getAvailability(practice.id, monday, addDaysISO(monday, 13), {}, prisma);
   const mondayDay = twoWeeks.find((d) => d.date === monday)!;
@@ -216,7 +217,7 @@ async function main() {
   );
 
   // ── ٧. إغلاق فترة جزئية ────────────────────────────────────────
-  const nextMonday = nextWeekday(1, 1);
+  const nextMonday = addDaysISO(monday, 7);
   await addException(
     doctorUser.id,
     practice.id,
