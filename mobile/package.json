@@ -24,6 +24,7 @@
   },
   "devDependencies": {
     "@types/react": "~19.2.2",
+    "eas-cli": "^23.1.0",
     "playwright": "^1.62.1",
     "typescript": "~6.0.3"
   },
@@ -37,7 +38,9 @@
     "serve:web": "node scripts/serve-web-export.mjs",
     "e2e": "node e2e/booking-flow.mjs",
     "build:dev": "eas build --profile development --platform android",
-    "build:apk": "eas build --profile preview --platform android"
+    "build:apk": "eas build --profile preview --platform android",
+    "eas:login": "eas login",
+    "eas:whoami": "eas whoami"
   },
   "private": true
 }
