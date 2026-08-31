@@ -3,13 +3,16 @@
  * كل مسار غير موجود يعود لـ index.html لأن المخرَج أحادي الصفحة.
  */
 import { createServer } from "node:http";
+import { fileURLToPath } from "node:url";
 import { readFile } from "node:fs/promises";
 import { join, extname } from "node:path";
 
 // منفذ قابل للتغيير: DIST_PORT=3012 npm run serve:web
 const PORT = Number(process.env.DIST_PORT ?? 3002);
 
-const ROOT = new URL("../dist/", import.meta.url).pathname;
+// fileURLToPath لا pathname: الأخير يعطي "/C:/Users/..." على ويندوز
+// فيفسد join ويصير كل مسار غير موجود
+const ROOT = fileURLToPath(new URL("../dist/", import.meta.url));
 const TYPES = { ".html": "text/html", ".js": "text/javascript", ".json": "application/json",
   ".png": "image/png", ".ttf": "font/ttf", ".css": "text/css", ".svg": "image/svg+xml" };
 

@@ -16,7 +16,7 @@ import { chromium } from "playwright";
 import { existsSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(HERE, "..");
@@ -68,8 +68,8 @@ const mark = (size, fill = WHITE, ratio = MARK_SPAN) =>
 
 function html({ width, height, body, transparent }) {
   return `<!doctype html><meta charset="utf-8"><style>
-@font-face{font-family:'Sans';src:url('file://${SANS}') format('truetype');font-weight:700}
-${hasDisplay ? `@font-face{font-family:'Display';src:url('file://${DISPLAY}') format('woff2');font-weight:700}` : ""}
+@font-face{font-family:'Sans';src:url('${pathToFileURL(SANS).href}') format('truetype');font-weight:700}
+${hasDisplay ? `@font-face{font-family:'Display';src:url('${pathToFileURL(DISPLAY).href}') format('woff2');font-weight:700}` : ""}
 html,body{margin:0;padding:0;background:${transparent ? "transparent" : "#fff"}}
 svg{display:block}
 </style>

@@ -1,3 +1,4 @@
+import { pathToFileURL } from "node:url";
 import Fastify from "fastify";
 import cors from "@fastify/cors";
 import { registerRoutes } from "./http/routes.js";
@@ -34,12 +35,39 @@ async function start() {
     process.exit(1);
   }
 
+  // فحص القاعدة قبل الاستماع: بدونه يقلع الخادم سليماً وكل طلب يعود بـ٥٠٠،
+  // فيبدو العطل في الواجهة وهو في الاتصال
+  try {
+    await prisma.$queryRaw`select 1`;
+  } catch {
+    const url = process.env.DATABASE_URL ?? "(غير معيّن)";
+    // نخفي كلمة المرور: السجلات تُنسخ وتُلصق في الرسائل
+    console.error(
+      [
+        "تعذّر الاتصال بقاعدة البيانات.",
+        `  DATABASE_URL: ${url.replace(/:\/\/([^:]+):[^@]*@/, "://$1:***@")}`,
+        "  شغّلها أولاً:  docker compose up -d",
+        "  وتأكّد أن المنفذ في DATABASE_URL هو نفسه منفذ الحاوية.",
+      ].join("\n"),
+    );
+    process.exit(1);
+  }
+
   const app = await buildServer();
   const port = Number(process.env.PORT ?? 3000);
 
   try {
     await app.listen({ port, host: "0.0.0.0" });
-    app.log.info(`مزوّد الواتساب: ${getWhatsAppProvider().name}`);
+    // سطر واضح بلا JSON: السجل المهيكل لا يقول للمشغّل «جاهز» بلمحة
+    console.log(
+      [
+        "",
+        "  موعد · الخادم جاهز",
+        `  http://localhost:${port}`,
+        `  واتساب: ${getWhatsAppProvider().name}`,
+        "",
+      ].join("\n"),
+    );
 
     // المهام الدورية داخل الخادم. تُعطَّل عند التشغيل خلف عدة نسخ إن أُريد
     // فصلها في عامل مستقل — القيود في قاعدة البيانات تمنع الازدواج أصلاً.
@@ -59,7 +87,11 @@ async function start() {
   }
 }
 
-// يُشغَّل الخادم فقط عند التنفيذ المباشر، لا عند الاستيراد في الاختبارات
-if (process.argv[1] && import.meta.url === `file://${process.argv[1]}`) {
+// يُشغَّل الخادم فقط عند التنفيذ المباشر، لا عند الاستيراد في الاختبارات.
+// pathToFileURL لا التركيب اليدوي: على ويندوز يكون argv[1] بالشكل
+// C:\Users\... فينتج "file://C:\..." ولا يطابق "file:///C:/..." الذي في
+// import.meta.url، فلا تُستدعى start() ويقف الخادم صامتاً بلا رسالة.
+const entry = process.argv[1] ? pathToFileURL(process.argv[1]).href : null;
+if (entry && import.meta.url === entry) {
   void start();
 }
