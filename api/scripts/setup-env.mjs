@@ -75,10 +75,11 @@ if (secret === null || secret.length < SECRET_MIN) {
   if (!created) repaired.push("JWT_SECRET");
 }
 
-// ورابط القاعدة: المثال يحمل اسم مستخدم عامّاً، بينما docker-compose ينشئ mawid
+// ورابط القاعدة يُملأ إن غاب فقط. لا نبدّل قيمةً موجودة مهما بدت لنا خاطئة:
+// من نصّب PostgreSQL على جهازه مباشرةً يستعمل المستخدم postgres لا mawid،
+// فتبديلُه "إصلاحاً" يقطع اتصالاً كان يعمل — وهذا ما حدث فعلاً.
 const db = valueOf(text, "DATABASE_URL");
-const exampleDb = existsSync(EXAMPLE) ? valueOf(readFileSync(EXAMPLE, "utf8"), "DATABASE_URL") : null;
-if (!db || (exampleDb !== null && db === exampleDb)) {
+if (!db) {
   replacements.set("DATABASE_URL", DEFAULT_DB);
   if (!created) repaired.push("DATABASE_URL");
 }
@@ -96,6 +97,10 @@ if (replacements.size === 0) {
 }
 
 // ── الكتابة: تبديل السطر الموجود، وإلحاق المفقود ──────────────────
+// نسخة احتياطية قبل الكتابة: تعديلٌ خاطئ على .env يوقف المشروع كلّه،
+// وبلا نسخةٍ لا يبقى للمستخدم ما يرجع إليه
+if (!created) copyFileSync(ENV, `${ENV}.bak`);
+
 const seen = new Set();
 const lines = text.split(/\r?\n/).map((line) => {
   for (const [key, value] of replacements) {
