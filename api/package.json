@@ -23,7 +23,8 @@
     "verify:features": "tsx scripts/verify-features.ts",
     "owner:reset": "tsx scripts/reset-owner.ts",
     "env:fix": "node scripts/setup-env.mjs",
-    "check:phone": "node scripts/check-phone-reach.mjs"
+    "check:phone": "node scripts/check-phone-reach.mjs",
+    "tunnel": "node scripts/tunnel.mjs"
   },
   "prisma": {
     "seed": "tsx prisma/seed/index.ts"
