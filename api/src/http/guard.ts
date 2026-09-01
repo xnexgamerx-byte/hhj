@@ -40,6 +40,14 @@ export function errorHandler(error: Error, request: FastifyRequest, reply: Fasti
   if (error instanceof AppError) {
     return reply.status(error.statusCode).send({ error: error.code, message: error.message });
   }
+  // تجاوز حدّ المعدّل يصل إلى هنا كخطأ عاديّ بحالة ٤٢٩، فبلا هذا الفرع يُبلَّغ
+  // العميل بـ٥٠٠ فيظنّه عطلاً في الخادم ويعيد المحاولة فوراً — وهو آخر ما يُراد
+  if ((error as { statusCode?: number }).statusCode === 429) {
+    return reply.status(429).send({
+      error: "RATE_LIMITED",
+      message: "طلبات كثيرة في وقت قصير. انتظر قليلاً ثم أعد المحاولة.",
+    });
+  }
   if ((error as { validation?: unknown }).validation) {
     return reply.status(400).send({ error: "INVALID_INPUT", message: "البيانات المرسلة غير مكتملة أو غير صحيحة" });
   }

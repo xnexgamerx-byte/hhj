@@ -9,10 +9,12 @@ import { prisma as defaultPrisma } from "../../lib/prisma.js";
 import { hashPassword, validatePasswordStrength, verifyPassword } from "../../lib/password.js";
 import { normalizeIraqiPhone } from "../../lib/phone.js";
 import { createRefreshToken, hashRefreshToken, signAccessToken } from "../../lib/tokens.js";
-import { badRequest, forbidden, unauthorized } from "../../lib/errors.js";
+import { badRequest, forbidden, unauthorized, tooMany } from "../../lib/errors.js";
 
 const OTP_TTL_MINUTES = 5;
 const OTP_MAX_ATTEMPTS = 5;
+// خمسة رموز في الساعة تكفي من نسي أو تأخّرت رسالته، ولا تكفي من يقصف رقماً
+const OTP_MAX_PER_HOUR = 5;
 const LOGIN_MAX_FAILURES = 5;
 const LOGIN_LOCK_MINUTES = 15;
 
@@ -123,8 +125,29 @@ export async function requestOtp(
   client: PrismaClient = defaultPrisma,
 ): Promise<{ phone: string; expiresAt: Date; devCode?: string }> {
   const phone = normalizeIraqiPhone(rawPhone);
+
+  // الحدّ هنا على الرقم لا على عنوان الشبكة، ومن جهتين:
+  //
+  // الأولى أنّ كل طلب يرسل رسالة لها ثمن، وبلا حدٍّ يستطيع أيّ أحد أن يغرق
+  // هاتف غيره برسائل ويستنزف الرصيد معاً.
+  //
+  // والثانية أنّ الحدّ على العنوان وحده لا يصلح هنا: شبكات الهاتف في العراق
+  // تُخرج آلاف المشتركين من عناوين عامة قليلة، فحدٌّ ضيّق على العنوان يحجب
+  // شبكة بأكملها عن الدخول.
+  const now = new Date();
+  const [sinceMinute, sinceHour] = await Promise.all([
+    client.otpCode.count({ where: { phone, createdAt: { gt: new Date(now.getTime() - 60_000) } } }),
+    client.otpCode.count({ where: { phone, createdAt: { gt: new Date(now.getTime() - 3_600_000) } } }),
+  ]);
+  if (sinceMinute > 0) {
+    throw tooMany("OTP_COOLDOWN", "أرسلنا رمزاً للتو. انتظر دقيقة قبل طلب رمز جديد.");
+  }
+  if (sinceHour >= OTP_MAX_PER_HOUR) {
+    throw tooMany("OTP_LIMIT", "طلبت رموزاً كثيرة لهذا الرقم. حاول بعد ساعة.");
+  }
+
   const code = String(randomInt(100000, 1000000));
-  const expiresAt = new Date(Date.now() + OTP_TTL_MINUTES * 60_000);
+  const expiresAt = new Date(now.getTime() + OTP_TTL_MINUTES * 60_000);
 
   await client.otpCode.create({
     data: { phone, codeHash: createHash("sha256").update(code).digest("hex"), expiresAt },

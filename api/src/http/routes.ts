@@ -88,20 +88,28 @@ export async function registerRoutes(app: FastifyInstance) {
     });
   });
 
+  // أبواب الدخول أضيق من العامّ، وأوسع مما يبدو لازماً: خلف CGNAT يشترك
+  // مشتركو شبكةٍ كاملة في عنوان واحد. الحارس الحقيقي هنا ليس العنوان بل
+  // قفلُ الحساب بعد محاولات فاشلة، وحدُّ الرقم في طلب الرمز — وكلاهما يميّز
+  // الفاعل بعينه. هذا الحدّ يوقف الآلة التي تمرّ على آلاف الحسابات فحسب.
+  const gate = { config: { rateLimit: { max: 30, timeWindow: "10 minutes" } } };
+  const otpGate = { config: { rateLimit: { max: 60, timeWindow: "10 minutes" } } };
+
   // ── دخول المريض برقم الهاتف ───────────────────────────────────
-  app.post<{ Body: { phone: string } }>("/auth/otp/request", async (request) => {
+  app.post<{ Body: { phone: string } }>("/auth/otp/request", otpGate, async (request) => {
     return requestOtp(request.body.phone);
   });
 
   app.post<{ Body: { phone: string; code: string; fullName?: string } }>(
     "/auth/otp/verify",
+    gate,
     async (request) => {
       return verifyOtp(request.body.phone, request.body.code, request.body.fullName);
     },
   );
 
   // ── دخول الطبيب والسكرتير والمالك ─────────────────────────────
-  app.post<{ Body: { email: string; password: string } }>("/auth/login", async (request) => {
+  app.post<{ Body: { email: string; password: string } }>("/auth/login", gate, async (request) => {
     return loginWithPassword(request.body.email, request.body.password);
   });
 

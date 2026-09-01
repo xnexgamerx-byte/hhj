@@ -2,6 +2,8 @@ import { networkInterfaces } from "node:os";
 import { pathToFileURL } from "node:url";
 import Fastify from "fastify";
 import cors from "@fastify/cors";
+import helmet from "@fastify/helmet";
+import rateLimit from "@fastify/rate-limit";
 import { registerRoutes } from "./http/routes.js";
 import { errorHandler } from "./http/guard.js";
 import { prisma } from "./lib/prisma.js";
@@ -19,6 +21,27 @@ export async function buildServer() {
     },
     // الأسماء والعناوين العربية تجعل الأجسام أطول من المعتاد
     bodyLimit: 1_048_576,
+    // خلف وسيط (نفق أو استضافة) يصل كل طلب من عنوان الوسيط نفسه، فيقتسم
+    // المستخدمون حصّة واحدة ويحجب أوّلُهم البقية. ومع ذلك لا يُفعَّل إلا
+    // بإعلان صريح: تصديق X-Forwarded-For بلا وسيطٍ فعليّ يجعل تزويره ممكناً.
+    trustProxy: process.env.TRUST_PROXY === "true",
+  });
+
+  // ترويسات أمان قياسية. سياسة المحتوى مطفأة: الخادم لا يقدّم صفحات بل JSON
+  await app.register(helmet, { contentSecurityPolicy: false });
+
+  // حدٌّ عامّ يوقف الطوفان الظاهر لا أكثر، وهو مقصود على سعته: شبكات الهاتف
+  // في العراق تُخرج آلاف المشتركين من عناوين عامة قليلة، فالحدّ الضيّق على
+  // العنوان يحجب شبكةً بأكملها ويصيب من لا ذنب له. الحدود الدقيقة تُوضع حيث
+  // يمكن تمييز الفاعل: على الحساب عند الدخول، وعلى الرقم عند طلب الرمز.
+  await app.register(rateLimit, {
+    max: Number(process.env.RATE_LIMIT_MAX ?? 1000),
+    timeWindow: "1 minute",
+    // فحص الصحة يُستدعى كل دقيقة من المراقبة، ولا معنى لعدّه
+    allowList: (request) => request.url === "/health",
+    // بلا errorResponseBuilder: الإضافة ترمي ما يعيده حرفياً، فكائنٌ عاديّ
+    // يصل بلا statusCode فيُبلَّغ عنه بـ٥٠٠. والافتراضيّ يضبط ٤٢٩، ومعالج
+    // الأخطاء عندنا يترجمه إلى رسالة عربية واحدة لكل المسارات.
   });
 
   // الواجهة تعمل على أصل مختلف عن الخادم، فبدون CORS لا يصلها شيء.

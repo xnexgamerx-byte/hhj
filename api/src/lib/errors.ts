@@ -15,3 +15,4 @@ export const unauthorized = (code: string, message: string) => new AppError(401,
 export const forbidden = (code: string, message: string) => new AppError(403, code, message);
 export const notFound = (code: string, message: string) => new AppError(404, code, message);
 export const conflict = (code: string, message: string) => new AppError(409, code, message);
+export const tooMany = (code: string, message: string) => new AppError(429, code, message);
