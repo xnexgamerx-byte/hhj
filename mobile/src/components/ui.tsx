@@ -314,6 +314,61 @@ export function SectionHeader({ title, actionLabel, onAction }: { title: string;
   );
 }
 
+/* ── الاختيار من بين خيارات قليلة ────────────────────────────── */
+
+/**
+ * شريط خيارات: بديل القائمة المنسدلة حين تكون الخيارات قليلة ومعروفة.
+ *
+ * أفضل منها هنا لأنّ الخيارات كلّها مرئية بلا فتح، والإصبع يصلها بضغطة
+ * واحدة — وهذا يهمّ في شاشة حجز يُراد لها أن تكون أقصر ما يمكن.
+ */
+export function Segmented<V extends string>({
+  options,
+  value,
+  onChange,
+}: {
+  options: readonly { value: V; label: string }[];
+  value: V;
+  onChange: (value: V) => void;
+}) {
+  const palette = usePalette();
+  return (
+    <View
+      style={{
+        flexDirection: "row",
+        backgroundColor: palette.surface2,
+        borderRadius: radius.md,
+        padding: space(1),
+        gap: space(1),
+      }}
+    >
+      {options.map((option) => {
+        const active = option.value === value;
+        return (
+          <Pressable
+            key={option.value}
+            accessibilityRole="button"
+            accessibilityState={{ selected: active }}
+            onPress={() => onChange(option.value)}
+            style={{
+              flex: 1,
+              alignItems: "center",
+              paddingVertical: space(2.25),
+              borderRadius: radius.sm,
+              backgroundColor: active ? palette.surface : "transparent",
+              ...(active ? shadow(1, palette.shadowTint) : null),
+            }}
+          >
+            <T size={13} weight={active ? "bold" : "medium"} tone={active ? "ink" : "muted"}>
+              {option.label}
+            </T>
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+}
+
 /* ── الحقول ──────────────────────────────────────────────────── */
 
 export function Field({ label, hint, children }: { label: string; hint?: string; children: ReactNode }) {

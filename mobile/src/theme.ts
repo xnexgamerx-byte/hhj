@@ -1,4 +1,6 @@
-import { Platform, useColorScheme } from "react-native";
+import { Platform } from "react-native";
+
+import { useThemeMode } from "./theme-mode";
 
 /**
  * هوية «موعد» على نظام كيت فيغما المرجعي.
@@ -16,7 +18,8 @@ const light = {
   muted: "#4B5563",
   faint: "#78828F",
   line: "#E5E7EB",
-  lineStrong: "#D1D5DB",
+  /** حدٌّ يُرى: يحمل معنًى — إطار زر، نجمة فارغة، يوم مغلق، نقطة غير نشطة */
+  lineStrong: "#848E9B",
 
   /** الكحلي: الأزرار والعناوين وكل فعل أساسي */
   primary: "#1C2A3A",
@@ -25,6 +28,18 @@ const light = {
   primarySoft: "#EEF1F4",
   primaryTint: "#F5F7F8",
   onPrimary: "#FFFFFF",
+
+  /**
+   * لوحة اللافتة: تبقى داكنة في الوضعين.
+   *
+   * لا تُشتقّ من primary: ذاك ينقلب فاتحاً في الوضع الداكن ليصلح لوناً
+   * للأزرار على سطحٍ داكن — وهو صواب هناك وخطأ هنا، إذ يصير مستطيلٌ بحجم
+   * ثلث الشاشة كتلةً ساطعة تشدّ العين عن كل ما حولها.
+   */
+  heroFrom: "#2E4257",
+  heroTo: "#101A24",
+  onHero: "#FFFFFF",
+  onHeroMuted: "#C6D0DA",
 
   /** الزمرّدي: العلامة وحدها — الأيقونة والشعار وشاشة البداية */
   brand: "#0E5140",
@@ -57,7 +72,7 @@ const dark: typeof light = {
   muted: "#9FADBC",
   faint: "#7D8B9A",
   line: "#26313D",
-  lineStrong: "#37434F",
+  lineStrong: "#5C6B7B",
 
   primary: "#7FA3C4",
   primaryDeep: "#0E161D",
@@ -65,6 +80,11 @@ const dark: typeof light = {
   primarySoft: "#18242F",
   primaryTint: "#131C24",
   onPrimary: "#0B1116",
+
+  heroFrom: "#22303D",
+  heroTo: "#0E161D",
+  onHero: "#E7ECF1",
+  onHeroMuted: "#A8B6C4",
 
   brand: "#3FA383",
   brandSoft: "#12291F",
@@ -126,16 +146,15 @@ export function tintFor(key: string, isDark = false): Tint {
 
 export type Palette = typeof light;
 
+export const palettes = { light, dark } as const;
+
 export function usePalette(): Palette {
-  return useColorScheme() === "dark" ? dark : light;
+  return palettes[useThemeMode().resolved];
 }
 
 export function useIsDark(): boolean {
-  return useColorScheme() === "dark";
+  return useThemeMode().resolved === "dark";
 }
-
-/** تدرّج الترويسة — ثلاث محطات كي لا يظهر شريط حادّ في المنتصف */
-export const headerGradient = (p: Palette) => [p.primaryLift, p.primary, p.primaryDeep] as const;
 
 export const font = {
   regular: "PlexArabic400",

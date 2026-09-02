@@ -3,14 +3,16 @@ import { Alert as RNAlert, Linking, Pressable, ScrollView, View } from "react-na
 import { useFocusEffect, useRouter } from "expo-router";
 import { PlainHeader } from "@/components/PlainHeader";
 import { Icon } from "@/components/icons";
-import { Avatar, Button, Card, Divider, EmptyState, IconTile, T } from "@/components/ui";
+import { Avatar, Button, Card, Divider, EmptyState, IconTile, Segmented, T } from "@/components/ui";
 import { api, clearSession, getSession, type Patient, type SessionUser } from "@/lib/api";
 import { toArabic } from "@/lib/format";
 import { radius, space, usePalette } from "@/theme";
+import { useThemeMode } from "@/theme-mode";
 
 /** حساب المريض: من هو، ولمن يحجز، والخروج. */
 export default function ProfileScreen() {
   const palette = usePalette();
+  const { mode, setMode } = useThemeMode();
   const router = useRouter();
   const [user, setUser] = useState<SessionUser | null>(null);
   const [patients, setPatients] = useState<Patient[]>([]);
@@ -119,6 +121,31 @@ export default function ProfileScreen() {
                 </View>
               ))
             )}
+          </Card>
+        </View>
+
+        {/* المظهر */}
+        <View style={{ gap: space(2.5) }}>
+          <T size={16} weight="bold">
+            مظهر التطبيق
+          </T>
+          <Card style={{ gap: space(2.5) }}>
+            <Segmented
+              value={mode}
+              onChange={setMode}
+              options={[
+                { value: "system", label: "تلقائي" },
+                { value: "light", label: "فاتح" },
+                { value: "dark", label: "داكن" },
+              ]}
+            />
+            <T size={12} tone="faint">
+              {mode === "system"
+                ? "يتبع إعداد هاتفك — يُظلم مع الليل ويفتح مع النهار."
+                : mode === "light"
+                  ? "فاتح دائماً، مهما كان إعداد هاتفك."
+                  : "داكن دائماً، مهما كان إعداد هاتفك."}
+            </T>
           </Card>
         </View>
 

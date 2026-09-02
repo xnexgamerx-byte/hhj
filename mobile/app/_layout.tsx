@@ -6,6 +6,7 @@ import { useFonts } from "expo-font";
 import * as SplashScreen from "expo-splash-screen";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { font, usePalette } from "@/theme";
+import { ThemeProvider, useThemeMode } from "@/theme-mode";
 
 /**
  * التطبيق عربي بالكامل، فنفرض اتجاه اليمين إلى اليسار قبل أي رسم.
@@ -28,8 +29,6 @@ if (typeof document !== "undefined") {
 SplashScreen.preventAutoHideAsync().catch(() => {});
 
 export default function RootLayout() {
-  const palette = usePalette();
-
   const [fontsLoaded, fontError] = useFonts({
     [font.regular]: require("../assets/fonts/IBMPlexSansArabic-400.ttf"),
     [font.medium]: require("../assets/fonts/IBMPlexSansArabic-500.ttf"),
@@ -44,9 +43,25 @@ export default function RootLayout() {
 
   if (!fontsLoaded && !fontError) return null;
 
+  // المزوّد يلفّ كل ما يقرأ اللوحة، وهذا يشمل هذه الشاشة نفسها — فالمحتوى
+  // في مكوّن داخلي لا في الجذر
   return (
-    <SafeAreaProvider>
-      <StatusBar style="auto" />
+    <ThemeProvider>
+      <SafeAreaProvider>
+        <Shell />
+      </SafeAreaProvider>
+    </ThemeProvider>
+  );
+}
+
+function Shell() {
+  const palette = usePalette();
+  const { resolved } = useThemeMode();
+
+  return (
+    <>
+      {/* صريحاً لا "auto": الأخير يتبع سمة النظام، فيبقى فاتحاً على ثيمٍ داكن ثبّته المستخدم */}
+      <StatusBar style={resolved === "dark" ? "light" : "dark"} />
       <Stack
         screenOptions={{
           headerShown: false,
@@ -54,6 +69,6 @@ export default function RootLayout() {
           animation: "slide_from_left",
         }}
       />
-    </SafeAreaProvider>
+    </>
   );
 }

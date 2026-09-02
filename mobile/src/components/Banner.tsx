@@ -37,7 +37,7 @@ export function Banner({ slides, onPress }: { slides: Slide[]; onPress: () => vo
         style={{ width: width || undefined }}
       >
         <LinearGradient
-          colors={[palette.primaryLift, palette.primary, palette.primaryDeep]}
+          colors={[palette.heroFrom, palette.heroTo]}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
           style={{
@@ -51,15 +51,15 @@ export function Banner({ slides, onPress }: { slides: Slide[]; onPress: () => vo
           }}
         >
           <View style={{ flex: 1, gap: space(1.5) }}>
-            <T size={17.5} weight="bold" tone="onPrimary" lineHeight={26}>
+            <T size={17.5} weight="bold" tone="onHero" lineHeight={26}>
               {item.title}
             </T>
-            <T size={12.5} tone="onPrimary" style={{ opacity: 0.85 }} lineHeight={19}>
+            <T size={12.5} tone="onHeroMuted" lineHeight={19}>
               {item.body}
             </T>
           </View>
           {/* الأيقونة الكبيرة تملأ الفراغ الذي تشغله صورة الطبيب في الكيت */}
-          <View style={{ opacity: 0.2 }}>{item.icon("#FFFFFF", 88)}</View>
+          <View style={{ opacity: 0.18 }}>{item.icon(palette.onHero, 88)}</View>
         </LinearGradient>
       </Pressable>
     ),

@@ -46,9 +46,10 @@
     "eas:whoami": "npx eas-cli@latest whoami",
     "check:native": "node scripts/check-native-versions.mjs",
     "check:build": "node scripts/preflight-build.mjs",
-    "check": "npm run typecheck && npm run check:native && npm run check:build",
+    "check": "npm run typecheck && npm run check:contrast && npm run check:native && npm run check:build",
     "api:auto": "node scripts/api-url.mjs",
-    "api:set": "node scripts/api-url.mjs"
+    "api:set": "node scripts/api-url.mjs",
+    "check:contrast": "node scripts/check-contrast.mjs"
   },
   "private": true
 }
