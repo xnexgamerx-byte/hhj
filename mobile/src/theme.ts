@@ -148,17 +148,27 @@ export const radius = { sm: 10, md: 14, lg: 20, xl: 26, xxl: 34, pill: 999 } as 
 
 export const space = (n: number) => n * 4;
 
+/** يدمج لوناً ست عشرياً مع شفافية — boxShadow يطلبهما في نصٍّ واحد */
+function rgba(hex: string, alpha: number): string {
+  const value = hex.replace("#", "");
+  const full = value.length === 3 ? [...value].map((c) => c + c).join("") : value;
+  const n = Number.parseInt(full, 16);
+  return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${alpha})`;
+}
+
 /**
  * ثلاث درجات ظل: ١ للبطاقات الساكنة، ٢ للعائمة، ٣ للنوافذ.
- * أندرويد لا يعرف لون الظل قبل ٢٨، فيبقى elevation وحده.
+ *
+ * أندرويد لا يعرف لون الظل قبل ٢٨، فيبقى elevation وحده. وما عداه يستعمل
+ * boxShadow لا خصائص shadow* المنفصلة: تلك مهجورة ويحذّر منها التشغيل، وهي
+ * في طريقها إلى الإزالة.
  */
-export const shadow = (level: 1 | 2 | 3 = 1, tint = "#0A2E24") =>
-  Platform.select({
+export const shadow = (level: 1 | 2 | 3 = 1, tint = "#0A2E24") => {
+  const y = level === 1 ? 3 : level === 2 ? 10 : 16;
+  const blur = level === 1 ? 10 : level === 2 ? 22 : 34;
+  const alpha = level === 1 ? 0.07 : level === 2 ? 0.13 : 0.22;
+  return Platform.select({
     android: { elevation: level === 1 ? 2 : level === 2 ? 7 : 14 },
-    default: {
-      shadowColor: tint,
-      shadowOpacity: level === 1 ? 0.07 : level === 2 ? 0.13 : 0.22,
-      shadowRadius: level === 1 ? 10 : level === 2 ? 22 : 34,
-      shadowOffset: { width: 0, height: level === 1 ? 3 : level === 2 ? 10 : 16 },
-    },
+    default: { boxShadow: `0px ${y}px ${blur}px ${rgba(tint, alpha)}` },
   })!;
+};
