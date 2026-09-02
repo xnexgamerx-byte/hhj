@@ -220,6 +220,15 @@ function networkFailure(error: Error, elapsedMs: number): ApiError {
       `تعذّر معرفة عنوان حاسوبك، فقُصد ${BASE} — وهو الهاتف نفسه. اكتب العنوان في mobile/.env: EXPO_PUBLIC_API_URL`,
     );
   }
+  // رابط نفقٍ مؤقّت يموت اسمه في DNS عند إغلاقه، فيبدو الفشل رفضَ اتصال
+  // ويُتّهم الخادم وهو يعمل. والعلّة أنّ الرابط يُحقن وقت بناء الحزمة.
+  if (/trycloudflare\.com|ngrok/.test(BASE)) {
+    return new ApiError(
+      0,
+      "STALE_TUNNEL",
+      `لم يُستجب من ${BASE} — أُعيد تشغيل النفق على الأرجح فتبدّل رابطه. أعد تشغيل Metro، أو: npm run api:auto`,
+    );
+  }
   const swallowed = error?.name === "AbortError" || elapsedMs >= SLOW_FAILURE_MS;
   return swallowed
     ? new ApiError(0, "TIMEOUT", `لم يصل الطلب (${BASE}) — جدار الحماية يحجب المنفذ على الأرجح.`)
