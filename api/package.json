@@ -24,7 +24,8 @@
     "owner:reset": "tsx scripts/reset-owner.ts",
     "env:fix": "node scripts/setup-env.mjs",
     "check:phone": "node scripts/check-phone-reach.mjs",
-    "tunnel": "node scripts/tunnel.mjs"
+    "tunnel": "node scripts/tunnel.mjs",
+    "dev:public": "node scripts/dev-public.mjs"
   },
   "prisma": {
     "seed": "tsx prisma/seed/index.ts"
