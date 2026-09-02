@@ -49,17 +49,19 @@ export async function buildServer() {
   const allowed = (process.env.WEB_ORIGIN ?? "http://localhost:3001").split(",").map((o) => o.trim());
   const isProduction = process.env.NODE_ENV === "production";
 
-  // في التطوير وحده: أصلٌ على شبكة محلية خاصة مسموح مهما كان منفذه. بدونه
-  // لا تُجرَّب النسخة المصدَّرة من متصفّح الهاتف — أصلها عنوان الحاسوب على
-  // الشبكة، ولا يعرفه أحد سلفاً ليكتبه في WEB_ORIGIN. ولا يتّسع هذا للإنتاج:
-  // هناك تبقى القائمة وحدها هي الحَكَم.
-  const PRIVATE_LAN = /^https?:\/\/(10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)[\d.]+(:\d+)?$/;
+  // في التطوير وحده: يُسمح بأصلٍ على هذا الجهاز أو على شبكة محلية خاصة، مهما
+  // كان منفذه. المنافذ في التطوير كثيرة ومتغيّرة — ٨٠٨١ لنسخة الويب من
+  // التطبيق، و٣٠٠١ للوحات، و٣٠٠٢ للنسخة المصدَّرة — وعنوان الحاسوب على الشبكة
+  // لا يعرفه أحد سلفاً ليكتبه في WEB_ORIGIN. ولا يتّسع هذا للإنتاج: هناك تبقى
+  // القائمة وحدها هي الحَكَم.
+  const DEV_ORIGIN =
+    /^https?:\/\/(localhost|127\.0\.0\.1|10\.[\d.]+|192\.168\.[\d.]+|172\.(1[6-9]|2\d|3[01])\.[\d.]+)(:\d+)?$/;
 
   await app.register(cors, {
     origin(origin, callback) {
       // الطلبات بلا أصل (تطبيق أصيل، curl، فحص صحة) لا يحكمها CORS
       if (!origin || allowed.includes("*") || allowed.includes(origin)) return callback(null, true);
-      if (!isProduction && PRIVATE_LAN.test(origin)) return callback(null, true);
+      if (!isProduction && DEV_ORIGIN.test(origin)) return callback(null, true);
       callback(null, false);
     },
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE"],
