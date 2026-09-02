@@ -43,6 +43,7 @@ export default function HomeScreen() {
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [feed, setFeed] = useState<BannerFeed | null>(null);
+  const [unread, setUnread] = useState(0);
 
   useEffect(() => {
     api
@@ -59,6 +60,18 @@ export default function HomeScreen() {
   useEffect(() => {
     api.get<BannerFeed>("/banners").then(setFeed).catch(() => {});
   }, []);
+
+  // العدّاد عند كل عودة للشاشة، لا مرّةً عند التركيب: المريض يفتح الإشعارات
+  // ويقرأها ثم يرجع، فلو بقيت الشارة لظنّ أن شيئاً لم يُقرأ. والزائر بلا
+  // حساب لا عدّاد له — الخطأ يُبتلع ويبقى صفراً
+  useFocusEffect(
+    useCallback(() => {
+      api
+        .get<{ unread: number }>("/me/notifications/unread")
+        .then((r) => setUnread(r.unread))
+        .catch(() => setUnread(0));
+    }, []),
+  );
 
   const load = useCallback(
     (id: number) =>
@@ -163,8 +176,8 @@ export default function HomeScreen() {
 
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel="مواعيدي"
-            onPress={() => router.push("/bookings")}
+            accessibilityLabel={unread > 0 ? `الإشعارات — ${toArabic(unread)} غير مقروء` : "الإشعارات"}
+            onPress={() => router.push("/notifications")}
             style={({ pressed }) => ({
               width: 42,
               height: 42,
@@ -175,6 +188,32 @@ export default function HomeScreen() {
             })}
           >
             <Icon.bell size={20} color={palette.ink} />
+            {/* شارةٌ بالعدد لا نقطةٌ صمّاء: «٣ إشعارات» يستدعي فتحها،
+                والنقطة وحدها قد تكون شيئاً واحداً لا يستحقّ */}
+            {unread > 0 ? (
+              <View
+                style={{
+                  position: "absolute",
+                  top: -2,
+                  left: -2,
+                  minWidth: 18,
+                  height: 18,
+                  paddingHorizontal: 4,
+                  borderRadius: 9,
+                  backgroundColor: palette.danger,
+                  alignItems: "center",
+                  justifyContent: "center",
+                  borderWidth: 2,
+                  borderColor: palette.bg,
+                }}
+              >
+                {/* onPrimary لا أبيضَ صريح: الأحمر في الوضع الداكن فاتحٌ
+                    (#F87171) والأبيض عليه لا يكاد يُقرأ */}
+                <T size={10} weight="bold" tone="onPrimary">
+                  {unread > 9 ? "٩+" : toArabic(unread)}
+                </T>
+              </View>
+            ) : null}
           </Pressable>
         </View>
 

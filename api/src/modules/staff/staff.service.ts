@@ -13,6 +13,7 @@ import { badRequest, conflict, forbidden, notFound } from "../../lib/errors.js";
 import { createBooking } from "../booking/booking.service.js";
 import { resolveScope, assertOwns } from "./access.js";
 import { accrueCommission, reverseCommission } from "../commissions/commissions.service.js";
+import { notifyPatientToReview } from "../../notifications/dispatch.js";
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 
@@ -339,6 +340,10 @@ export async function setScopedAppointmentStatus(
   } else if (status === "NO_SHOW") {
     await reverseCommission(appointmentId, client);
   }
+
+  // انتهى الكشف: ندعو المريض للتقييم. الدعوة بعد الزيارة لا قبلها، ولا
+  // تتكرّر لأن القيد الفريد على (الحجز، القالب، القناة) يرفض الثانية
+  if (status === "COMPLETED") await notifyPatientToReview(appointmentId, client);
 
   return { ...updated, commission };
 }

@@ -9,7 +9,12 @@ import { randomBytes } from "node:crypto";
 import { Prisma, type PrismaClient } from "@prisma/client";
 import { prisma as defaultPrisma } from "../../lib/prisma.js";
 import { badRequest, conflict, forbidden, notFound } from "../../lib/errors.js";
-import { notifyDoctorOfCancellation, notifyDoctorOfNewBooking } from "../../notifications/dispatch.js";
+import {
+  notifyDoctorOfCancellation,
+  notifyDoctorOfNewBooking,
+  notifyPatientOfBooking,
+  notifyPatientOfCancellation,
+} from "../../notifications/dispatch.js";
 import { getAvailability } from "../availability/availability.service.js";
 import { addDaysISO, utcToZonedDateISO } from "../../lib/timezone.js";
 
@@ -135,6 +140,10 @@ export async function createBooking(
   } catch (error) {
     whatsapp = { queued: false, delivered: false, reason: (error as Error).message };
   }
+
+  // وإشعار المريض في صندوق تطبيقه — مستقلٌّ عن واتساب الطبيب: قد لا يكون
+  // للطبيب رقمٌ مفعّل، والمريض يستحقّ تأكيداً في الحالتين
+  await notifyPatientOfBooking(appointment.id, client);
 
   return {
     appointmentId: appointment.id,
@@ -352,4 +361,7 @@ export async function cancelBooking(
   } catch {
     // الإلغاء تم؛ تعذّر إشعار الطبيب لا يُبطله
   }
+
+  // ومن ألغت العيادةُ موعده يجب أن يعرف — الإلغاء بيده لا يحتاج إخباره
+  await notifyPatientOfCancellation(appointmentId, cancelledBy, reason, client);
 }

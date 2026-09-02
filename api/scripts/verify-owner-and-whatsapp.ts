@@ -230,8 +230,10 @@ async function main() {
     { doctorClinicId: practice.id, patientId: patient.id, bookedByUserId: account.id, startAt: sessionStart },
     prisma,
   );
+  // بقناة واتساب صراحةً: للحجز الواحد صفّان الآن — رسالة الطبيب وإشعار
+  // المريض في التطبيق — وهذا الفحص عن الطابور الخارجي وحده
   const queuedLog = await prisma.notificationLog.findFirstOrThrow({
-    where: { appointmentId: secondBooking.appointmentId },
+    where: { appointmentId: secondBooking.appointmentId, channel: "WHATSAPP" },
   });
   check(
     "تعطّل واتساب لا يُفشل الحجز",

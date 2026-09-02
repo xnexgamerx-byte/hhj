@@ -54,6 +54,7 @@ import {
 } from "../modules/owner/content.service.js";
 import { removeImage, storeImage } from "../lib/uploads.js";
 import { badRequest, notFound } from "../lib/errors.js";
+import { countUnread, listInbox, markAllRead, markRead } from "../notifications/inbox.js";
 import {
   addFamilyMember,
   updatePatient,
@@ -432,9 +433,14 @@ export async function registerRoutes(app: FastifyInstance) {
 
   app.get("/owner/settlements", ownerOnly, async () => listSettlements());
 
-  /** سجل رسائل الواتساب — ليرى المالك ما وصل وما لم يصل */
+  /**
+   * سجل رسائل الواتساب — ليرى المالك ما وصل وما لم يصل.
+   * بقناةٍ صريحة: إشعارات صندوق التطبيق تشترك الجدول نفسه، وبلا الترشيح
+   * تزحم المئة صفٍّ فتُخفي الرسائل التي جاء المالك ليتفقّدها.
+   */
   app.get("/owner/notifications", ownerOnly, async () => {
     return prisma.notificationLog.findMany({
+      where: { channel: { in: ["WHATSAPP", "SMS", "PUSH"] } },
       orderBy: { createdAt: "desc" },
       take: 100,
       select: {
@@ -512,6 +518,29 @@ export async function registerRoutes(app: FastifyInstance) {
   app.get("/me/patients", { preHandler: requireRole("PATIENT") }, async (request) => {
     return getMyPatients(request.auth!.sub);
   });
+
+  // ── صندوق الإشعارات ──
+
+  app.get<{ Querystring: { limit?: string } }>(
+    "/me/notifications",
+    { preHandler: requireRole("PATIENT") },
+    async (request) => listInbox(request.auth!.sub, Number(request.query.limit) || 50),
+  );
+
+  /** عدّاد وحده — تقرأه الشاشة الرئيسية في كل فتحة، فلا داعي لجرّ القائمة */
+  app.get("/me/notifications/unread", { preHandler: requireRole("PATIENT") }, async (request) => ({
+    unread: await countUnread(request.auth!.sub),
+  }));
+
+  app.post("/me/notifications/read", { preHandler: requireRole("PATIENT") }, async (request) =>
+    markAllRead(request.auth!.sub),
+  );
+
+  app.post<{ Params: { id: string } }>(
+    "/me/notifications/:id/read",
+    { preHandler: requireRole("PATIENT") },
+    async (request) => markRead(request.auth!.sub, request.params.id),
+  );
 
   /** الزيارات التي يستطيع المريض تقييمها الآن */
   app.get("/me/reviewable", { preHandler: requireRole("PATIENT") }, async (request) => {

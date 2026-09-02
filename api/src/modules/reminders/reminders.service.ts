@@ -13,6 +13,9 @@ import { prisma as defaultPrisma } from "../../lib/prisma.js";
 import { toWhatsAppAddress } from "../../lib/phone.js";
 import { deliver, queueWhatsApp, resolveDoctorWhatsApp } from "../../notifications/dispatch.js";
 import { patientReminderMessage } from "../../notifications/whatsapp/templates.js";
+import { notifyInApp } from "../../notifications/inbox.js";
+
+const toArabicDigits = (value: number) => String(value).replace(/\d/g, (d) => "٠١٢٣٤٥٦٧٨٩"[Number(d)]);
 
 export type ReminderKind = "reminder_24h" | "reminder_2h";
 
@@ -29,6 +32,8 @@ export type ReminderRun = {
   scanned: number;
   queued: number;
   delivered: number;
+  /** إشعارات صندوق التطبيق — لا تتعلّق بوجود رقم واتساب */
+  inApp: number;
   skipped: { alreadySent: number; noWhatsApp: number };
 };
 
@@ -40,7 +45,7 @@ export async function runReminders(
   now: Date = new Date(),
   client: PrismaClient = defaultPrisma,
 ): Promise<ReminderRun> {
-  const run: ReminderRun = { scanned: 0, queued: 0, delivered: 0, skipped: { alreadySent: 0, noWhatsApp: 0 } };
+  const run: ReminderRun = { scanned: 0, queued: 0, delivered: 0, inApp: 0, skipped: { alreadySent: 0, noWhatsApp: 0 } };
 
   for (const { template, minutesBefore } of REMINDERS) {
     const target = new Date(now.getTime() + minutesBefore * 60_000);
@@ -70,6 +75,26 @@ export async function runReminders(
     run.scanned += appointments.length;
 
     for (const appointment of appointments) {
+      // صندوق التطبيق قبل الواتساب وبمعزلٍ عنه: لا يحتاج رقماً، فيصل حتى
+      // لمن لا رقم واتساب له — وهؤلاء أحوج الناس إلى تذكير
+      const label = template === "reminder_24h" ? "غداً" : "بعد ساعتين";
+      const doctorName = `${appointment.doctorClinic.doctor.title} ${appointment.doctorClinic.doctor.user.fullName}`;
+      const sentInApp = await notifyInApp(
+        {
+          userId: appointment.patient.account.id,
+          appointmentId: appointment.id,
+          template,
+          title: `موعدك ${label}`,
+          body:
+            `${appointment.patient.fullName} عند ${doctorName} — ${appointment.doctorClinic.clinic.nameAr}` +
+            `${appointment.doctorClinic.clinic.landmark ? `، ${appointment.doctorClinic.clinic.landmark}` : ""}.` +
+            `${appointment.dailyNumber ? ` رقمك ${toArabicDigits(appointment.dailyNumber)}.` : ""}`,
+          linkTo: "/bookings",
+        },
+        client,
+      );
+      if (sentInApp) run.inApp++;
+
       const to = appointment.patient.phone ?? appointment.patient.account.phone;
       if (!to) {
         run.skipped.noWhatsApp++;
@@ -89,7 +114,7 @@ export async function runReminders(
           sessionEnd: appointment.sessionEnd,
           queueNumber: appointment.queueNumber,
         },
-        template === "reminder_24h" ? "غداً" : "بعد ساعتين",
+        label,
       );
 
       let logId: string;

@@ -394,6 +394,18 @@ export type BannerItem = {
 
 export type BannerFeed = { banners: BannerItem[]; rotateSeconds: number };
 
+/** إشعارٌ في صندوق التطبيق */
+export type Notification = {
+  id: string;
+  title: string;
+  body: string;
+  linkTo: string | null;
+  isRead: boolean;
+  createdAt: string;
+};
+
+export type InboxFeed = { items: Notification[]; unread: number };
+
 export type Slot = { start: string; time: string; taken: boolean };
 
 export type Session = {

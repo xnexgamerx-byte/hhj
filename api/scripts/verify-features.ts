@@ -16,10 +16,12 @@ import {
   updateBanner,
 } from "../src/modules/owner/content.service.js";
 import { storeImage } from "../src/lib/uploads.js";
+import { countUnread, listInbox, markAllRead, markRead, notifyInApp } from "../src/notifications/inbox.js";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { UPLOAD_DIR } from "../src/lib/uploads.js";
 import { runReminders } from "../src/modules/reminders/reminders.service.js";
+import { notifyPatientToReview } from "../src/notifications/dispatch.js";
 import { createReview, listDoctorReviews, listReviewableVisits, setReviewPublished } from "../src/modules/reviews/reviews.service.js";
 import {
   createStaffAccount,
@@ -629,6 +631,115 @@ async function main() {
       (await getPublicBanners(prisma)).banners.length === before,
       "عاد العدد كما كان",
     );
+  }
+
+  // ═══ صندوق الإشعارات ═════════════════════════════════════════
+  {
+    const { practice } = await buildClinic(`i${suffix}`);
+    const me = await buildPatient(`8${suffix.slice(1)}`, "زينب حسين");
+    const other = await buildPatient(`9${suffix.slice(1)}`, "شخص آخر");
+
+    const booking = await createBooking(
+      { doctorClinicId: practice.id, patientId: me.patient.id, bookedByUserId: me.account.id, startAt: slotIn(26) },
+      prisma,
+    );
+
+    const afterBooking = await listInbox(me.account.id, 50, prisma);
+    const confirm = afterBooking.items[0];
+    check(
+      "الحجز يضع إشعاراً في صندوق المريض فيه رقمه",
+      afterBooking.unread === 1 && confirm?.title === "تم تثبيت حجزك" && confirm.body.includes("رقمك في العيادة"),
+      `«${confirm?.title}» — ${confirm?.body.slice(0, 60)}…`,
+    );
+
+    check(
+      "الإشعار يقود إلى مواعيدي",
+      confirm?.linkTo === "/bookings",
+      "الإشعار طريقٌ إلى الشيء لا شيءٌ بذاته",
+    );
+
+    // المجدوِل يمرّ مرّتين على الموعد نفسه: القيد الفريد يمنع التذكير المكرّر
+    const first = await runReminders(new Date(booking.slotStart.getTime() - 24 * 3_600_000), prisma);
+    const second = await runReminders(new Date(booking.slotStart.getTime() - 24 * 3_600_000), prisma);
+    const afterReminder = await listInbox(me.account.id, 50, prisma);
+    check(
+      "التذكير يصل الصندوق مرّةً واحدة مهما تكرّر تشغيل المجدوِل",
+      first.inApp >= 1 && second.inApp === 0 && afterReminder.items.filter((x) => x.title.includes("غداً")).length === 1,
+      `أُضيف ${first.inApp} في التشغيل الأول و${second.inApp} في الثاني`,
+    );
+
+    // التذكير في الصندوق لا يتعلّق برقم واتساب — ومن لا رقم له أحوج إليه
+    check(
+      "الصندوق يصل من لا واتساب له",
+      afterReminder.items.some((x) => x.title.includes("موعدك")),
+      "الرسالة الخارجية قد تُتخطّى، وإشعار التطبيق لا يُتخطّى",
+    );
+
+    // ── القراءة ──
+    const target = afterReminder.items[0];
+    const afterRead = await markRead(me.account.id, target.id, prisma);
+    check(
+      "تأشير إشعارٍ مقروءاً ينقص العدّاد",
+      afterRead.unread === afterReminder.unread - 1,
+      `${afterReminder.unread} ← ${afterRead.unread}`,
+    );
+
+    const again = await markRead(me.account.id, target.id, prisma);
+    check("إعادة تأشير المقروء لا تنقص العدّاد مرّتين", again.unread === afterRead.unread, "القراءة لا تُتراجع");
+
+    let notMine = "";
+    try {
+      await markRead(other.account.id, target.id, prisma);
+    } catch (error) {
+      if (error instanceof AppError) notMine = error.code;
+    }
+    check("لا يقرأ أحد إشعار غيره", notMine === "NOT_YOUR_NOTIFICATION", `رُفض بالرمز ${notMine}`);
+
+    check("صندوق كل مريض له وحده", (await countUnread(other.account.id, prisma)) === 0, "لا تسرّب بين الصناديق");
+
+    await markAllRead(me.account.id, prisma);
+    check("تأشير الكل يفرّغ الشارة", (await countUnread(me.account.id, prisma)) === 0, "الشارة الحمراء تختفي");
+
+    // ── الإلغاء من العيادة ──
+    await cancelBooking(booking.appointmentId, "CLINIC", me.account.id, "الطبيب مسافر", prisma);
+    const afterCancel = await listInbox(me.account.id, 50, prisma);
+    check(
+      "إلغاء العيادة يُشعر المريض ومعه السبب",
+      afterCancel.items[0]?.title === "أُلغي موعدك" && afterCancel.items[0].body.includes("الطبيب مسافر"),
+      `«${afterCancel.items[0]?.body.slice(0, 70)}…»`,
+    );
+
+    // ── الإلغاء بيد المريض لا يحتاج إخباره بما فعل ──
+    const own = await createBooking(
+      { doctorClinicId: practice.id, patientId: me.patient.id, bookedByUserId: me.account.id, startAt: slotIn(50) },
+      prisma,
+    );
+    const beforeOwn = (await listInbox(me.account.id, 50, prisma)).items.length;
+    await cancelBooking(own.appointmentId, "PATIENT", me.account.id, null, prisma);
+    check(
+      "من ألغى بيده لا يُشعَر بأنه ألغى",
+      (await listInbox(me.account.id, 50, prisma)).items.length === beforeOwn,
+      "إشعارٌ يخبرك بما فعلته للتوّ ضجيج",
+    );
+
+    // ── دعوة التقييم بعد انتهاء الكشف ──
+    const visit = await createBooking(
+      { doctorClinicId: practice.id, patientId: me.patient.id, bookedByUserId: me.account.id, startAt: slotIn(74) },
+      prisma,
+    );
+    await notifyPatientToReview(visit.appointmentId, prisma);
+    const afterVisit = await listInbox(me.account.id, 50, prisma);
+    check(
+      "انتهاء الكشف يدعو المريض للتقييم",
+      afterVisit.items[0]?.title === "كيف كانت زيارتك؟",
+      `«${afterVisit.items[0]?.title}»`,
+    );
+
+    const dup = await notifyInApp(
+      { userId: me.account.id, appointmentId: visit.appointmentId, template: "review_request", title: "مكرّر", body: "x" },
+      prisma,
+    );
+    check("الإشعار نفسه لا يتكرّر للحجز نفسه", dup === false, "القيد الفريد يرفضه بصمت لا برمي خطأ");
   }
 
   const failed = results.filter((r) => !r.passed);

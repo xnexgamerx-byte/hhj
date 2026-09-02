@@ -596,6 +596,7 @@ enum NotificationChannel {
   PUSH
   SMS
   WHATSAPP
+  IN_APP /// صندوق الإشعارات داخل التطبيق
 }
 
 enum CommissionStatus {
@@ -664,6 +665,12 @@ model NotificationLog {
   payload           Json?
   /// نص الرسالة كما أُرسل — يفيد عند أي نزاع «ما وصلني شيء»
   renderedBody      String?
+  /// عنوان الإشعار داخل التطبيق. الرسائل الخارجية لا عنوان لها
+  title             String?
+  /// وجهة الضغط داخل التطبيق: /bookings مثلاً
+  linkTo            String?
+  /// متى قرأه صاحبه. NULL = غير مقروء
+  readAt            DateTime?
   status            NotificationStatus  @default(QUEUED)
   attempts          Int                 @default(0)
   error             String?
@@ -676,12 +683,16 @@ model NotificationLog {
   user        User?        @relation(fields: [userId], references: [id], onDelete: Cascade)
   appointment Appointment? @relation(fields: [appointmentId], references: [id], onDelete: SetNull)
 
-  /// رسالة واحدة من كل نوع لكل حجز — يمنع إرسال تذكير مرتين لو تداخل
-  /// تشغيلان للمجدوِل، أو أُعيد تشغيل الخادم أثناء الإرسال.
+  /// رسالة واحدة من كل نوع لكل حجز في كل قناة — يمنع إرسال تذكير مرتين لو
+  /// تداخل تشغيلان للمجدوِل، أو أُعيد تشغيل الخادم أثناء الإرسال. والقناة
+  /// جزءٌ من المفتاح لأن تذكير الواتساب وتذكير صندوق التطبيق رسالتان لا
+  /// واحدة، ومنعُ الثانية بحجّة الأولى يترك المريض بلا إشعار في تطبيقه.
   /// الصفوف بلا حجز (appointmentId فارغ) لا يمسّها القيد لأن بوستغرس
   /// يعتبر قيم NULL مختلفة.
-  @@unique([appointmentId, template])
+  @@unique([appointmentId, template, channel])
   @@index([userId, createdAt])
+  /// عدّاد غير المقروء يُقرأ في كل فتحة للشاشة الرئيسية
+  @@index([userId, channel, readAt])
   @@index([status, createdAt])
   @@index([appointmentId])
   @@map("notification_logs")
