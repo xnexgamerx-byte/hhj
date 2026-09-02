@@ -1,11 +1,11 @@
 import { useEffect, useState } from "react";
-import { Linking, ScrollView, View } from "react-native";
+import { Image, Linking, ScrollView, View } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { PlainHeader, BottomBar } from "@/components/PlainHeader";
 import { StatRow } from "@/components/Stats";
 import { Icon } from "@/components/icons";
 import { Alert, Avatar, Badge, Button, Card, IconTile, Loading, SectionHeader, Stars, T } from "@/components/ui";
-import { api, type DoctorProfile, type Review } from "@/lib/api";
+import { api, mediaUrl, type DoctorProfile, type Review } from "@/lib/api";
 import { formatTimeLabel, statNumber, toArabic, WEEKDAYS } from "@/lib/format";
 import { font, radius, space, tintFor, useIsDark, usePalette } from "@/theme";
 import { Text } from "react-native";
@@ -59,6 +59,7 @@ export default function DoctorScreen() {
   }
 
   const tint = tintFor(profile.specialties[0] ?? "طب عام", isDark);
+  const photo = mediaUrl(profile.photoUrl);
   const shownReviews = showAllReviews ? reviews : reviews.slice(0, 2);
 
   return (
@@ -80,11 +81,20 @@ export default function DoctorScreen() {
                 backgroundColor: tint.bg,
                 alignItems: "center",
                 justifyContent: "center",
+                overflow: "hidden",
               }}
             >
               <Text style={{ fontFamily: font.bold, fontSize: 38, color: tint.fg }}>
                 {profile.fullName.trim().charAt(0)}
               </Text>
+              {photo ? (
+                <Image
+                  source={{ uri: photo }}
+                  style={{ position: "absolute", inset: 0 }}
+                  resizeMode="cover"
+                  accessibilityIgnoresInvertColors
+                />
+              ) : null}
             </View>
 
             <View style={{ flex: 1, gap: space(2) }}>

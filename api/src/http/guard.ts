@@ -51,6 +51,18 @@ export function errorHandler(error: Error, request: FastifyRequest, reply: Fasti
   if ((error as { validation?: unknown }).validation) {
     return reply.status(400).send({ error: "INVALID_INPUT", message: "البيانات المرسلة غير مكتملة أو غير صحيحة" });
   }
+  // الملف يتجاوز الحدّ: الإضافة ترمي هذا أثناء القراءة، أي قبل أن يصل الطلب
+  // إلى تحقّقنا. بلا هذا الفرع يرى المالك «خطأ غير متوقع» ويعيد الرفع مراراً
+  if ((error as { code?: string }).code === "FST_REQ_FILE_TOO_LARGE") {
+    return reply.status(413).send({ error: "FILE_TOO_LARGE", message: "الصورة أكبر من ٤ ميغابايت. اضغطها أو اختر أصغر" });
+  }
+  // خدمة الملفات الثابتة ترمي ForbiddenError على محاولات الخروج من المجلّد
+  // (‎%2e%2e%2f). المحاولة محجوبة أصلاً، لكن ٥٠٠ يوحي بعطلٍ في الخادم ويُغرق
+  // السجلّ — والجواب الصحيح لمسارٍ لا وجود له هو ٤٠٤
+  const status = (error as { statusCode?: number }).statusCode;
+  if (request.url.startsWith("/uploads/") && (status === 403 || status === 404)) {
+    return reply.status(404).send({ error: "NOT_FOUND", message: "الملف غير موجود" });
+  }
   request.log.error(error);
   return reply.status(500).send({ error: "INTERNAL", message: "حدث خطأ غير متوقع. حاول مرة أخرى" });
 }

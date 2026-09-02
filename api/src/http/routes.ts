@@ -42,6 +42,19 @@ import { runReminders } from "../modules/reminders/reminders.service.js";
 import { getAvailability } from "../modules/availability/availability.service.js";
 import { getOwnerSummary } from "../modules/owner/summary.service.js";
 import {
+  createBanner,
+  deleteBanner,
+  getPublicBanners,
+  getRotateSeconds,
+  listBanners,
+  reorderBanners,
+  setRotateSeconds,
+  updateBanner,
+  type BannerInput,
+} from "../modules/owner/content.service.js";
+import { removeImage, storeImage } from "../lib/uploads.js";
+import { badRequest, notFound } from "../lib/errors.js";
+import {
   addFamilyMember,
   updatePatient,
   getDoctorProfile,
@@ -80,6 +93,9 @@ export async function registerRoutes(app: FastifyInstance) {
       select: { id: true, slug: true, nameAr: true, nameEn: true },
     });
   });
+
+  /** لافتات الشاشة الرئيسية ومدّة تبديلها — يحرّرها المالك من لوحته */
+  app.get("/banners", async () => getPublicBanners());
 
   app.get("/specialties", async () => {
     return prisma.specialty.findMany({
@@ -167,6 +183,7 @@ export async function registerRoutes(app: FastifyInstance) {
         title: true,
         isActive: true,
         isPublished: true,
+        photoUrl: true,
         whatsappNumber: true,
         whatsappEnabled: true,
         registeredAt: true,
@@ -182,6 +199,32 @@ export async function registerRoutes(app: FastifyInstance) {
     ownerOnly,
     async (request) => {
       return resetDoctorPassword(request.auth!.sub, request.params.id);
+    },
+  );
+
+  /**
+   * صورة الطبيب. المالك هو من يسجّل الأطباء فهو من يضع صورهم — والطبيب لا
+   * يرفع صورته بنفسه كي لا تصل صورةٌ غير لائقة إلى واجهة عامة بلا مراجعة.
+   */
+  app.patch<{ Params: { id: string }; Body: { photoUrl: string | null } }>(
+    "/owner/doctors/:id/photo",
+    ownerOnly,
+    async (request) => {
+      const doctor = await prisma.doctor.findUnique({
+        where: { id: request.params.id },
+        select: { photoUrl: true },
+      });
+      if (!doctor) throw notFound("DOCTOR_NOT_FOUND", "الطبيب غير موجود");
+
+      const next = request.body?.photoUrl?.trim() || null;
+      const updated = await prisma.doctor.update({
+        where: { id: request.params.id },
+        data: { photoUrl: next },
+        select: { id: true, photoUrl: true },
+      });
+      // الصورة القديمة تُحذف بعد نجاح التحديث لا قبله
+      if (doctor.photoUrl && doctor.photoUrl !== next) await removeImage(doctor.photoUrl);
+      return updated;
     },
   );
 
@@ -278,6 +321,50 @@ export async function registerRoutes(app: FastifyInstance) {
 
   /** ملخص لوحة المالك */
   app.get("/owner/summary", ownerOnly, async () => getOwnerSummary());
+
+  // ── الصور واللافتات ──
+
+  /**
+   * رفع صورة. المالك وحده: الرفع يكتب على القرص، وأيّ دورٍ آخر يفتحه
+   * يجعل تعبئة القرص عملاً يقوم به أيّ من سجّل برقم هاتف.
+   */
+  app.post("/owner/uploads", ownerOnly, async (request, reply) => {
+    const file = await request.file();
+    if (!file) throw badRequest("NO_FILE", "لم يصل ملف");
+    const buffer = await file.toBuffer();
+    // truncated يعني أن الحدّ أوقف القراءة — الملف ناقص فلا يُحفظ نصفه
+    if (file.file.truncated) throw badRequest("FILE_TOO_LARGE", "الصورة أكبر من ٤ ميغابايت");
+    const stored = await storeImage(buffer);
+    return reply.status(201).send(stored);
+  });
+
+  app.get("/owner/banners", ownerOnly, async () => ({
+    banners: await listBanners(),
+    rotateSeconds: await getRotateSeconds(),
+  }));
+
+  app.post<{ Body: BannerInput }>("/owner/banners", ownerOnly, async (request, reply) => {
+    return reply.status(201).send(await createBanner(request.body ?? {}));
+  });
+
+  app.patch<{ Params: { id: string }; Body: BannerInput }>(
+    "/owner/banners/:id",
+    ownerOnly,
+    async (request) => updateBanner(request.params.id, request.body ?? {}),
+  );
+
+  app.delete<{ Params: { id: string } }>("/owner/banners/:id", ownerOnly, async (request, reply) => {
+    await deleteBanner(request.params.id);
+    return reply.status(204).send();
+  });
+
+  app.put<{ Body: { ids: string[] } }>("/owner/banners/order", ownerOnly, async (request) => {
+    return reorderBanners(request.body?.ids ?? []);
+  });
+
+  app.patch<{ Body: { rotateSeconds: number } }>("/owner/settings", ownerOnly, async (request) => ({
+    rotateSeconds: await setRotateSeconds(Number(request.body?.rotateSeconds)),
+  }));
 
   // ── السكرتيرون ──
   app.get("/owner/staff", ownerOnly, async () => listStaff());

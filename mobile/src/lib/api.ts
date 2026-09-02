@@ -101,6 +101,20 @@ const BASE: string =
   (Constants.expoConfig?.extra as { apiUrl?: string } | undefined)?.apiUrl ??
   "http://localhost:3000";
 
+/**
+ * يحوّل مسار صورةٍ مرفوعة («/uploads/…») إلى رابطٍ كامل على الخادم نفسه.
+ *
+ * الخادم يعيد مساراً نسبياً لا رابطاً مطلقاً عن قصد: عنوانه يتبدّل بين
+ * جهازٍ ونفقٍ ومنصّة استضافة، ورابطٌ مطلقٌ محفوظ في القاعدة يصير خطأً ثابتاً
+ * بعد أول انتقال. الحلّ أن يعرف كلٌّ عنوانه: القاعدة تحفظ المسار، والعميل
+ * يعرف الأصل الذي يكلّمه.
+ */
+export function mediaUrl(path: string | null | undefined): string | null {
+  if (!path) return null;
+  if (/^(https?:)?\/\//i.test(path) || path.startsWith("data:")) return path;
+  return `${BASE}${path.startsWith("/") ? path : `/${path}`}`;
+}
+
 // على جهاز حقيقي، localhost يعني الجهاز نفسه — فبلوغُه هنا يقين خطأ لا احتمال.
 // نرفعه إلى السطح بدل أن يظهر بعد حين كـ«تعذّر الاتصال» يُبحث له عن سبب في
 // الشبكة وجدار الحماية، وهي رحلة لا تنتهي عند أحد.
@@ -325,6 +339,7 @@ export type DoctorCard = {
   id: string;
   title: string;
   fullName: string;
+  photoUrl: string | null;
   yearsOfExperience: number | null;
   ratingAvg: number;
   ratingCount: number;
@@ -345,6 +360,7 @@ export type DoctorProfile = {
   id: string;
   title: string;
   fullName: string;
+  photoUrl: string | null;
   bio: string | null;
   yearsOfExperience: number | null;
   ratingAvg: number;
@@ -365,6 +381,18 @@ export type DoctorProfile = {
     schedules: { weekday: number; startTime: string; endTime: string }[];
   }[];
 };
+
+/** لافتة الشاشة الرئيسية كما يحرّرها المالك */
+export type BannerItem = {
+  id: string;
+  imageUrl: string | null;
+  title: string | null;
+  body: string | null;
+  linkKind: string | null;
+  linkValue: string | null;
+};
+
+export type BannerFeed = { banners: BannerItem[]; rotateSeconds: number };
 
 export type Slot = { start: string; time: string; taken: boolean };
 

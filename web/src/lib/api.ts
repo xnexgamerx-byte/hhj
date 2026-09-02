@@ -4,6 +4,16 @@
  */
 const BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3000";
 
+/**
+ * مسارُ صورةٍ مرفوعة («/uploads/…») ⇐ رابطٌ كامل على الخادم.
+ * الخادم يحفظ المسار لا الرابط: عنوانه يتبدّل بين جهازٍ ونفقٍ واستضافة.
+ */
+export function mediaUrl(path: string | null | undefined): string | null {
+  if (!path) return null;
+  if (/^(https?:)?\/\//i.test(path) || path.startsWith("data:")) return path;
+  return `${BASE}${path.startsWith("/") ? path : `/${path}`}`;
+}
+
 const ACCESS_KEY = "mawid.access";
 const REFRESH_KEY = "mawid.refresh";
 const USER_KEY = "mawid.user";
@@ -69,7 +79,9 @@ export function clearSession() {
 async function request<T>(path: string, init: RequestInit = {}, retry = true): Promise<T> {
   const token = read(ACCESS_KEY);
   const headers = new Headers(init.headers);
-  if (init.body) headers.set("Content-Type", "application/json");
+  // FormData يضع ترويسته بنفسه مع حدّ الأجزاء — فرضُ application/json عليها
+  // يجعل الخادم يعجز عن تحليل الرفع
+  if (init.body && !(init.body instanceof FormData)) headers.set("Content-Type", "application/json");
   if (token) headers.set("Authorization", `Bearer ${token}`);
 
   let response: Response;
@@ -118,6 +130,17 @@ async function tryRefresh(): Promise<boolean> {
   } catch {
     return false;
   }
+}
+
+/**
+ * رفع ملف. لا يمرّ بـ`request` لأن ذاك يضع Content-Type: application/json،
+ * وحقل الرفع يحتاج أن يضع المتصفّح حدَّ الأجزاء (boundary) بنفسه — وضبطُه
+ * يدوياً يعطّل التحليل على الخادم بلا رسالة مفهومة.
+ */
+export async function uploadFile(path: string, file: File): Promise<{ url: string }> {
+  const form = new FormData();
+  form.append("file", file);
+  return request<{ url: string }>(path, { method: "POST", body: form });
 }
 
 export const api = {

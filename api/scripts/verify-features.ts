@@ -7,6 +7,18 @@ import { hashPassword } from "../src/lib/password.js";
 import { AppError } from "../src/lib/errors.js";
 import { cancelBooking, createBooking } from "../src/modules/booking/booking.service.js";
 import { getMyPatients, updatePatient } from "../src/modules/discovery/discovery.service.js";
+import {
+  createBanner,
+  deleteBanner,
+  getPublicBanners,
+  reorderBanners,
+  setRotateSeconds,
+  updateBanner,
+} from "../src/modules/owner/content.service.js";
+import { storeImage } from "../src/lib/uploads.js";
+import { readFile } from "node:fs/promises";
+import path from "node:path";
+import { UPLOAD_DIR } from "../src/lib/uploads.js";
 import { runReminders } from "../src/modules/reminders/reminders.service.js";
 import { createReview, listDoctorReviews, listReviewableVisits, setReviewPublished } from "../src/modules/reviews/reviews.service.js";
 import {
@@ -497,6 +509,126 @@ async function main() {
       if (error instanceof AppError) badYear = error.code;
     }
     check("سنة ميلاد غير معقولة تُرفض", badYear === "BAD_BIRTH_YEAR", `رُفض بالرمز ${badYear}`);
+  }
+
+  // ═══ اللافتات والصور المرفوعة ════════════════════════════════
+  {
+    // صورة PNG صغيرة صحيحة البصمة
+    const png = Buffer.concat([
+      Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+      Buffer.from(`test-${suffix}`),
+    ]);
+    const stored = await storeImage(png);
+    const onDisk = await readFile(path.join(UPLOAD_DIR, stored.fileName));
+    check(
+      "الصورة تُحفظ باسمٍ هو بصمة محتواها",
+      stored.url.startsWith("/uploads/") && /^[0-9a-f]{32}\.png$/.test(stored.fileName) && onDisk.equals(png),
+      `${stored.fileName} · ${stored.bytes} بايت`,
+    );
+
+    const again = await storeImage(png);
+    check(
+      "رفع الصورة نفسها مرّتين لا ينشئ نسختين",
+      again.fileName === stored.fileName,
+      "الاسم من المحتوى، فالتكرار يكتب فوق نفسه",
+    );
+
+    // ملفٌّ يتظاهر بأنه صورة: الامتداد يكتبه من يرفع، والبصمة لا
+    let disguised = "";
+    try {
+      await storeImage(Buffer.from('<?php system($_GET["c"]); ?>'));
+    } catch (error) {
+      if (error instanceof AppError) disguised = error.code;
+    }
+    check(
+      "ملفٌّ ليس صورةً يُرفض مهما كان امتداده",
+      disguised === "BAD_IMAGE",
+      `رُفض بالرمز ${disguised} — الحكم بالبايتات لا بالاسم`,
+    );
+
+    let tooBig = "";
+    try {
+      await storeImage(Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.alloc(5 * 1024 * 1024)]));
+    } catch (error) {
+      if (error instanceof AppError) tooBig = error.code;
+    }
+    check("الصورة الأكبر من الحدّ تُرفض", tooBig === "FILE_TOO_LARGE", `رُفض بالرمز ${tooBig}`);
+
+    // ── دورة حياة اللافتة ──
+    const before = (await getPublicBanners(prisma)).banners.length;
+    const a = await createBanner({ imageUrl: stored.url, title: `لافتة أ ${suffix}` }, prisma);
+    const b = await createBanner({ title: `لافتة ب ${suffix}` }, prisma);
+    const feed = await getPublicBanners(prisma);
+    check(
+      "اللافتة الجديدة تصل التطبيق فوراً وفي آخر الصفّ",
+      feed.banners.length === before + 2 && feed.banners.at(-1)?.id === b.id,
+      `${feed.banners.length} لافتة، وآخرها التي أُضيفت أخيراً`,
+    );
+
+    let empty = "";
+    try {
+      await createBanner({}, prisma);
+    } catch (error) {
+      if (error instanceof AppError) empty = error.code;
+    }
+    check("لافتة بلا صورة ولا عنوان تُرفض", empty === "EMPTY_BANNER", `رُفض بالرمز ${empty}`);
+
+    await updateBanner(a.id, { isActive: false }, prisma);
+    const hidden = await getPublicBanners(prisma);
+    check(
+      "اللافتة المخفيّة تختفي عن التطبيق ولا تُحذف",
+      !hidden.banners.some((x) => x.id === a.id) && (await prisma.banner.findUnique({ where: { id: a.id } })) !== null,
+      "الإخفاء تراجعٌ لا إتلاف",
+    );
+    await updateBanner(a.id, { isActive: true }, prisma);
+
+    const all = await prisma.banner.findMany({ orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }] });
+    const flipped = [...all].reverse().map((x) => x.id);
+    const reordered = await reorderBanners(flipped, prisma);
+    check(
+      "الترتيب الذي يرسله المالك هو الترتيب النهائي",
+      reordered.map((x) => x.id).join() === flipped.join(),
+      `${flipped.length} لافتة أُعيد ترتيبها`,
+    );
+
+    let badOrder = "";
+    try {
+      await reorderBanners([a.id], prisma);
+    } catch (error) {
+      if (error instanceof AppError) badOrder = error.code;
+    }
+    check(
+      "ترتيبٌ ناقص يُرفض بدل أن يُفقد لافتات",
+      badOrder === "BAD_ORDER",
+      `رُفض بالرمز ${badOrder} — قائمةٌ فيها لافتةٌ واحدة كانت ستترك البقية بلا ترتيب`,
+    );
+
+    // ── مدّة التبديل ──
+    check("مدّة التبديل تُحفظ", (await setRotateSeconds(9, prisma)) === 9, "٩ ثوانٍ");
+    let badRotate = "";
+    try {
+      await setRotateSeconds(900, prisma);
+    } catch (error) {
+      if (error instanceof AppError) badRotate = error.code;
+    }
+    check("مدّة خارج المدى تُرفض", badRotate === "BAD_ROTATE", `رُفض بالرمز ${badRotate}`);
+
+    // قيمةٌ تالفة في القاعدة لا تُعطّل الشاشة الرئيسية
+    await prisma.appSetting.update({ where: { key: "banner_rotate_seconds" }, data: { value: "ليست رقماً" } });
+    check(
+      "قيمةٌ تالفة في الإعداد تعود إلى الافتراضي لا تُعطّل الشاشة",
+      (await getPublicBanners(prisma)).rotateSeconds === 5,
+      "الشاشة الرئيسية أهمّ من إعداد",
+    );
+    await setRotateSeconds(5, prisma);
+
+    await deleteBanner(a.id, prisma);
+    await deleteBanner(b.id, prisma);
+    check(
+      "الحذف يُخرج اللافتة من التطبيق",
+      (await getPublicBanners(prisma)).banners.length === before,
+      "عاد العدد كما كان",
+    );
   }
 
   const failed = results.filter((r) => !r.passed);

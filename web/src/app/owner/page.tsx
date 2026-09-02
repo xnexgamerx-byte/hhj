@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Header } from "@/components/Header";
 import { Alert, Badge, Button, Card, Dialog, EmptyState, Field, Input, Loading, SectionTitle, Select, StatTile } from "@/components/ui";
-import { api, getSession } from "@/lib/api";
+import { api, getSession, mediaUrl, uploadFile } from "@/lib/api";
 import { formatClock, formatDay, formatFee, statNumber, toArabic, WEEKDAYS } from "@/lib/format";
 
 type Summary = {
@@ -33,6 +33,7 @@ type DoctorRow = {
   title: string;
   isActive: boolean;
   isPublished: boolean;
+  photoUrl: string | null;
   whatsappNumber: string | null;
   whatsappEnabled: boolean;
   registeredAt: string;
@@ -41,7 +42,16 @@ type DoctorRow = {
   _count: { practices: number };
 };
 
-type Tab = "overview" | "doctors" | "staff" | "commissions" | "reviews" | "messages";
+type BannerRow = {
+  id: string;
+  imageUrl: string | null;
+  title: string | null;
+  body: string | null;
+  isActive: boolean;
+  sortOrder: number;
+};
+
+type Tab = "overview" | "doctors" | "staff" | "banners" | "commissions" | "reviews" | "messages";
 
 export default function OwnerDashboard() {
   const router = useRouter();
@@ -69,6 +79,7 @@ export default function OwnerDashboard() {
               ["overview", "نظرة عامة"],
               ["doctors", "الأطباء"],
               ["staff", "السكرتيرون"],
+              ["banners", "واجهة التطبيق"],
               ["commissions", "العمولات"],
               ["reviews", "التقييمات"],
               ["messages", "رسائل الواتساب"],
@@ -93,6 +104,7 @@ export default function OwnerDashboard() {
         {tab === "overview" && <OverviewTab />}
         {tab === "doctors" && <DoctorsTab />}
         {tab === "staff" && <StaffTab />}
+        {tab === "banners" && <BannersTab />}
         {tab === "commissions" && <CommissionsTab />}
         {tab === "reviews" && <ReviewsTab />}
         {tab === "messages" && <MessagesTab />}
@@ -364,7 +376,9 @@ function DoctorsTab() {
         {rows?.map((row) => (
           <Card key={row.id}>
             <div className="flex items-start justify-between gap-3 flex-wrap">
-              <div className="min-w-0">
+              <div className="min-w-0 flex gap-3 items-start">
+                <DoctorPhoto row={row} onDone={load} />
+                <div className="min-w-0">
                 <p className="text-[15.5px] font-bold">
                   {row.title} {row.user.fullName}
                 </p>
@@ -374,6 +388,7 @@ function DoctorsTab() {
                 <p className="text-[13px] mt-0.5" style={{ color: "var(--primary)" }}>
                   {row.specialties.map((s) => s.specialty.nameAr).join(" · ") || "بلا تخصص"}
                 </p>
+                </div>
               </div>
               <div className="flex flex-wrap gap-1.5 justify-end">
                 {!row.isActive && <Badge tone="danger">موقوف</Badge>}
@@ -432,6 +447,80 @@ function DoctorsTab() {
  * إعداد عيادة الطبيب: الموقع والسعر والعمولة والدوام في خطوة واحدة.
  * فصلها إلى خطوات يترك أطباء نصف مُعدّين لا يستطيع أحد الحجز عندهم.
  */
+/**
+ * صورة الطبيب — تُرفع وتُبدَّل من هنا.
+ *
+ * المالك هو من يسجّل الأطباء، فهو من يضع صورهم: لو رفعها الطبيب بنفسه لوصلت
+ * إلى واجهةٍ عامة بلا مراجعة. والحرف الأول يبقى بديلاً حتى تُرفع صورة —
+ * مربّعٌ فارغ في قائمة الأطباء يبدو عطلاً.
+ */
+function DoctorPhoto({ row, onDone }: { row: DoctorRow; onDone: () => void }) {
+  const [busy, setBusy] = useState(false);
+  const inputId = `photo-${row.id}`;
+  const photo = mediaUrl(row.photoUrl);
+
+  async function pick(file: File | undefined) {
+    if (!file) return;
+    setBusy(true);
+    try {
+      const { url } = await uploadFile("/owner/uploads", file);
+      await api.patch(`/owner/doctors/${row.id}/photo`, { photoUrl: url });
+      onDone();
+    } catch (e) {
+      alert((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="shrink-0 text-center">
+      <label
+        htmlFor={inputId}
+        className="block w-[62px] h-[68px] rounded-[10px] overflow-hidden cursor-pointer relative grid place-items-center"
+        style={{ background: "var(--primary-soft)", border: "1px solid var(--line)" }}
+        title="اضغط لتغيير الصورة"
+      >
+        <span className="text-[24px] font-bold" style={{ color: "var(--primary)" }}>
+          {row.user.fullName.trim().charAt(0)}
+        </span>
+        {photo && (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={photo} alt="" className="absolute inset-0 w-full h-full object-cover" />
+        )}
+        {busy && (
+          <span
+            className="absolute inset-0 grid place-items-center text-[11px] font-semibold"
+            style={{ background: "rgba(0,0,0,.55)", color: "#fff" }}
+          >
+            يُرفع…
+          </span>
+        )}
+      </label>
+      <input
+        id={inputId}
+        type="file"
+        accept="image/png,image/jpeg,image/webp"
+        className="hidden"
+        onChange={(e) => void pick(e.target.files?.[0])}
+      />
+      {row.photoUrl && (
+        <button
+          type="button"
+          className="text-[11.5px] mt-1 underline"
+          style={{ color: "var(--muted)" }}
+          onClick={() => {
+            if (!confirm("حذف صورة الطبيب؟")) return;
+            void api.patch(`/owner/doctors/${row.id}/photo`, { photoUrl: null }).then(onDone);
+          }}
+        >
+          حذف الصورة
+        </button>
+      )}
+    </div>
+  );
+}
+
 function SetupClinicDialog({
   doctor,
   onClose,
@@ -1035,6 +1124,280 @@ type SettlementRow = {
   collectedBy: string;
   createdAt: string;
 };
+
+/* ── واجهة التطبيق: اللافتات ومدّة تبديلها ───────────────────── */
+
+/**
+ * كل ما يظهر في صدر الشاشة الرئيسية يُحرَّر من هنا.
+ *
+ * السبب أن الإصدار الجديد من التطبيق يمرّ بمراجعة المتجر ويأخذ أياماً، بينما
+ * اللافتة إعلانٌ موسميّ: عيادةٌ افتُتحت، حملةُ تطعيم، عرضٌ ينتهي بعد أسبوع.
+ * ربطُها بالإصدار يعني أنها تصل متأخّرة دائماً.
+ */
+function BannersTab() {
+  const [rows, setRows] = useState<BannerRow[] | null>(null);
+  const [rotate, setRotate] = useState(5);
+  const [savedRotate, setSavedRotate] = useState(5);
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [adding, setAdding] = useState(false);
+
+  const load = useCallback(() => {
+    api
+      .get<{ banners: BannerRow[]; rotateSeconds: number }>("/owner/banners")
+      .then((data) => {
+        setRows(data.banners);
+        setRotate(data.rotateSeconds);
+        setSavedRotate(data.rotateSeconds);
+      })
+      .catch((e) => setError(e.message));
+  }, []);
+  useEffect(load, [load]);
+
+  async function run(key: string, action: () => Promise<unknown>) {
+    setBusy(key);
+    setError(null);
+    try {
+      await action();
+      load();
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  /** يحرّك لافتةً خطوةً واحدة، ويرسل الترتيب كاملاً — الخادم لا يخمّن النيّة */
+  function move(index: number, delta: number) {
+    if (!rows) return;
+    const next = [...rows];
+    const target = index + delta;
+    if (target < 0 || target >= next.length) return;
+    [next[index], next[target]] = [next[target], next[index]];
+    setRows(next);
+    void run("order", () => api.put("/owner/banners/order", { ids: next.map((b) => b.id) }));
+  }
+
+  return (
+    <>
+      <h2 className="text-[18px] font-bold mb-1" style={{ fontFamily: "var(--font-display)" }}>
+        لافتات الشاشة الرئيسية
+      </h2>
+      <p className="text-[13px] mb-4" style={{ color: "var(--muted)" }}>
+        تظهر في صدر التطبيق وتتبدّل تلقائياً. تعديلها يصل للمرضى فوراً بلا إصدار جديد.
+      </p>
+
+      {error && (
+        <div className="mb-4">
+          <Alert>{error}</Alert>
+        </div>
+      )}
+
+      <Card>
+        <div className="flex flex-wrap items-end gap-3">
+          <div className="min-w-[180px]">
+            <Field label="مدّة بقاء اللافتة" hint="بين ٢ و٦٠ ثانية">
+              <Input
+                type="number"
+                min={2}
+                max={60}
+                value={rotate}
+                onChange={(e) => setRotate(Number(e.target.value))}
+              />
+            </Field>
+          </div>
+          <Button
+            variant="outline"
+            disabled={busy === "rotate" || rotate === savedRotate}
+            onClick={() => void run("rotate", () => api.patch("/owner/settings", { rotateSeconds: rotate }))}
+          >
+            {busy === "rotate" ? "يُحفظ…" : "حفظ المدّة"}
+          </Button>
+          <div className="flex-1" />
+          <Button onClick={() => setAdding(true)}>أضف لافتة</Button>
+        </div>
+      </Card>
+
+      {rows === null && <Loading />}
+
+      {rows?.length === 0 && (
+        <Card>
+          <EmptyState
+            title="لا لافتات بعد"
+            hint="حتى تضيف أول لافتة، يعرض التطبيق ثلاث لافتات مدمجة تشرح الخدمة — فلا تظهر الشاشة فارغة."
+          />
+        </Card>
+      )}
+
+      <div className="grid gap-3 mt-3">
+        {rows?.map((banner, index) => (
+          <Card key={banner.id}>
+            <div className="flex flex-wrap gap-4 items-start">
+              {/* بنسبة اللافتة نفسها في التطبيق كي يرى المالك ما سيراه المريض */}
+              <div
+                className="w-[190px] h-[67px] rounded-[10px] overflow-hidden shrink-0 grid place-items-center"
+                style={{ background: "var(--surface-2)", border: "1px solid var(--line)" }}
+              >
+                {banner.imageUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={mediaUrl(banner.imageUrl) ?? ""}
+                    alt=""
+                    className="w-full h-full object-cover"
+                  />
+                ) : (
+                  <span className="text-[12px]" style={{ color: "var(--faint)" }}>
+                    بلا صورة
+                  </span>
+                )}
+              </div>
+
+              <div className="flex-1 min-w-[200px]">
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="text-[15px] font-semibold">{banner.title ?? "بلا عنوان"}</span>
+                  {!banner.isActive && <Badge tone="warn">مخفيّة</Badge>}
+                </div>
+                <p className="text-[13px]" style={{ color: "var(--muted)" }}>
+                  {banner.body ?? "—"}
+                </p>
+              </div>
+
+              <div className="flex flex-wrap gap-2 items-center">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={index === 0 || busy === "order"}
+                  onClick={() => move(index, -1)}
+                >
+                  ↑
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={index === rows.length - 1 || busy === "order"}
+                  onClick={() => move(index, 1)}
+                >
+                  ↓
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={busy === banner.id}
+                  onClick={() =>
+                    void run(banner.id, () =>
+                      api.patch(`/owner/banners/${banner.id}`, { isActive: !banner.isActive }),
+                    )
+                  }
+                >
+                  {banner.isActive ? "إخفاء" : "إظهار"}
+                </Button>
+                <Button
+                  variant="danger"
+                  size="sm"
+                  disabled={busy === banner.id}
+                  onClick={() => {
+                    if (!confirm(`حذف لافتة «${banner.title ?? "بلا عنوان"}»؟`)) return;
+                    void run(banner.id, () => api.del(`/owner/banners/${banner.id}`));
+                  }}
+                >
+                  حذف
+                </Button>
+              </div>
+            </div>
+          </Card>
+        ))}
+      </div>
+
+      {adding && (
+        <AddBannerDialog
+          onClose={() => setAdding(false)}
+          onDone={() => {
+            setAdding(false);
+            load();
+          }}
+        />
+      )}
+    </>
+  );
+}
+
+function AddBannerDialog({ onClose, onDone }: { onClose: () => void; onDone: () => void }) {
+  const [title, setTitle] = useState("");
+  const [body, setBody] = useState("");
+  const [file, setFile] = useState<File | null>(null);
+  const [preview, setPreview] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // الرابط المؤقّت يُلغى عند التبديل والإغلاق، وإلا بقيت الصور في ذاكرة الصفحة
+  useEffect(() => {
+    if (!file) {
+      setPreview(null);
+      return;
+    }
+    const url = URL.createObjectURL(file);
+    setPreview(url);
+    return () => URL.revokeObjectURL(url);
+  }, [file]);
+
+  async function submit() {
+    setBusy(true);
+    setError(null);
+    try {
+      // الصورة تُرفع أولاً ثم تُنشأ اللافتة: لافتةٌ بلا صورتها أسوأ من صورةٍ
+      // يتيمةٍ على القرص، والثانية يمكن تنظيفها لاحقاً
+      const imageUrl = file ? (await uploadFile("/owner/uploads", file)).url : null;
+      await api.post("/owner/banners", { imageUrl, title: title.trim() || null, body: body.trim() || null });
+      onDone();
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Dialog title="لافتة جديدة" onClose={onClose}>
+      {error && <Alert>{error}</Alert>}
+
+      <Field label="الصورة" hint="PNG أو JPG أو WEBP · حتى ٤ ميغابايت · الأفضل بعرض ١٢٠٠×٤٢٠">
+        <input
+          type="file"
+          accept="image/png,image/jpeg,image/webp"
+          onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+          className="w-full text-[13px]"
+        />
+      </Field>
+
+      {preview && (
+        <div
+          className="w-full h-[120px] rounded-[10px] overflow-hidden"
+          style={{ border: "1px solid var(--line)" }}
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={preview} alt="" className="w-full h-full object-cover" />
+        </div>
+      )}
+
+      <Field label="العنوان" hint="اختياري — اتركه فارغاً إن كان النصّ داخل الصورة">
+        <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="تدور على طبيب اختصاص؟" />
+      </Field>
+
+      <Field label="الشرح" hint="اختياري — سطر تحت العنوان">
+        <Input value={body} onChange={(e) => setBody(e.target.value)} placeholder="أوقات محدّثة من الطبيب نفسه" />
+      </Field>
+
+      <div className="flex gap-2 justify-end">
+        <Button variant="outline" onClick={onClose}>
+          إلغاء
+        </Button>
+        <Button disabled={busy || (!file && !title.trim())} onClick={submit}>
+          {busy ? "يُحفظ…" : "أضف اللافتة"}
+        </Button>
+      </div>
+    </Dialog>
+  );
+}
 
 function CommissionsTab() {
   const [data, setData] = useState<CommissionData | null>(null);

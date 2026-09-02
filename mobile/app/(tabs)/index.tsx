@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Modal, Pressable, RefreshControl, ScrollView, View } from "react-native";
 import { useFocusEffect, useRouter } from "expo-router";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { Banner, DEFAULT_SLIDES } from "@/components/Banner";
+import { Banner, slidesFrom } from "@/components/Banner";
 import { ClinicCard } from "@/components/ClinicCard";
 import { SearchField } from "@/components/PlainHeader";
 import { DoctorRow } from "@/components/DoctorRow";
@@ -12,6 +12,7 @@ import { Alert, Button, Card, EmptyState, IconTile, Loading, SectionHeader, T } 
 import {
   api,
   getSession,
+  type BannerFeed,
   type ClinicCard as Clinic,
   type DoctorCard,
   type Governorate,
@@ -41,6 +42,7 @@ export default function HomeScreen() {
   const [user, setUser] = useState<SessionUser | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [feed, setFeed] = useState<BannerFeed | null>(null);
 
   useEffect(() => {
     api
@@ -51,6 +53,11 @@ export default function HomeScreen() {
         setGovernorateId(saved && list.some((g) => g.id === saved) ? saved : (list[0]?.id ?? null));
       })
       .catch((e) => setError(e.message));
+  }, []);
+
+  // اللافتات مستقلّة عن المحافظة، وفشلها لا يُعطّل الشاشة: تظهر المدمجة
+  useEffect(() => {
+    api.get<BannerFeed>("/banners").then(setFeed).catch(() => {});
   }, []);
 
   const load = useCallback(
@@ -179,7 +186,8 @@ export default function HomeScreen() {
         {/* ── لافتة منزلقة بنقاط ── */}
         <View style={{ paddingHorizontal: space(4), paddingTop: space(4) }}>
           <Banner
-            slides={DEFAULT_SLIDES()}
+            slides={slidesFrom(feed?.banners)}
+            rotateSeconds={feed?.rotateSeconds ?? 5}
             onPress={() => router.push(`/doctors?governorateId=${governorateId}`)}
           />
         </View>

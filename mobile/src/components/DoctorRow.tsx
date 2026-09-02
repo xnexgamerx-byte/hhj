@@ -1,7 +1,7 @@
-import { View } from "react-native";
+import { Image, View } from "react-native";
 import { Icon } from "@/components/icons";
 import { Badge, Card, T } from "@/components/ui";
-import type { DoctorCard } from "@/lib/api";
+import { mediaUrl, type DoctorCard } from "@/lib/api";
 import { formatFee, toArabic } from "@/lib/format";
 import { font, radius, space, tintFor, useIsDark, usePalette } from "@/theme";
 import { Text } from "react-native";
@@ -18,6 +18,7 @@ export function DoctorRow({ doctor, onPress }: { doctor: DoctorCard; onPress: ()
   const specialty = doctor.specialties[0] ?? "طب عام";
   const tint = tintFor(specialty, isDark);
   const initial = doctor.fullName.trim().charAt(0);
+  const photo = mediaUrl(doctor.photoUrl);
 
   return (
     <Card onPress={onPress} padded={false} style={{ padding: space(3.5) }}>
@@ -30,9 +31,20 @@ export function DoctorRow({ doctor, onPress }: { doctor: DoctorCard; onPress: ()
             backgroundColor: tint.bg,
             alignItems: "center",
             justifyContent: "center",
+            overflow: "hidden",
           }}
         >
+          {/* الحرف الأول يبقى تحت الصورة لا بدلاً منها: صورةٌ بطيئة أو مفقودة
+              تترك مربّعاً ملوّناً فيه حرفُ الطبيب، لا فجوةً رمادية */}
           <Text style={{ fontFamily: font.bold, fontSize: 34, color: tint.fg }}>{initial}</Text>
+          {photo ? (
+            <Image
+              source={{ uri: photo }}
+              style={{ position: "absolute", inset: 0 }}
+              resizeMode="cover"
+              accessibilityIgnoresInvertColors
+            />
+          ) : null}
         </View>
 
         <View style={{ flex: 1, gap: space(1.5) }}>

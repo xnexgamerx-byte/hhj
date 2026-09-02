@@ -4,7 +4,10 @@ import Fastify from "fastify";
 import cors from "@fastify/cors";
 import helmet from "@fastify/helmet";
 import rateLimit from "@fastify/rate-limit";
+import multipart from "@fastify/multipart";
+import fastifyStatic from "@fastify/static";
 import { registerRoutes } from "./http/routes.js";
+import { MAX_UPLOAD_BYTES, UPLOAD_DIR, UPLOAD_ROUTE } from "./lib/uploads.js";
 import { errorHandler } from "./http/guard.js";
 import { prisma } from "./lib/prisma.js";
 import { getWhatsAppProvider } from "./notifications/dispatch.js";
@@ -28,7 +31,23 @@ export async function buildServer() {
   });
 
   // ترويسات أمان قياسية. سياسة المحتوى مطفأة: الخادم لا يقدّم صفحات بل JSON
-  await app.register(helmet, { contentSecurityPolicy: false });
+  // وصوراً. crossOriginResourcePolicy مفتوحة لأن الصور تُعرض من أصلٍ آخر —
+  // تطبيق الجوال وواجهة الويب كلاهما على منفذٍ غير منفذ الخادم.
+  await app.register(helmet, { contentSecurityPolicy: false, crossOriginResourcePolicy: false });
+
+  // رفع الصور: الحدّ هنا يمنع استنزاف الذاكرة قبل أن يصل الملف إلى التحقّق
+  await app.register(multipart, { limits: { fileSize: MAX_UPLOAD_BYTES, files: 1 } });
+
+  // الصور المرفوعة تُقدَّم ثابتةً. immutable لأن الاسم بصمةُ المحتوى:
+  // ملفٌّ باسمٍ واحد لا يتبدّل محتواه أبداً، فالتخزين المؤقّت آمنٌ إلى الأبد.
+  await app.register(fastifyStatic, {
+    root: UPLOAD_DIR,
+    prefix: `${UPLOAD_ROUTE}/`,
+    decorateReply: false,
+    cacheControl: true,
+    maxAge: "365d",
+    immutable: true,
+  });
 
   // حدٌّ عامّ يوقف الطوفان الظاهر لا أكثر، وهو مقصود على سعته: شبكات الهاتف
   // في العراق تُخرج آلاف المشتركين من عناوين عامة قليلة، فالحدّ الضيّق على
@@ -37,8 +56,9 @@ export async function buildServer() {
   await app.register(rateLimit, {
     max: Number(process.env.RATE_LIMIT_MAX ?? 1000),
     timeWindow: "1 minute",
-    // فحص الصحة يُستدعى كل دقيقة من المراقبة، ولا معنى لعدّه
-    allowList: (request) => request.url === "/health",
+    // فحص الصحة يُستدعى كل دقيقة من المراقبة، ولا معنى لعدّه. والصور الثابتة
+    // كذلك: صفحةٌ فيها عشر لافتات تستهلك عشر حصص وهي طلبٌ واحد في نظر المستخدم
+    allowList: (request) => request.url === "/health" || request.url.startsWith(`${UPLOAD_ROUTE}/`),
     // بلا errorResponseBuilder: الإضافة ترمي ما يعيده حرفياً، فكائنٌ عاديّ
     // يصل بلا statusCode فيُبلَّغ عنه بـ٥٠٠. والافتراضيّ يضبط ٤٢٩، ومعالج
     // الأخطاء عندنا يترجمه إلى رسالة عربية واحدة لكل المسارات.

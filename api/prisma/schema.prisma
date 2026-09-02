@@ -204,6 +204,39 @@ model Patient {
 }
 
 // ═══════════════════════════════════════════════════════════
+//  محتوى الواجهة الذي يحرّره المالك
+// ═══════════════════════════════════════════════════════════
+
+/// لافتات الشاشة الرئيسية — يضيفها المالك ويرتّبها ويحذفها بلا إصدار جديد.
+/// النصّ اختياري: لافتةٌ مصمّمةٌ كاملةً في الصورة لا تحتاج عنواناً فوقها.
+model Banner {
+  id        String   @id @default(uuid())
+  imageUrl  String?
+  title     String?
+  body      String?
+  /// وجهة الضغط: specialty | clinic | doctor | url — وفارغة تعني بحثاً عاماً
+  linkKind  String?
+  linkValue String?
+  sortOrder Int      @default(0)
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([isActive, sortOrder])
+  @@map("banners")
+}
+
+/// إعدادات يغيّرها المالك من لوحته — مدّة تبديل اللافتة وما شابه.
+/// جدول مفتاح/قيمة لا أعمدة: كل إعدادٍ جديد لا يستحقّ ترحيلاً في قاعدة البيانات.
+model AppSetting {
+  key       String   @id
+  value     String
+  updatedAt DateTime @updatedAt
+
+  @@map("app_settings")
+}
+
+// ═══════════════════════════════════════════════════════════
 //  الأطباء والتخصصات
 // ═══════════════════════════════════════════════════════════
 

@@ -6,7 +6,7 @@ import { Calendar, type DayState } from "@/components/Calendar";
 import { BookingSheet, type Chosen } from "@/components/BookingSheet";
 import { Icon } from "@/components/icons";
 import { Alert, Avatar, Badge, Button, EmptyState, IconTile, Loading, T } from "@/components/ui";
-import { api, type Day, type DoctorProfile, type Session } from "@/lib/api";
+import { api, mediaUrl, type Day, type DoctorProfile, type Session } from "@/lib/api";
 import { formatDay, formatFee, formatTimeLabel, toArabic, todayISO } from "@/lib/format";
 import { radius, shadow, space, usePalette } from "@/theme";
 
@@ -90,7 +90,7 @@ export default function BookScreen() {
               padding: space(3.5),
             }}
           >
-            <Avatar name={profile.fullName} size={46} />
+            <Avatar name={profile.fullName} uri={mediaUrl(profile.photoUrl)} size={46} />
             <View style={{ flex: 1, gap: 1 }}>
               <T size={15} weight="bold" numberOfLines={1}>
                 {profile.title} {profile.fullName}

@@ -7,3 +7,10 @@ build/
 *.log
 .DS_Store
 .expo/
+
+# الصور التي يرفعها المالك — محتوى تشغيل لا مصدر
+api/uploads/
+
+# يولّدهما خادم Next.js عند التشغيل، لا نحن
+web/AGENTS.md
+web/CLAUDE.md
