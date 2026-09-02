@@ -1,9 +1,9 @@
-import { View, useColorScheme } from "react-native";
+import { View } from "react-native";
 import { Icon } from "@/components/icons";
 import { Badge, Card, T } from "@/components/ui";
 import type { DoctorCard } from "@/lib/api";
 import { formatFee, toArabic } from "@/lib/format";
-import { font, radius, space, tintFor, usePalette } from "@/theme";
+import { font, radius, space, tintFor, useIsDark, usePalette } from "@/theme";
 import { Text } from "react-native";
 
 /**
@@ -13,7 +13,7 @@ import { Text } from "react-native";
  */
 export function DoctorRow({ doctor, onPress }: { doctor: DoctorCard; onPress: () => void }) {
   const palette = usePalette();
-  const isDark = useColorScheme() === "dark";
+  const isDark = useIsDark();
   const practice = doctor.practices[0];
   const specialty = doctor.specialties[0] ?? "طب عام";
   const tint = tintFor(specialty, isDark);

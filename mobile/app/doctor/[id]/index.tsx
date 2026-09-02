@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Linking, ScrollView, View, useColorScheme } from "react-native";
+import { Linking, ScrollView, View } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { PlainHeader, BottomBar } from "@/components/PlainHeader";
 import { StatRow } from "@/components/Stats";
@@ -7,7 +7,7 @@ import { Icon } from "@/components/icons";
 import { Alert, Avatar, Badge, Button, Card, IconTile, Loading, SectionHeader, Stars, T } from "@/components/ui";
 import { api, type DoctorProfile, type Review } from "@/lib/api";
 import { formatTimeLabel, statNumber, toArabic, WEEKDAYS } from "@/lib/format";
-import { font, radius, space, tintFor, usePalette } from "@/theme";
+import { font, radius, space, tintFor, useIsDark, usePalette } from "@/theme";
 import { Text } from "react-native";
 
 /**
@@ -16,7 +16,7 @@ import { Text } from "react-native";
  */
 export default function DoctorScreen() {
   const palette = usePalette();
-  const isDark = useColorScheme() === "dark";
+  const isDark = useIsDark();
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
 

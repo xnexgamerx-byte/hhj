@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { Header } from "@/components/Header";
 import { Card, EmptyState, Loading, Select } from "@/components/ui";
-import { SpecialtyIcon } from "@/components/SpecialtyIcon";
+import { SpecialtyArt } from "@/components/SpecialtyArt";
 import { api } from "@/lib/api";
 import { toArabic } from "@/lib/format";
 
@@ -112,11 +112,11 @@ export default function HomePage() {
                   style={{ background: "var(--surface)", border: "1px solid var(--line)" }}
                 >
                   <span
-                    className="grid place-items-center w-11 h-11 rounded-full mb-3"
-                    style={{ background: "var(--primary-soft)", color: "var(--primary)" }}
+                    className="grid place-items-center w-14 h-14 rounded-[16px] mb-3"
+                    style={{ background: "var(--art-tile)" }}
                     aria-hidden
                   >
-                    <SpecialtyIcon slug={specialty.slug} size={23} />
+                    <SpecialtyArt slug={specialty.slug} size={42} />
                   </span>
                   <span className="block text-[15px] font-semibold leading-snug">{specialty.nameAr}</span>
                   <span className="block text-[12.5px] mt-1 tnum" style={{ color: "var(--muted)" }}>

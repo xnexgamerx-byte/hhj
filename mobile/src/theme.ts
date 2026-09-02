@@ -41,6 +41,14 @@ const light = {
   onHero: "#FFFFFF",
   onHeroMuted: "#C6D0DA",
 
+  /**
+   * بلاطة رسمة التخصص.
+   *
+   * الرسمات صارت ملوّنةً كاملة، فخلفيةٌ مختلفة لكل تخصص تجعل الشبكة ثماني
+   * لوحاتٍ متنافرة. لونٌ واحدٌ محايدٌ دافئ يترك الرسمة هي التي تميّز.
+   */
+  artTile: "#FBF7F0",
+
   /** الزمرّدي: العلامة وحدها — الأيقونة والشعار وشاشة البداية */
   brand: "#0E5140",
   brandSoft: "#E3EFE9",
@@ -85,6 +93,8 @@ const dark: typeof light = {
   heroTo: "#0E161D",
   onHero: "#E7ECF1",
   onHeroMuted: "#A8B6C4",
+
+  artTile: "#1B242E",
 
   brand: "#3FA383",
   brandSoft: "#12291F",

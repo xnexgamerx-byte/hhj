@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Modal, Pressable, RefreshControl, ScrollView, View, useColorScheme } from "react-native";
+import { Modal, Pressable, RefreshControl, ScrollView, View } from "react-native";
 import { useFocusEffect, useRouter } from "expo-router";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Banner, DEFAULT_SLIDES } from "@/components/Banner";
 import { ClinicCard } from "@/components/ClinicCard";
 import { SearchField } from "@/components/PlainHeader";
 import { DoctorRow } from "@/components/DoctorRow";
-import { Icon, SpecialtyIcon } from "@/components/icons";
+import { Icon } from "@/components/icons";
+import { SpecialtyArt } from "@/components/SpecialtyArt";
 import { Alert, Button, Card, EmptyState, IconTile, Loading, SectionHeader, T } from "@/components/ui";
 import {
   api,
@@ -18,7 +19,7 @@ import {
   type Specialty,
 } from "@/lib/api";
 import { toArabic } from "@/lib/format";
-import { radius, shadow, space, tintFor, usePalette } from "@/theme";
+import { radius, shadow, space, usePalette } from "@/theme";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 const GOVERNORATE_KEY = "mawid.governorate";
@@ -26,7 +27,6 @@ const PREVIEW_COUNT = 8;
 
 export default function HomeScreen() {
   const palette = usePalette();
-  const isDark = useColorScheme() === "dark";
   const insets = useSafeAreaInsets();
   const router = useRouter();
 
@@ -213,7 +213,6 @@ export default function HomeScreen() {
 
           <View style={{ flexDirection: "row", flexWrap: "wrap", rowGap: space(4) }}>
             {shown?.map((specialty) => {
-              const tint = tintFor(specialty.slug, isDark);
               return (
                 <Pressable
                   key={specialty.id}
@@ -233,13 +232,13 @@ export default function HomeScreen() {
                     style={{
                       width: 62,
                       height: 62,
-                      borderRadius: radius.md,
-                      backgroundColor: tint.bg,
+                      borderRadius: radius.lg,
+                      backgroundColor: palette.artTile,
                       alignItems: "center",
                       justifyContent: "center",
                     }}
                   >
-                    <SpecialtyIcon slug={specialty.slug} size={30} color={tint.fg} />
+                    <SpecialtyArt slug={specialty.slug} size={44} color={palette.ink} />
                   </View>
                   <T size={11.5} weight="semibold" align="center" numberOfLines={2} lineHeight={15}>
                     {specialty.nameAr}
