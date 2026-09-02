@@ -126,7 +126,12 @@ const ACCESS_KEY = "mawid.access";
 const REFRESH_KEY = "mawid.refresh";
 const USER_KEY = "mawid.user";
 
-export type SessionUser = { id: string; fullName: string; role: "PATIENT" | "DOCTOR" | "STAFF" | "OWNER" };
+export type SessionUser = {
+  id: string;
+  fullName: string;
+  role: "PATIENT" | "DOCTOR" | "STAFF" | "OWNER";
+  phone: string | null;
+};
 
 export class ApiError extends Error {
   constructor(
@@ -386,7 +391,15 @@ export type Day = {
   freeCount: number;
 };
 
-export type Patient = { id: string; fullName: string; isSelf: boolean };
+export type Patient = {
+  id: string;
+  fullName: string;
+  isSelf: boolean;
+  birthYear: number | null;
+  gender: "MALE" | "FEMALE" | null;
+  phone: string | null;
+  address: string | null;
+};
 
 export type Review = { id: string; rating: number; comment: string | null; createdAt: string; patientName: string };
 
@@ -398,6 +411,8 @@ export type Booking = {
   status: string;
   bookingMode: "SLOT" | "QUEUE";
   queueNumber: number;
+  /** رقم المريض ذلك اليوم في تلك العيادة — ما يحفظه ويُنادى به */
+  dailyNumber: number | null;
   slotStart: string;
   sessionStart: string;
   sessionEnd: string;
@@ -415,5 +430,7 @@ export type BookingResult = {
   appointmentId: string;
   reference: string;
   queueNumber: number;
+  dailyNumber: number;
+  serviceDate: string;
   status: string;
 };

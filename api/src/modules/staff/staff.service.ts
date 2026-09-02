@@ -260,7 +260,7 @@ export async function getScopedAppointments(
     },
     orderBy: [{ slotStart: "asc" }, { queueNumber: "asc" }],
     include: {
-      patient: { select: { fullName: true, phone: true, account: { select: { phone: true } } } },
+      patient: { select: { fullName: true, phone: true, address: true, account: { select: { phone: true } } } },
       createdByStaff: { select: { id: true } },
       doctorClinic: {
         include: {
@@ -287,11 +287,13 @@ export async function getScopedAppointments(
       status: appointment.status,
       bookingMode: appointment.bookingMode,
       queueNumber: appointment.queueNumber,
+      dailyNumber: appointment.dailyNumber,
       slotStart: appointment.slotStart.toISOString(),
       sessionStart: appointment.sessionStart.toISOString(),
       sessionEnd: appointment.sessionEnd.toISOString(),
       patientName: appointment.patient.fullName,
       patientPhone: appointment.patient.phone ?? appointment.patient.account.phone,
+      patientAddress: appointment.patient.address,
       patientNote: appointment.patientNote,
       clinicName: appointment.doctorClinic.clinic.nameAr,
       doctorName: `${appointment.doctorClinic.doctor.title} ${appointment.doctorClinic.doctor.user.fullName}`,

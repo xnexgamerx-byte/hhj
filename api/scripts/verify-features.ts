@@ -5,7 +5,8 @@
 import { PrismaClient } from "@prisma/client";
 import { hashPassword } from "../src/lib/password.js";
 import { AppError } from "../src/lib/errors.js";
-import { createBooking } from "../src/modules/booking/booking.service.js";
+import { cancelBooking, createBooking } from "../src/modules/booking/booking.service.js";
+import { getMyPatients, updatePatient } from "../src/modules/discovery/discovery.service.js";
 import { runReminders } from "../src/modules/reminders/reminders.service.js";
 import { createReview, listDoctorReviews, listReviewableVisits, setReviewPublished } from "../src/modules/reviews/reviews.service.js";
 import {
@@ -79,8 +80,13 @@ async function buildClinic(suffix: string, commission = 0) {
   return { doctorUser: user, doctor, clinic, practice };
 }
 
+/**
+ * البادئة ٧٩ لا ٧٧: اختبار الحضور بلا تطبيق ينشئ حسابه برقم ‎077+الطابع الزمني،
+ * فمتى بدأ الطابع بالرقم الذي تمرّره هذه الدالة تطابق الرقمان وسقط الاختبار
+ * سقوطاً يعتمد على ساعة التشغيل — أسوأ أنواع الهشاشة.
+ */
 async function buildPatient(suffix: string, name = "علي حسن") {
-  const account = await prisma.user.create({ data: { phone: `+96477${suffix}`, fullName: name, role: "PATIENT" } });
+  const account = await prisma.user.create({ data: { phone: `+96479${suffix}`, fullName: name, role: "PATIENT" } });
   const patient = await prisma.patient.create({ data: { accountId: account.id, fullName: name, isSelf: true } });
   return { account, patient };
 }
@@ -389,6 +395,108 @@ async function main() {
       if (error instanceof AppError) nothingDue = error.code;
     }
     check("لا يُسجَّل تحصيل على عيادة بلا مستحقات", nothingDue === "NOTHING_DUE", `رُفض بالرمز ${nothingDue}`);
+  }
+
+  // ═══ الرقم اليومي وبيانات المريض ══════════════════════════════
+  {
+    const { practice } = await buildClinic(`n${suffix}`);
+    const other = await buildClinic(`k${suffix}`);
+    const a = await buildPatient(`7${suffix.slice(1)}`, "سارة كاظم");
+    const b = await buildPatient(`6${suffix.slice(1)}`, "حسن جبار");
+
+    // كلا الموعدين في يوم واحد كي يتقاسما ترقيمه
+    const morning = slotIn(30);
+    const later = new Date(morning.getTime() + 40 * 60_000);
+
+    const first = await createBooking(
+      { doctorClinicId: practice.id, patientId: a.patient.id, bookedByUserId: a.account.id, startAt: morning },
+      prisma,
+    );
+    const second = await createBooking(
+      { doctorClinicId: practice.id, patientId: b.patient.id, bookedByUserId: b.account.id, startAt: later },
+      prisma,
+    );
+    check(
+      "أول مريض في اليوم يأخذ الرقم ١ والذي بعده ٢",
+      first.dailyNumber === 1 && second.dailyNumber === 2,
+      `الرقمان ${first.dailyNumber} و${second.dailyNumber} ليوم ${first.serviceDate}`,
+    );
+
+    check(
+      "الرقم يُعطى في نمط الوقت المحدد لا في نمط الدور وحده",
+      first.queueNumber === 0 && first.dailyNumber > 0,
+      "رقم الدور صفر لأن الموعد بوقت محدد، والرقم اليومي موجود لأنه ما يحفظه المريض",
+    );
+
+    // الإلغاء يحرّر المكان لا الرقم: رقمٌ في يد مريضين يوماً واحداً فوضى
+    await cancelBooking(second.appointmentId, "PATIENT", b.account.id, null, prisma);
+    const third = await createBooking(
+      { doctorClinicId: practice.id, patientId: b.patient.id, bookedByUserId: b.account.id, startAt: later },
+      prisma,
+    );
+    check(
+      "الرقم لا يُعاد استعماله بعد الإلغاء",
+      third.dailyNumber === 3,
+      `أُلغي صاحب الرقم ٢ فأخذ التالي ${third.dailyNumber} لا ٢`,
+    );
+
+    // عيادة أخرى: ترقيمها مستقل تماماً
+    const elsewhere = await createBooking(
+      { doctorClinicId: other.practice.id, patientId: a.patient.id, bookedByUserId: a.account.id, startAt: morning },
+      prisma,
+    );
+    check(
+      "كل عيادة ترقّم مرضاها وحدها",
+      elsewhere.dailyNumber === 1,
+      `الرقم ${elsewhere.dailyNumber} عند عيادة أخرى في اليوم نفسه`,
+    );
+
+    // اليوم التالي يبدأ من واحد: الترقيم يومي لا تراكمي
+    const tomorrow = await createBooking(
+      { doctorClinicId: practice.id, patientId: a.patient.id, bookedByUserId: a.account.id, startAt: slotIn(30 + 24) },
+      prisma,
+    );
+    check(
+      "كل يوم يبدأ الترقيم من واحد",
+      tomorrow.dailyNumber === 1 && tomorrow.serviceDate !== first.serviceDate,
+      `${tomorrow.serviceDate} بدأ بـ${tomorrow.dailyNumber} بعد أن بلغ ${first.serviceDate} الرقم 3`,
+    );
+
+    // ── بيانات المريض التي تسألها العيادة ──
+    const updated = await updatePatient(
+      a.account.id,
+      a.patient.id,
+      { fullName: "سارة كاظم محمد", phone: "07701234567", address: "الكرخ — حي الجامعة، محلة 630", birthYear: 1994 },
+      prisma,
+    );
+    check(
+      "بيانات المريض تُحفظ مرّة لا في كل حجز",
+      updated.address?.includes("حي الجامعة") === true && updated.birthYear === 1994 && updated.phone === "07701234567",
+      `${updated.fullName} · ${updated.birthYear} · ${updated.address}`,
+    );
+
+    const listed = await getMyPatients(a.account.id, prisma);
+    check(
+      "الشاشة تقرأ ما حُفظ فتملأ الحقول تلقائياً في المرّة القادمة",
+      listed[0]?.address === updated.address && listed[0]?.birthYear === 1994,
+      "العنوان والعمر يعودان مع قائمة المرضى",
+    );
+
+    let notMine = "";
+    try {
+      await updatePatient(b.account.id, a.patient.id, { address: "عنوان مدسوس" }, prisma);
+    } catch (error) {
+      if (error instanceof AppError) notMine = error.code;
+    }
+    check("لا يعدّل أحد بيانات مريض لا يتبع حسابه", notMine === "NOT_YOUR_PATIENT", `رُفض بالرمز ${notMine}`);
+
+    let badYear = "";
+    try {
+      await updatePatient(a.account.id, a.patient.id, { birthYear: 1700 }, prisma);
+    } catch (error) {
+      if (error instanceof AppError) badYear = error.code;
+    }
+    check("سنة ميلاد غير معقولة تُرفض", badYear === "BAD_BIRTH_YEAR", `رُفض بالرمز ${badYear}`);
   }
 
   const failed = results.filter((r) => !r.passed);

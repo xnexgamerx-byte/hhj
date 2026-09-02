@@ -43,6 +43,7 @@ import { getAvailability } from "../modules/availability/availability.service.js
 import { getOwnerSummary } from "../modules/owner/summary.service.js";
 import {
   addFamilyMember,
+  updatePatient,
   getDoctorProfile,
   getMyBookings,
   getMyPatients,
@@ -452,6 +453,14 @@ export async function registerRoutes(app: FastifyInstance) {
       return reply.status(201).send(created);
     },
   );
+
+  /** بيانات المريض التي تسألها العيادة: الاسم والهاتف والعنوان والعمر */
+  app.patch<{
+    Params: { id: string };
+    Body: { fullName?: string; phone?: string | null; address?: string | null; birthYear?: number | null; gender?: "MALE" | "FEMALE" | null };
+  }>("/me/patients/:id", { preHandler: requireRole("PATIENT") }, async (request) => {
+    return updatePatient(request.auth!.sub, request.params.id, request.body ?? {});
+  });
 
   // ── لوحة الطبيب ───────────────────────────────────────────────
   const doctorOnly = { preHandler: requireRole("DOCTOR") };

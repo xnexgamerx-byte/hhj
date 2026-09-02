@@ -5,9 +5,9 @@ import { PlainHeader, BottomBar } from "@/components/PlainHeader";
 import { Calendar, type DayState } from "@/components/Calendar";
 import { BookingSheet, type Chosen } from "@/components/BookingSheet";
 import { Icon } from "@/components/icons";
-import { Alert, Badge, Button, EmptyState, IconTile, Loading, T } from "@/components/ui";
+import { Alert, Avatar, Badge, Button, EmptyState, IconTile, Loading, T } from "@/components/ui";
 import { api, type Day, type DoctorProfile, type Session } from "@/lib/api";
-import { formatDay, formatTimeLabel, toArabic, todayISO } from "@/lib/format";
+import { formatDay, formatFee, formatTimeLabel, toArabic, todayISO } from "@/lib/format";
 import { radius, shadow, space, usePalette } from "@/theme";
 
 /**
@@ -74,6 +74,88 @@ export default function BookScreen() {
         contentContainerStyle={{ padding: space(4), paddingBottom: space(8), gap: space(5) }}
       >
         {error ? <Alert message={error} /> : null}
+
+        {/* مع مَن أحجز؟ الشاشة كانت تسأل عن اليوم قبل أن تقول عند من — والمريض
+            قد يصلها من بحثٍ فيه عشرة أطباء متشابهي الاسم */}
+        {profile && current ? (
+          <View
+            style={{
+              flexDirection: "row",
+              alignItems: "center",
+              gap: space(3),
+              backgroundColor: palette.surface,
+              borderRadius: radius.lg,
+              borderWidth: 1.4,
+              borderColor: palette.line,
+              padding: space(3.5),
+            }}
+          >
+            <Avatar name={profile.fullName} size={46} />
+            <View style={{ flex: 1, gap: 1 }}>
+              <T size={15} weight="bold" numberOfLines={1}>
+                {profile.title} {profile.fullName}
+              </T>
+              <T size={13} tone="muted" numberOfLines={1}>
+                {current.clinicName}
+              </T>
+            </View>
+            <View style={{ alignItems: "flex-start" }}>
+              <T size={14.5} weight="bold" tone="primary">
+                {formatFee(current.feeAmount)}
+              </T>
+              <T size={11.5} tone="faint">
+                سعر الكشف
+              </T>
+            </View>
+          </View>
+        ) : null}
+
+        {/* عيادتان لطبيبٍ واحد: كان يُختار أوّلها صامتاً فيحجز المريض في الكرخ
+            وهو يقصد الكرادة. الاختيار ظاهرٌ الآن ما دام هناك ما يُختار */}
+        {profile && profile.practices.length > 1 ? (
+          <View style={{ gap: space(2.5) }}>
+            <T size={16.5} weight="bold">
+              اختر العيادة
+            </T>
+            <View style={{ gap: space(2) }}>
+              {profile.practices.map((option) => {
+                const active = option.id === practice;
+                return (
+                  <Pressable
+                    key={option.id}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: active }}
+                    onPress={() => {
+                      if (option.id === practice) return;
+                      setChosen(null);
+                      setPractice(option.id);
+                    }}
+                    style={{
+                      flexDirection: "row",
+                      alignItems: "center",
+                      gap: space(3),
+                      padding: space(3.5),
+                      borderRadius: radius.md,
+                      backgroundColor: active ? palette.primarySoft : palette.surface,
+                      borderWidth: 1.4,
+                      borderColor: active ? palette.primary : palette.line,
+                    }}
+                  >
+                    <Icon.pin size={18} color={active ? palette.primary : palette.faint} />
+                    <View style={{ flex: 1 }}>
+                      <T size={14.5} weight="semibold">
+                        {option.clinicName}
+                      </T>
+                      <T size={12.5} tone="muted">
+                        {option.district} · {formatFee(option.feeAmount)}
+                      </T>
+                    </View>
+                  </Pressable>
+                );
+              })}
+            </View>
+          </View>
+        ) : null}
 
         {days === null && !error ? <Loading label="جارٍ جلب الأوقات…" /> : null}
 

@@ -190,6 +190,8 @@ model Patient {
   birthYear Int?
   gender    Gender?
   phone     String? /// رقم بديل للتواصل إن اختلف عن صاحب الحساب
+  /// عنوان السكن — تسأله العيادة عادةً في الزيارة الأولى، فنسأله مرّة ونحفظه
+  address   String?
   createdAt DateTime @default(now())
 
   account      User             @relation(fields: [accountId], references: [id], onDelete: Cascade)
@@ -456,6 +458,15 @@ model Appointment {
   /// SLOT: صفر دائماً. QUEUE: رقم الدور.
   queueNumber  Int         @default(0)
 
+  /// يوم الزيارة بتوقيت العيادة "YYYY-MM-DD".
+  /// عمودٌ صريح لا مشتقّ: ترقيم اليوم يحتاج قيداً فريداً، والقيد لا يقوم على
+  /// تعبيرٍ محسوب. وهو يجعل استعلام «حجوزات اليوم» فهرساً بدل ترشيحٍ في الذاكرة.
+  serviceDate String?
+  /// رقم المريض ذلك اليوم في تلك العيادة — هذا ما يحفظه ويُنادى به عند الحضور.
+  /// لا يُعاد استعماله بعد الإلغاء: رقمٌ في يد مريضين يوماً واحداً فوضى.
+  /// NULL في الصفوف السابقة للترقيم — وبوستغرس يعدّ NULL مختلفاً فلا تتصادم.
+  dailyNumber Int?
+
   status AppointmentStatus @default(CONFIRMED)
 
   /// مفتاح القفل: true ما دام الحجز يشغل المكان، وNULL بعد الإلغاء.
@@ -486,7 +497,10 @@ model Appointment {
 
   /// القيد الذي يمنع حجز نفس المكان مرتين
   @@unique([doctorClinicId, slotStart, queueNumber, lockKey])
+  /// والقيد الذي يمنع إعطاء رقمٍ واحد لمريضين في يومٍ واحد
+  @@unique([doctorClinicId, serviceDate, dailyNumber])
   @@index([doctorClinicId, sessionStart, status])
+  @@index([doctorClinicId, serviceDate])
   @@index([patientId, sessionStart])
   @@index([status, holdExpiresAt])
   @@map("appointments")

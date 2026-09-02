@@ -313,12 +313,14 @@ function BookingCard({
         {booking.landmark ? <Row icon={(c, sz) => <Icon.pin size={sz} color={c} />} text={booking.landmark} /> : null}
       </View>
 
-      {/* كعب التذكرة: الرقم المرجعي والسعر — الحدّ المتقطّع يوحي بأنه قابل للاقتطاع */}
+      {/* كعب التذكرة: الرقم والسعر — الحدّ المتقطّع يوحي بأنه قابل للاقتطاع.
+          الرقم اليومي أوّلاً لا الكود المرجعي: هو ما تناديه العيادة، والكود
+          يبقى تحته لمن يحتاجه من الموظّفين. حجوزٌ قديمة سبقت الترقيم بلا رقم. */}
       <View
         style={{
           flexDirection: "row",
           alignItems: "center",
-          gap: space(2),
+          gap: space(2.5),
           borderTopWidth: 1.4,
           borderTopColor: palette.line,
           borderStyle: "dashed",
@@ -326,9 +328,20 @@ function BookingCard({
         }}
       >
         <Icon.ticket size={17} color={palette.gold} />
-        <T size={13.5} weight="bold">
-          {booking.reference}
-        </T>
+        {booking.dailyNumber ? (
+          <View>
+            <T size={16} weight="bold">
+              رقمك {toArabic(booking.dailyNumber)}
+            </T>
+            <T size={11.5} tone="faint">
+              {booking.reference}
+            </T>
+          </View>
+        ) : (
+          <T size={13.5} weight="bold">
+            {booking.reference}
+          </T>
+        )}
         <View style={{ flex: 1 }} />
         <T size={13} tone="muted">
           {formatFee(booking.feeAmount)}

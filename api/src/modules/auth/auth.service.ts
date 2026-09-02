@@ -22,13 +22,15 @@ export type Session = {
   accessToken: string;
   refreshToken: string;
   mustChangePassword: boolean;
-  user: { id: string; fullName: string; role: UserRole };
+  /** الهاتف للمريض وحده — تملأ به شاشة الحجز حقلها فلا يكتبه مرّتين */
+  user: { id: string; fullName: string; role: UserRole; phone: string | null };
 };
 
 async function issueSession(
   userId: string,
   fullName: string,
   role: UserRole,
+  phone: string | null,
   mustChangePassword: boolean,
   client: PrismaClient,
 ): Promise<Session> {
@@ -41,7 +43,7 @@ async function issueSession(
     accessToken,
     refreshToken: refresh.token,
     mustChangePassword,
-    user: { id: userId, fullName, role },
+    user: { id: userId, fullName, role, phone },
   };
 }
 
@@ -82,7 +84,7 @@ export async function loginWithPassword(
     data: { failedLoginCount: 0, lockedUntil: null, lastLoginAt: new Date() },
   });
 
-  return issueSession(user.id, user.fullName, user.role, user.mustChangePassword, client);
+  return issueSession(user.id, user.fullName, user.role, user.phone, user.mustChangePassword, client);
 }
 
 /** تغيير الباسوورد — إلزامي بعد أول دخول بباسوورد أنشأه المالك. */
@@ -201,7 +203,7 @@ export async function verifyOtp(
     await client.user.update({ where: { id: user.id }, data: { lastLoginAt: new Date() } });
   }
 
-  return issueSession(user.id, user.fullName, user.role, false, client);
+  return issueSession(user.id, user.fullName, user.role, user.phone, false, client);
 }
 
 // ── تجديد الجلسة والخروج ─────────────────────────────────────────
@@ -227,6 +229,7 @@ export async function refreshSession(
     stored.user.id,
     stored.user.fullName,
     stored.user.role,
+    stored.user.phone,
     stored.user.mustChangePassword,
     client,
   );

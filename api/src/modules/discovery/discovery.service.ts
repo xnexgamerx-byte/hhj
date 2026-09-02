@@ -4,7 +4,7 @@
  */
 import type { PrismaClient } from "@prisma/client";
 import { prisma as defaultPrisma } from "../../lib/prisma.js";
-import { notFound } from "../../lib/errors.js";
+import { badRequest, forbidden, notFound } from "../../lib/errors.js";
 import { getNextAvailableDay } from "../availability/availability.service.js";
 
 /** التخصصات مع عدد الأطباء المتاحين في كل منها — تخصص بلا أطباء لا يُعرض. */
@@ -303,6 +303,7 @@ export async function getMyBookings(accountId: string, client: PrismaClient = de
     status: b.status,
     bookingMode: b.bookingMode,
     queueNumber: b.queueNumber,
+    dailyNumber: b.dailyNumber,
     slotStart: b.slotStart.toISOString(),
     sessionStart: b.sessionStart.toISOString(),
     sessionEnd: b.sessionEnd.toISOString(),
@@ -325,7 +326,51 @@ export async function getMyPatients(accountId: string, client: PrismaClient = de
   return client.patient.findMany({
     where: { accountId },
     orderBy: [{ isSelf: "desc" }, { createdAt: "asc" }],
-    select: { id: true, fullName: true, isSelf: true, birthYear: true, gender: true },
+    select: { id: true, fullName: true, isSelf: true, birthYear: true, gender: true, phone: true, address: true },
+  });
+}
+
+/**
+ * يحدّث بيانات مريضٍ يتبع الحساب.
+ *
+ * العيادة تسأل الاسم والهاتف والعنوان والعمر في كل زيارة أولى. نسألها مرّةً
+ * في أول حجز ونحفظها في المريض لا في الحجز: هي صفته لا صفة موعده، فلا تُعاد
+ * كتابتها في كل مرّة. والحقل الذي لم يُرسل لا يُمسح — الشاشة قد ترسل بعضها.
+ */
+export async function updatePatient(
+  accountId: string,
+  patientId: string,
+  input: { fullName?: string; phone?: string | null; address?: string | null; birthYear?: number | null; gender?: "MALE" | "FEMALE" | null },
+  client: PrismaClient = defaultPrisma,
+) {
+  const patient = await client.patient.findUnique({ where: { id: patientId }, select: { accountId: true } });
+  if (!patient) throw notFound("PATIENT_NOT_FOUND", "المريض غير موجود");
+  if (patient.accountId !== accountId) throw forbidden("NOT_YOUR_PATIENT", "لا يمكنك تعديل بيانات مريض لا يتبع حسابك");
+
+  const name = input.fullName?.trim();
+  if (name !== undefined && name.length < 3) {
+    throw badRequest("NAME_TOO_SHORT", "الاسم قصير جداً — اكتب الاسم كما في الهوية");
+  }
+
+  const year = input.birthYear;
+  if (year !== undefined && year !== null) {
+    const thisYear = new Date().getFullYear();
+    // ١٢٠ سنة حدٌّ يرفض الخطأ المطبعي (١٩٠٠ بدل ١٩٩٠) ولا يرفض معمّراً
+    if (!Number.isInteger(year) || year > thisYear || year < thisYear - 120) {
+      throw badRequest("BAD_BIRTH_YEAR", "العمر غير معقول — راجعه");
+    }
+  }
+
+  return client.patient.update({
+    where: { id: patientId },
+    data: {
+      ...(name !== undefined ? { fullName: name } : {}),
+      ...(input.phone !== undefined ? { phone: input.phone?.trim() || null } : {}),
+      ...(input.address !== undefined ? { address: input.address?.trim() || null } : {}),
+      ...(year !== undefined ? { birthYear: year } : {}),
+      ...(input.gender !== undefined ? { gender: input.gender } : {}),
+    },
+    select: { id: true, fullName: true, isSelf: true, birthYear: true, gender: true, phone: true, address: true },
   });
 }
 

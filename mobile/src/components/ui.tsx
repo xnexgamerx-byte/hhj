@@ -369,6 +369,55 @@ export function Segmented<V extends string>({
   );
 }
 
+/**
+ * أزرارٌ تُنتقى بلمسة — للحالات الشائعة التي يشقّ كتابتها على لوحة مفاتيح الهاتف.
+ *
+ * الكتابة بالعربية على الهاتف أبطأ من الإنجليزية، ومريضٌ في الخمسين يكتب
+ * «سكري» بثلاث محاولات. اللمسة الواحدة تسبق الحقل الحرّ ولا تلغيه.
+ */
+export function Chips({
+  options,
+  selected,
+  onToggle,
+}: {
+  options: readonly string[];
+  selected: readonly string[];
+  onToggle: (value: string) => void;
+}) {
+  const palette = usePalette();
+  return (
+    <View style={{ flexDirection: "row", flexWrap: "wrap", gap: space(2) }}>
+      {options.map((option) => {
+        const active = selected.includes(option);
+        return (
+          <Pressable
+            key={option}
+            accessibilityRole="button"
+            accessibilityState={{ selected: active }}
+            onPress={() => onToggle(option)}
+            style={{
+              flexDirection: "row",
+              alignItems: "center",
+              gap: space(1.5),
+              paddingHorizontal: space(3.5),
+              paddingVertical: space(2.25),
+              borderRadius: radius.pill,
+              backgroundColor: active ? palette.primary : palette.surface2,
+              borderWidth: 1.4,
+              borderColor: active ? palette.primary : palette.lineStrong,
+            }}
+          >
+            {active ? <Icon.check size={13} color={palette.onPrimary} weight={2.4} /> : null}
+            <T size={13.5} weight={active ? "bold" : "medium"} tone={active ? "onPrimary" : "ink"}>
+              {option}
+            </T>
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+}
+
 /* ── الحقول ──────────────────────────────────────────────────── */
 
 export function Field({ label, hint, children }: { label: string; hint?: string; children: ReactNode }) {

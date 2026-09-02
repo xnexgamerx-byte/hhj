@@ -11,7 +11,10 @@ import { prisma as defaultPrisma } from "../../lib/prisma.js";
 import { badRequest, conflict, forbidden, notFound } from "../../lib/errors.js";
 import { notifyDoctorOfCancellation, notifyDoctorOfNewBooking } from "../../notifications/dispatch.js";
 import { getAvailability } from "../availability/availability.service.js";
-import { addDaysISO } from "../../lib/timezone.js";
+import { addDaysISO, utcToZonedDateISO } from "../../lib/timezone.js";
+
+/** محاولات إعادة الحساب عند تصادم رقمين — التصادم لحظيّ ونادر */
+const MAX_NUMBER_RETRIES = 10;
 
 /** رقم مرجعي قصير يقرأه المريض للسكرتير — بلا أحرف متشابهة. */
 function generateReference(): string {
@@ -42,6 +45,9 @@ export type CreateBookingResult = {
   appointmentId: string;
   reference: string;
   queueNumber: number;
+  /** رقم المريض ذلك اليوم — هو ما يحفظه ويُنادى به */
+  dailyNumber: number;
+  serviceDate: string;
   slotStart: Date;
   status: string;
   whatsapp: { queued: boolean; delivered: boolean; reason?: string };
@@ -51,13 +57,42 @@ export type CreateBookingResult = {
 const isUniqueViolation = (error: unknown) =>
   error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002";
 
+/**
+ * أيّ قيدٍ فريد انكسر؟ قيدان على الجدول: المكان المحجوز، والرقم اليومي.
+ * الأول يعني «سبقك أحد إلى هذا الوقت» فيُبلَّغ المريض، والثاني يعني «سبقك أحد
+ * إلى الرقم» فيُعاد الحساب صامتاً. الخلط بينهما يعطي المريض رسالةً كاذبة.
+ */
+const isDailyNumberClash = (error: unknown) => {
+  if (!isUniqueViolation(error)) return false;
+  const target = (error as Prisma.PrismaClientKnownRequestError).meta?.target;
+  const fields = Array.isArray(target) ? target.join(",") : String(target ?? "");
+  return fields.includes("dailyNumber");
+};
+
+/**
+ * الرقم التالي في ذلك اليوم عند تلك العيادة.
+ *
+ * يُحسب على كل الصفوف لا على القائمة منها: الرقم في يد المريض، ولو أعدنا
+ * استعماله بعد إلغاءٍ لحمله اثنان في يومٍ واحد ونادت العيادة فأتى الاثنان.
+ */
+async function nextDailyNumber(practiceId: string, serviceDate: string, client: PrismaClient): Promise<number> {
+  const top = await client.appointment.aggregate({
+    where: { doctorClinicId: practiceId, serviceDate },
+    _max: { dailyNumber: true },
+  });
+  return (top._max.dailyNumber ?? 0) + 1;
+}
+
 export async function createBooking(
   input: CreateBookingInput,
   client: PrismaClient = defaultPrisma,
 ): Promise<CreateBookingResult> {
   const practice = await client.doctorClinic.findUnique({
     where: { id: input.doctorClinicId },
-    include: { doctor: { select: { id: true, isActive: true, isPublished: true } } },
+    include: {
+      doctor: { select: { id: true, isActive: true, isPublished: true } },
+      clinic: { select: { timezone: true } },
+    },
   });
   if (!practice) throw notFound("PRACTICE_NOT_FOUND", "العيادة غير موجودة");
   if (!practice.isActive || !practice.doctor.isActive) {
@@ -83,11 +118,14 @@ export async function createBooking(
   const resolved = await resolveSession(input.doctorClinicId, input.startAt, practice.bookingMode, client);
 
   const status = practice.autoConfirm ? "CONFIRMED" : "PENDING";
+  // اليوم بتوقيت العيادة لا بتوقيت الخادم: موعد الحادية عشرة ليلاً في بغداد
+  // يقع في اليوم التالي بالتوقيت العالمي، فيأخذ رقم الغد ويُنادى به اليوم
+  const serviceDate = utcToZonedDateISO(resolved.sessionStart, practice.clinic.timezone);
 
   const appointment =
     practice.bookingMode === "SLOT"
-      ? await createSlotBooking(input, resolved, status, client)
-      : await createQueueBooking(input, resolved, practice.capacityPerSession, status, client);
+      ? await createSlotBooking(input, resolved, serviceDate, status, client)
+      : await createQueueBooking(input, resolved, serviceDate, practice.capacityPerSession, status, client);
 
   // بعد نجاح الحجز فقط: تحويل التفاصيل لواتساب الطبيب.
   // أي فشل هنا لا يمس الحجز — يبقى في الطابور لإعادة المحاولة.
@@ -102,6 +140,8 @@ export async function createBooking(
     appointmentId: appointment.id,
     reference: appointment.reference,
     queueNumber: appointment.queueNumber,
+    dailyNumber: appointment.dailyNumber ?? 0,
+    serviceDate: appointment.serviceDate ?? serviceDate,
     slotStart: appointment.slotStart,
     status: appointment.status,
     whatsapp,
@@ -163,34 +203,42 @@ async function resolveSession(
 async function createSlotBooking(
   input: CreateBookingInput,
   resolved: ResolvedSession,
+  serviceDate: string,
   status: "CONFIRMED" | "PENDING",
   client: PrismaClient,
 ) {
-  try {
-    return await client.appointment.create({
-      data: {
-        reference: generateReference(),
-        doctorClinicId: input.doctorClinicId,
-        patientId: input.patientId,
-        bookedByUserId: input.bookedByUserId,
-        createdByStaffId: input.createdByStaffId ?? null,
-        bookingMode: "SLOT",
-        sessionStart: resolved.sessionStart,
-        sessionEnd: resolved.sessionEnd,
-        slotStart: input.startAt,
-        queueNumber: 0,
-        status,
-        lockKey: true,
-        patientNote: input.patientNote ?? null,
-        confirmedAt: status === "CONFIRMED" ? new Date() : null,
-      },
-    });
-  } catch (error) {
-    if (isUniqueViolation(error)) {
-      throw conflict("SLOT_TAKEN", "هذا الوقت حُجز للتو. اختر وقتاً آخر");
+  // نفس منطق نمط الدور: «الأعلى + ١» عرضة للتسابق، والقيد الفريد هو الحكم
+  for (let attempt = 0; attempt < MAX_NUMBER_RETRIES; attempt++) {
+    try {
+      return await client.appointment.create({
+        data: {
+          reference: generateReference(),
+          doctorClinicId: input.doctorClinicId,
+          patientId: input.patientId,
+          bookedByUserId: input.bookedByUserId,
+          createdByStaffId: input.createdByStaffId ?? null,
+          bookingMode: "SLOT",
+          sessionStart: resolved.sessionStart,
+          sessionEnd: resolved.sessionEnd,
+          slotStart: input.startAt,
+          queueNumber: 0,
+          serviceDate,
+          dailyNumber: await nextDailyNumber(input.doctorClinicId, serviceDate, client),
+          status,
+          lockKey: true,
+          patientNote: input.patientNote ?? null,
+          confirmedAt: status === "CONFIRMED" ? new Date() : null,
+        },
+      });
+    } catch (error) {
+      if (isDailyNumberClash(error)) continue;
+      if (isUniqueViolation(error)) {
+        throw conflict("SLOT_TAKEN", "هذا الوقت حُجز للتو. اختر وقتاً آخر");
+      }
+      throw error;
     }
-    throw error;
   }
+  throw conflict("NUMBER_CONTENTION", "الضغط عالٍ على هذه العيادة. حاول مرة أخرى");
 }
 
 /**
@@ -201,14 +249,14 @@ async function createSlotBooking(
 async function createQueueBooking(
   input: CreateBookingInput,
   resolved: ResolvedSession,
+  serviceDate: string,
   fallbackCapacity: number,
   status: "CONFIRMED" | "PENDING",
   client: PrismaClient,
 ) {
   const capacity = resolved.capacity || fallbackCapacity;
-  const MAX_RETRIES = 10;
 
-  for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+  for (let attempt = 0; attempt < MAX_NUMBER_RETRIES; attempt++) {
     const highest = await client.appointment.aggregate({
       where: {
         doctorClinicId: input.doctorClinicId,
@@ -236,6 +284,8 @@ async function createQueueBooking(
           sessionEnd: resolved.sessionEnd,
           slotStart: resolved.sessionStart,
           queueNumber: next,
+          serviceDate,
+          dailyNumber: await nextDailyNumber(input.doctorClinicId, serviceDate, client),
           status,
           lockKey: true,
           patientNote: input.patientNote ?? null,
@@ -243,7 +293,7 @@ async function createQueueBooking(
         },
       });
     } catch (error) {
-      // تصادم على نفس رقم الدور: مريض آخر سبقنا بجزء من الثانية — نعيد الحساب
+      // تصادم على رقم الدور أو الرقم اليومي: مريض آخر سبقنا بجزء من الثانية
       if (isUniqueViolation(error)) continue;
       throw error;
     }
