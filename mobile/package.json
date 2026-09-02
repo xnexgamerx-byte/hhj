@@ -41,7 +41,7 @@
     "serve:web": "node scripts/serve-web-export.mjs",
     "e2e": "node e2e/booking-flow.mjs",
     "build:dev": "npx eas-cli@latest build --profile development --platform android",
-    "build:apk": "npx eas-cli@latest build --profile preview --platform android",
+    "build:apk": "node scripts/build-apk.mjs",
     "eas:login": "npx eas-cli@latest login",
     "eas:whoami": "npx eas-cli@latest whoami",
     "check:native": "node scripts/check-native-versions.mjs",
