@@ -36,7 +36,12 @@ services:
     region: frankfurt
     rootDir: api
     buildCommand: npm ci
-    startCommand: npm run db:migrate:deploy && npm run db:seed && npm start
+    # الترحيل بابٌ لا يُتجاوز: فشله يعني قاعدةً لا تطابق الشفرة، فيوقف الإقلاع
+    # عمداً. التعبئة (‎db:seed‎) غير ذلك — عمودٌ فقري للبيانات المرجعية (محافظات
+    # وتخصصات) وحساب مالكٍ اختياري فوقه، وخطأٌ في الثاني (باسووردٌ قصير
+    # مثلاً) لا يبرّر إسقاط الخادم كلّه وقد نجحت التعبئة الأهمّ فعلاً قبله —
+    # لذا ‎|| true‎ تمنع فشلها من كتم ‎npm start‎، والخطأ يبقى واضحاً في السجلّ
+    startCommand: npm run db:migrate:deploy && (npm run db:seed || true) && npm start
     healthCheckPath: /health
     envVars:
       - key: NODE_ENV
