@@ -1,20 +1,26 @@
-# مخطّط نشر Render — بلوبرنت واحد يُنشئ الخادم وقاعدة البيانات معاً.
+# مخطّط نشر Render — الثلاث خدمات معاً: الـAPI ولوحة الويب ونسخة التطبيق
+# على الويب، وقاعدة البيانات. كلّها على Render نفسه لا Vercel: التحقق
+# بالرسالة النصية على Vercel غير مفعّل للعراق حالياً، فبقي Render وحده.
 #
 # التشغيل: Render Dashboard → New → Blueprint → اختر هذا المستودع والفرع.
-# يقرأ Render هذا الملف من جذر المستودع تلقائياً.
 #
 # عند فتح البلوبرنت سيسألك Render عن خطّة كل خدمة — لم نثبّتها هنا عمداً
 # لأن أسماء الخطط وأسعارها تتغيّر، وستراها حيّةً في لوحته:
 #   • قاعدة البيانات: أي خطّة، حتى الأصغر تكفي هذا الحجم من البيانات.
-#   • خادم الـAPI: اختر خطّةً تبقى مستيقظة دائماً لا التي تنام بعد الخمول —
-#     تطبيقٌ على المتجر يفتحه المستخدم لا يحتمل ٣٠ ثانية انتظارٍ عند أول
-#     طلب، وعميلٌ يجرّب التطبيق غداً كذلك.
+#   • الخدمتان الأخريان (API وweb): اختر خطّةً تبقى مستيقظة دائماً لا التي
+#     تنام بعد الخمول — تطبيقٌ على المتجر وعميلٌ يجرّبه غداً لا يحتملان
+#     ٣٠ ثانية انتظارٍ عند أول طلب.
+#   • الموقع الثابت (app، نسخة الجوال) لا ينام أصلاً مهما كانت خطّته —
+#     الاستضافة الثابتة لا خادم Node خلفها لينام.
 #
-# بعد أول نشر: افتح إعدادات خدمة الـAPI وأضف من "Environment" يدوياً —
+# روابط onrender.com أدناه افتراضية بأسماء الخدمات هنا. لو كان أحد الأسماء
+# محجوزاً لمستخدمٍ آخر يقترح Render لاحقتَه تلقائياً — عندها بدّل الرابطين
+# في NEXT_PUBLIC_API_URL وEXPO_PUBLIC_API_URL ليطابقا الاسم الفعلي.
+#
+# بعد أول نشر، افتح خدمة doctorsehti-api → Environment وأضف يدوياً:
 #   OWNER_EMAIL, OWNER_PASSWORD  (حساب المالك الأول)
-#   WEB_ORIGIN                   (روابط Vercel بعد نشرها — الخطوة التالية)
 #   WHATSAPP_TOKEN, WHATSAPP_PHONE_NUMBER_ID  (متى صار حساب واتساب جاهزاً)
-# هذه أسرارٌ ومتغيّراتٌ تُعرف بعد النشر لا قبله، فلا معنى لتثبيتها هنا.
+# أسرارٌ لا معنى لتثبيتها في ملفٍّ يدخل المستودع.
 
 databases:
   - name: doctorsehti-db
@@ -23,6 +29,7 @@ databases:
     region: frankfurt
 
 services:
+  # ── الـAPI ──────────────────────────────────────────────────────
   - type: web
     name: doctorsehti-api
     runtime: node
@@ -44,16 +51,43 @@ services:
         value: Asia/Baghdad
       - key: TRUST_PROXY
         value: "true"
-      # الأربعة التالية بلا قيمة هنا عمداً — تُملأ من لوحة Render بعد النشر،
-      # فهي إما سرٌّ لا يُكتب في مستودعٍ (الباسوورد، رمز الواتساب) أو قيمةٌ
-      # لا تُعرف إلا بعد أن يوجد الرابط الذي تصفه (روابط الواجهة)
+      # روابط الخدمتين تحتهما — أسماؤهما ثابتة في هذا الملف فروابطهما معروفة سلفاً
+      - key: WEB_ORIGIN
+        value: https://doctorsehti-web.onrender.com,https://doctorsehti-app.onrender.com
       - key: OWNER_EMAIL
         sync: false
       - key: OWNER_PASSWORD
-        sync: false
-      - key: WEB_ORIGIN
         sync: false
       - key: WHATSAPP_TOKEN
         sync: false
       - key: WHATSAPP_PHONE_NUMBER_ID
         sync: false
+
+  # ── لوحة الويب (web/) — Next.js عادي، يحتاج خادم Node لا موقعاً ثابتاً:
+  # فيه مسارٌ ديناميكي (‎/doctors/[id]‎) لا يُصدَّر ثابتاً بلا إعادة هيكلة ──
+  - type: web
+    name: doctorsehti-web
+    runtime: node
+    region: frankfurt
+    rootDir: web
+    buildCommand: npm ci && npm run build
+    startCommand: npm start
+    envVars:
+      - key: NEXT_PUBLIC_API_URL
+        value: https://doctorsehti-api.onrender.com
+
+  # ── نسخة التطبيق على الويب (mobile/) — تصديرٌ ثابت واحد بتوجيهٍ من
+  # جانب العميل (‎"output": "single"‎ في app.json)، فموقعٌ ثابتٌ يكفيه ──
+  - type: web
+    name: doctorsehti-app
+    runtime: static
+    rootDir: mobile
+    buildCommand: npm ci && npx expo export --platform web
+    staticPublishPath: ./dist
+    envVars:
+      - key: EXPO_PUBLIC_API_URL
+        value: https://doctorsehti-api.onrender.com
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
