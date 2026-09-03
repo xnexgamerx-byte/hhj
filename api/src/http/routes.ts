@@ -53,7 +53,7 @@ import {
   type BannerInput,
 } from "../modules/owner/content.service.js";
 import { removeImage, storeImage } from "../lib/uploads.js";
-import { badRequest, notFound } from "../lib/errors.js";
+import { badRequest, notFound, optionalText, requireText } from "../lib/errors.js";
 import { countUnread, listInbox, markAllRead, markRead } from "../notifications/inbox.js";
 import {
   addFamilyMember,
@@ -114,29 +114,38 @@ export async function registerRoutes(app: FastifyInstance) {
   const otpGate = { config: { rateLimit: { max: 60, timeWindow: "10 minutes" } } };
 
   // ── دخول المريض برقم الهاتف ───────────────────────────────────
+  // المسارات المفتوحة تقرأ حقولها عبر requireText: جسمٌ ناقصٌ أو بحقلٍ من
+  // نوعٍ آخر يجب أن يرجع ٤٠٠ لا ٥٠٠ — انظر تعليقها في lib/errors.ts
   app.post<{ Body: { phone: string } }>("/auth/otp/request", otpGate, async (request) => {
-    return requestOtp(request.body.phone);
+    return requestOtp(requireText(request.body?.phone, "رقم الهاتف"));
   });
 
   app.post<{ Body: { phone: string; code: string; fullName?: string } }>(
     "/auth/otp/verify",
     gate,
     async (request) => {
-      return verifyOtp(request.body.phone, request.body.code, request.body.fullName);
+      return verifyOtp(
+        requireText(request.body?.phone, "رقم الهاتف"),
+        requireText(request.body?.code, "رمز التحقق"),
+        optionalText(request.body?.fullName, "الاسم"),
+      );
     },
   );
 
   // ── دخول الطبيب والسكرتير والمالك ─────────────────────────────
   app.post<{ Body: { email: string; password: string } }>("/auth/login", gate, async (request) => {
-    return loginWithPassword(request.body.email, request.body.password);
+    return loginWithPassword(
+      requireText(request.body?.email, "الإيميل"),
+      requireText(request.body?.password, "الباسوورد"),
+    );
   });
 
   app.post<{ Body: { refreshToken: string } }>("/auth/refresh", async (request) => {
-    return refreshSession(request.body.refreshToken);
+    return refreshSession(requireText(request.body?.refreshToken, "رمز التجديد"));
   });
 
   app.post<{ Body: { refreshToken: string } }>("/auth/logout", async (request, reply) => {
-    await logout(request.body.refreshToken);
+    await logout(requireText(request.body?.refreshToken, "رمز التجديد"));
     return reply.status(204).send();
   });
 
@@ -145,7 +154,11 @@ export async function registerRoutes(app: FastifyInstance) {
     "/auth/password/change",
     { preHandler: authenticate },
     async (request, reply) => {
-      await changePassword(request.auth!.sub, request.body.currentPassword, request.body.newPassword);
+      await changePassword(
+        request.auth!.sub,
+        requireText(request.body?.currentPassword, "الباسوورد الحالي"),
+        requireText(request.body?.newPassword, "الباسوورد الجديد"),
+      );
       return reply.status(204).send();
     },
   );
