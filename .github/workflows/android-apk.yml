@@ -1,0 +1,52 @@
+name: بناء نسخة أندرويد للتجربة
+
+# بناءٌ محلّي على خوادم GitHub لا عبر Expo السحابي: بيئة العمل التي يُدفع
+# منها هذا المستودع محجوبة عن خوادم Expo وقوقل، فالبديل بناءٌ يدويّ بـGradle
+# هنا حيث الشبكة مفتوحة. النتيجة APK قابل للتثبيت مباشرة — كافٍ لتجربة
+# العميل، وإن أردنا لاحقاً رفعه للمتجر فتلك خطوة توقيعٍ منفصلة عبر EAS.
+on:
+  workflow_dispatch: {}
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: mobile
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: android-actions/setup-android@v3
+
+      - name: تثبيت الحزم
+        run: npm ci
+
+      - name: توليد مشروع أندرويد الأصلي
+        run: npx expo prebuild --platform android --no-install
+        env:
+          # الرابط الحقيقي المنشور على Render — يُخبَز داخل الحزمة الآن،
+          # فالتطبيق المُثبَّت على هاتف العميل يعرف أين خادمه دون إعدادٍ منه
+          EXPO_PUBLIC_API_URL: https://doctorsehti-api.onrender.com
+
+      - name: بناء APK
+        working-directory: mobile/android
+        run: ./gradlew assembleDebug
+        env:
+          EXPO_PUBLIC_API_URL: https://doctorsehti-api.onrender.com
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: doctorsehti-apk
+          path: mobile/android/app/build/outputs/apk/debug/app-debug.apk
+          retention-days: 14
