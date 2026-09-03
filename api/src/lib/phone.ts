@@ -43,8 +43,28 @@ export function toWhatsAppAddress(e164: string): string {
   return e164.replace(/^\+/, "");
 }
 
-/** للعرض في الواجهات: ‎0770 123 4567 */
-export function formatIraqiPhoneForDisplay(e164: string): string {
-  const national = `0${e164.replace("+964", "")}`;
-  return `${national.slice(0, 4)} ${national.slice(4, 7)} ${national.slice(7)}`;
+/**
+ * للعرض: ‎0770-123-4567
+ *
+ * يقبل الشكلين لأن كليهما يصلها فعلاً: حساب المستخدم يخزّن الدولي
+ * ‎+9647701234567‎، وحقل الهاتف في نموذج الحجز يخزّن المحلّي ‎07701234567‎،
+ * ورسالة الواتساب تأخذ الثاني إن وُجد وإلا الأول. وافتراضُ الدولي وحده كان
+ * يضيف صفراً إلى رقمٍ يبدأ بصفر فيخرج «0077 326 50315» — رقمٌ لا يُتّصل به.
+ *
+ * والفواصل شرطات لا مسافات: الرقم يُكتب داخل رسالةٍ عربية، ومجموعات الأرقام
+ * اللاتينية المفصولة بمسافات يعكس محرّك ثنائي الاتجاه ترتيبها فيقرأ الطبيب
+ * «4567 123 0770». والشرطة بين رقمين تُضمّ إليهما فيصير الرقم كتلةً واحدة لا
+ * تُعاد ترتيبها — بلا حاجة إلى محارف تحكّمٍ قد لا تنجو من وسيط الرسائل.
+ */
+export function formatIraqiPhoneForDisplay(phone: string): string {
+  const digits = toLatinDigits(phone).replace(/\D/g, "");
+  const national = digits.startsWith("964")
+    ? `0${digits.slice(3)}`
+    : digits.startsWith("0")
+      ? digits
+      : `0${digits}`;
+
+  // ما ليس أحد عشر رقماً ليس رقماً عراقياً — يُعرض كما هو بدل أن يُقصّ خطأً
+  if (national.length !== 11) return national;
+  return `${national.slice(0, 4)}-${national.slice(4, 7)}-${national.slice(7)}`;
 }

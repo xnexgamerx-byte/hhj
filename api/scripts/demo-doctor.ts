@@ -23,7 +23,9 @@ async function main() {
     const district = await prisma.district.findFirstOrThrow({ where: { slug: "karkh" } });
     const specialty = await prisma.specialty.findFirstOrThrow({ where: { slug: "cardiology" } });
     user = await prisma.user.create({
-      data: { email, fullName: "سارة العبيدي", role: "DOCTOR", passwordHash: await hashPassword("Demo123456") },
+      // اسمٌ وعيادةٌ لا يشبهان ما تزرعه البذرة: طبيبان باسمٍ واحد في قائمة
+      // البحث يبدوان عطلاً لا بيانات عرض
+      data: { email, fullName: "ليلى الحيدري", role: "DOCTOR", passwordHash: await hashPassword("Demo123456") },
     });
     const doctor = await prisma.doctor.create({
       data: {
@@ -32,7 +34,7 @@ async function main() {
       },
     });
     const clinic = await prisma.clinic.create({
-      data: { nameAr: "مركز القلب التخصصي", governorateId: district.governorateId, districtId: district.id, landmark: "قرب مستشفى ابن البيطار" },
+      data: { nameAr: "مركز النبض للقلبية", governorateId: district.governorateId, districtId: district.id, landmark: "قرب مستشفى ابن البيطار" },
     });
     await prisma.doctorClinic.create({
       data: {

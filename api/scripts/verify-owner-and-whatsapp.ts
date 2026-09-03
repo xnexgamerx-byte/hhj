@@ -76,8 +76,25 @@ async function main() {
 
   check(
     "رقم الهاتف يُعرض بصيغة عراقية مقروءة وقابلة للنقر",
-    formatIraqiPhoneForDisplay("+9647701234567") === "0770 123 4567",
+    formatIraqiPhoneForDisplay("+9647701234567") === "0770-123-4567",
     `‎+9647701234567 ⇐ ${formatIraqiPhoneForDisplay("+9647701234567")} — بأرقام لاتينية ليبقى قابلاً للاتصال داخل واتساب`,
+  );
+
+  // الشكل المحلّي يصل الدالة فعلاً: حقل الهاتف في نموذج الحجز يخزّنه هكذا،
+  // ورسالة الواتساب تفضّله على رقم الحساب. وافتراض الدولي وحده كان يضيف صفراً
+  // إلى رقمٍ يبدأ بصفر فيخرج رقمٌ من اثنتي عشرة خانة لا يُتّصل به
+  check(
+    "والشكل المحلّي كما يخزّنه نموذج الحجز يُعرض صحيحاً أيضاً",
+    formatIraqiPhoneForDisplay("07732650315") === "0773-265-0315",
+    `07732650315 ⇐ ${formatIraqiPhoneForDisplay("07732650315")}`,
+  );
+
+  // الفواصل شرطات لا مسافات: مجموعات أرقامٍ لاتينية مفصولة بمسافات داخل نصٍّ
+  // عربي يعكس محرّك ثنائي الاتجاه ترتيبها، فيقرأ الطبيب الرقم مقلوباً
+  check(
+    "لا مسافات في الرقم كي لا يقلبه اتجاه النصّ العربي",
+    !formatIraqiPhoneForDisplay("+9647701234567").includes(" "),
+    "الشرطة بين رقمين تُضمّ إليهما فيصير الرقم كتلةً واحدة لا تُعاد ترتيبها",
   );
 
   // ── ٢. المالك يسجّل الطبيب ──────────────────────────────────────
@@ -179,7 +196,8 @@ async function main() {
   });
 
   // يمر عبر التطبيع نفسه الذي يمر به تسجيل المريض الحقيقي، وإلا اختبرنا بيانات مستحيلة
-  const patientPhone = normalizeIraqiPhone(`077${suffix}`);
+  const localPhone = `077${suffix}`;
+  const patientPhone = normalizeIraqiPhone(localPhone);
   const account = await prisma.user.create({
     data: { phone: patientPhone, fullName: "علي حسن", role: "PATIENT" },
   });
@@ -228,7 +246,9 @@ async function main() {
       body.includes("عيادة النور") &&
       body.includes("٣٢ سنة") &&
       body.includes("حي الجامعة") &&
-      body.includes(formatIraqiPhoneForDisplay(patientPhone)) &&
+      // الرقم المتوقّع محسوبٌ هنا لا مأخوذٌ من الدالة: مقارنةُ الدالة بناتجها
+      // تمرّ مهما أخطأت — وهكذا فات عيبٌ حقيقيّ في الصيغة
+      body.includes(`${localPhone.slice(0, 4)}-${localPhone.slice(4, 7)}-${localPhone.slice(7)}`) &&
       body.includes("عنده سكري وضغط"),
     `أُرسلت إلى ${message?.to} بالقالب ${message?.message.templateName}`,
   );
