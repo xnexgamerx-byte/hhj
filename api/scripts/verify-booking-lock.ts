@@ -29,8 +29,16 @@ async function buildFixtures() {
     include: { governorate: true },
   });
 
+  // الإيميل بنمط الاختبارات لا لأن الطبيب يدخل به — هذا الاختبار لا يدخل —
+  // بل ليعرفه npm run db:clean فيمسحه مع بقايا الاختبارات الأخرى
+  const stamp = Date.now().toString().slice(-8);
   const doctorUser = await prisma.user.create({
-    data: { phone: `+9647${Date.now().toString().slice(-9)}`, fullName: "طبيب اختبار", role: "DOCTOR" },
+    data: {
+      phone: `+9647${Date.now().toString().slice(-9)}`,
+      email: `lock.${stamp}@clinic.iq`,
+      fullName: "طبيب اختبار",
+      role: "DOCTOR",
+    },
   });
   const doctor = await prisma.doctor.create({
     data: { userId: doctorUser.id, isPublished: true, isActive: true },
@@ -56,7 +64,12 @@ async function buildFixtures() {
   });
 
   const account = await prisma.user.create({
-    data: { phone: `+9648${Date.now().toString().slice(-9)}`, fullName: "حساب اختبار", role: "PATIENT" },
+    data: {
+      phone: `+9648${Date.now().toString().slice(-9)}`,
+      email: `lock.p${stamp}@clinic.iq`,
+      fullName: "حساب اختبار",
+      role: "PATIENT",
+    },
   });
   const patients = await Promise.all(
     ["مريض أ", "مريض ب", "مريض ج"].map((fullName) =>
