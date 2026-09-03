@@ -122,6 +122,7 @@ model User {
   bookedAppointments Appointment[]     @relation("BookedByUser")
   registeredDoctors  Doctor[]          @relation("DoctorRegisteredBy")
   refreshTokens      RefreshToken[]
+  trustedDevices     TrustedDevice[]
   devices            Device[]
   notifications      NotificationLog[]
   auditEntries       AuditLog[]
@@ -139,11 +140,37 @@ model RefreshToken {
   expiresAt DateTime
   revokedAt DateTime?
   createdAt DateTime  @default(now())
+  /// هل تفتح هذه الجلسة بيانات صاحبها أم تحجز فقط؟ محفوظة هنا لا في الرمز
+  /// وحده، كي يبقى التجديد محافظاً على مستوى الجلسة الذي بدأت به.
+  trusted   Boolean   @default(false)
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, revokedAt])
   @@map("refresh_tokens")
+}
+
+/// الأجهزة التي حجز منها صاحب الحساب فعلاً.
+///
+/// المريض يدخل برقم هاتفه وحده بلا رمز تحقّق — وهذا ما يجعل الحجز لمسةً
+/// واحدة. لكن رقم الهاتف يعرفه غيرُ صاحبه، فلا يصلح وحده مفتاحاً لملفٍّ فيه
+/// عنوان السكن وتاريخ المواعيد. لذا: الجهاز الذي أنشأ الحساب — أو حجز منه
+/// صاحبه — يُسجَّل هنا، ومنه وحده تُفتح البيانات. وجهازٌ غريب يكتب الرقم
+/// نفسه يحجز موعداً (وهذا مقصود: العيادة تستلم حجزاً صحيحاً) ولا يقرأ شيئاً.
+///
+/// وتُخزَّن البصمة مجزّأة لا خاماً، كرمز التجديد تماماً: من يقرأ القاعدة
+/// لا يخرج منها بمفاتيح أجهزةٍ يفتح بها الحسابات.
+model TrustedDevice {
+  id         String   @id @default(uuid())
+  userId     String
+  deviceHash String
+  createdAt  DateTime @default(now())
+  lastSeenAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, deviceHash])
+  @@map("trusted_devices")
 }
 
 /// أجهزة المستخدم لإرسال الإشعارات

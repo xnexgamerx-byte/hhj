@@ -139,6 +139,7 @@ const ACCESS_KEY = "doctorsehti.access";
 
 const REFRESH_KEY = "doctorsehti.refresh";
 const USER_KEY = "doctorsehti.user";
+const DEVICE_KEY = "doctorsehti.device";
 
 export type SessionUser = {
   id: string;
@@ -211,6 +212,24 @@ export async function saveSession(payload: {
 
 export async function clearSession(): Promise<void> {
   await Promise.all([writeKey(ACCESS_KEY, null), writeKey(REFRESH_KEY, null), writeKey(USER_KEY, null)]);
+}
+
+/**
+ * بصمة هذا التثبيت: رقمٌ عشوائي يُولَّد مرّةً ويبقى.
+ *
+ * المريض يدخل برقم هاتفه بلا رمز تحقّق — والرقم يعرفه غيره. فهذه البصمة هي
+ * ما يميّز هاتفه من هاتف غيره: الخادم يفتح المواعيد والعنوان لمن جاء ببصمةٍ
+ * يعرفها الحساب، ويكتفي بالحجز ممّن سواه. لا تُمسح مع الخروج — الخروج ينهي
+ * الجلسة لا يغيّر الهاتف، ولو مُسحت لصار كل خروجٍ فقداناً لتاريخ المواعيد.
+ */
+export async function getDeviceId(): Promise<string> {
+  const existing = await readKey(DEVICE_KEY);
+  if (existing) return existing;
+  const fresh = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}${Math.random()
+    .toString(36)
+    .slice(2)}`;
+  await writeKey(DEVICE_KEY, fresh);
+  return fresh;
 }
 
 // ── الطلبات ─────────────────────────────────────────────────────

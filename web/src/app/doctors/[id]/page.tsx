@@ -5,7 +5,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { Header } from "@/components/Header";
 import { Alert, Badge, Button, Card, EmptyState, Field, Input, Loading, Select } from "@/components/ui";
-import { api, getSession, saveSession, type SessionUser } from "@/lib/api";
+import { api, getDeviceId, getSession, saveSession, type SessionUser } from "@/lib/api";
 import { countLabel, COUNTS, formatDay, formatFee, formatTimeLabel, toArabic, todayISO, WEEKDAYS } from "@/lib/format";
 
 type Profile = {
@@ -482,7 +482,7 @@ function BookingPanel({
       if (!loggedIn) {
         const session = await api.post<{ accessToken: string; refreshToken: string; user: SessionUser }>(
           "/auth/phone/login",
-          { phone, fullName },
+          { phone, fullName, deviceId: getDeviceId() },
         );
         saveSession(session);
         setUser(session.user);

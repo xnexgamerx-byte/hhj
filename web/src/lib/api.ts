@@ -17,6 +17,7 @@ export function mediaUrl(path: string | null | undefined): string | null {
 const ACCESS_KEY = "doctorsehti.access";
 const REFRESH_KEY = "doctorsehti.refresh";
 const USER_KEY = "doctorsehti.user";
+const DEVICE_KEY = "doctorsehti.device";
 
 export type SessionUser = { id: string; fullName: string; role: "PATIENT" | "DOCTOR" | "STAFF" | "OWNER" };
 
@@ -74,6 +75,24 @@ export function clearSession() {
   write(ACCESS_KEY, null);
   write(REFRESH_KEY, null);
   write(USER_KEY, null);
+}
+
+/**
+ * بصمة هذا المتصفّح: رقمٌ عشوائي يُولَّد مرّةً ويبقى.
+ *
+ * المريض يدخل برقم هاتفه بلا رمز تحقّق، والرقم يعرفه غيره — فهذه البصمة هي
+ * ما يميّز متصفّحه. الخادم يفتح المواعيد والعنوان لمن جاء ببصمةٍ يعرفها
+ * الحساب، ويكتفي بالحجز ممّن سواه. لا تُمسح مع الخروج: الخروج ينهي الجلسة
+ * لا يغيّر الجهاز.
+ */
+export function getDeviceId(): string {
+  const existing = read(DEVICE_KEY);
+  if (existing) return existing;
+  const fresh = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}${Math.random()
+    .toString(36)
+    .slice(2)}`;
+  write(DEVICE_KEY, fresh);
+  return fresh;
 }
 
 async function request<T>(path: string, init: RequestInit = {}, retry = true): Promise<T> {

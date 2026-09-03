@@ -5,7 +5,7 @@ import { PlainHeader } from "@/components/PlainHeader";
 import { Tabs } from "@/components/Stats";
 import { Icon } from "@/components/icons";
 import { Alert, Badge, Button, Card, EmptyState, Field, IconTile, Input, Loading, T } from "@/components/ui";
-import { api, getSession, type Booking, type SessionUser } from "@/lib/api";
+import { api, ApiError, getSession, type Booking, type SessionUser } from "@/lib/api";
 import { formatClock, formatDay, formatFee, STATUS_LABELS, toArabic } from "@/lib/format";
 import { Appear } from "@/motion";
 import { radius, space, usePalette } from "@/theme";
@@ -20,13 +20,23 @@ export default function BookingsScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [reviewing, setReviewing] = useState<Booking | null>(null);
   const [tab, setTab] = useState<"upcoming" | "past">("upcoming");
+  /** هاتفٌ لا يعرفه الحساب: يحجز ولا يقرأ — انظر requireTrusted في الخادم */
+  const [blocked, setBlocked] = useState(false);
 
   const load = useCallback(() => {
     setError(null);
+    setBlocked(false);
     api
       .get<Booking[]>("/me/bookings")
       .then(setBookings)
-      .catch((e) => setError(e.message));
+      .catch((e) => {
+        // ليس خطأً بل حالة: هاتفٌ غير الذي حجز منه صاحب الحساب. تُشرح
+        // في مكان القائمة لا في شريط خطأٍ أحمر — ليست عطلاً يُبلَّغ عنه
+        if (e instanceof ApiError && e.code === "DEVICE_NOT_TRUSTED") {
+          setBlocked(true);
+          setBookings([]);
+        } else setError(e.message);
+      });
   }, []);
 
   useFocusEffect(
@@ -110,7 +120,16 @@ export default function BookingsScreen() {
       {error ? <Alert message={error} /> : null}
       {bookings === null ? <Loading /> : null}
 
-      {bookings?.length === 0 ? (
+      {blocked ? (
+        <Card>
+          <EmptyState
+            icon={(c, sz) => <Icon.user size={sz} color={c} />}
+            title="هذا ليس هاتفك المعتاد"
+            hint="مواعيدك تُفتح من الهاتف الذي حجزت منه أول مرّة، حمايةً لبياناتك. تستطيع الحجز من هنا عادةً، وإن غيّرت هاتفك فالعيادة تخبرك بمواعيدك."
+            action={<Button label="ابحث عن طبيب" onPress={() => router.replace("/")} />}
+          />
+        </Card>
+      ) : bookings?.length === 0 ? (
         <Card>
           <EmptyState
             icon={(c, sz) => <Icon.calendar size={sz} color={c} />}

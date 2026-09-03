@@ -1,6 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import { prisma } from "../lib/prisma.js";
-import { authenticate, requireRole } from "./guard.js";
+import { authenticate, requireRole, requireTrusted } from "./guard.js";
 import {
   changePassword,
   loginByPhone,
@@ -114,12 +114,17 @@ export async function registerRoutes(app: FastifyInstance) {
   // بلا رمز تحقق: الرقم وحده يكفي ليُنشأ الحساب أو يُستأنف، فيصير الحجز
   // ضغطةً واحدة. المسارات المفتوحة تقرأ حقولها عبر requireText: جسمٌ ناقصٌ
   // أو بحقلٍ من نوعٍ آخر يجب أن يرجع ٤٠٠ لا ٥٠٠ — انظر تعليقها في lib/errors.ts
-  app.post<{ Body: { phone: string; fullName?: string } }>("/auth/phone/login", gate, async (request) => {
-    return loginByPhone(
-      requireText(request.body?.phone, "رقم الهاتف"),
-      optionalText(request.body?.fullName, "الاسم"),
-    );
-  });
+  app.post<{ Body: { phone: string; fullName?: string; deviceId?: string } }>(
+    "/auth/phone/login",
+    gate,
+    async (request) => {
+      return loginByPhone(
+        requireText(request.body?.phone, "رقم الهاتف"),
+        optionalText(request.body?.fullName, "الاسم"),
+        optionalText(request.body?.deviceId, "معرّف الجهاز"),
+      );
+    },
+  );
 
   // ── دخول الطبيب والسكرتير والمالك ─────────────────────────────
   app.post<{ Body: { email: string; password: string } }>("/auth/login", gate, async (request) => {
@@ -542,45 +547,52 @@ export async function registerRoutes(app: FastifyInstance) {
     },
   );
 
-  app.get("/me/bookings", { preHandler: requireRole("PATIENT") }, async (request) => {
+  // ما يلي يقرأ ملفّ المريض، فيُشترط له جهازٌ يعرفه الحساب لا رقمُ هاتفٍ
+  // يعرفه الناس — انظر تعليق requireTrusted في guard.ts
+  app.get("/me/bookings", { preHandler: requireTrusted("PATIENT") }, async (request) => {
     return getMyBookings(request.auth!.sub);
   });
 
+  /**
+   * الجهاز الغريب يحتاج معرّف مريضٍ ليحجز به، ولا يحتاج أن يعرف من في
+   * الحساب: يأخذ صاحب الحساب وحده بلا اسمٍ ولا عنوان، فتُفتح له شاشة حجزٍ
+   * فارغة يملؤها بنفسه — ولا تتسرّب إليه بيانات غيره ولا أفراد عائلته.
+   */
   app.get("/me/patients", { preHandler: requireRole("PATIENT") }, async (request) => {
-    return getMyPatients(request.auth!.sub);
+    return getMyPatients(request.auth!.sub, { trusted: request.auth!.trusted });
   });
 
   // ── صندوق الإشعارات ──
 
   app.get<{ Querystring: { limit?: string } }>(
     "/me/notifications",
-    { preHandler: requireRole("PATIENT") },
+    { preHandler: requireTrusted("PATIENT") },
     async (request) => listInbox(request.auth!.sub, Number(request.query.limit) || 50),
   );
 
   /** عدّاد وحده — تقرأه الشاشة الرئيسية في كل فتحة، فلا داعي لجرّ القائمة */
-  app.get("/me/notifications/unread", { preHandler: requireRole("PATIENT") }, async (request) => ({
+  app.get("/me/notifications/unread", { preHandler: requireTrusted("PATIENT") }, async (request) => ({
     unread: await countUnread(request.auth!.sub),
   }));
 
-  app.post("/me/notifications/read", { preHandler: requireRole("PATIENT") }, async (request) =>
+  app.post("/me/notifications/read", { preHandler: requireTrusted("PATIENT") }, async (request) =>
     markAllRead(request.auth!.sub),
   );
 
   app.post<{ Params: { id: string } }>(
     "/me/notifications/:id/read",
-    { preHandler: requireRole("PATIENT") },
+    { preHandler: requireTrusted("PATIENT") },
     async (request) => markRead(request.auth!.sub, request.params.id),
   );
 
   /** الزيارات التي يستطيع المريض تقييمها الآن */
-  app.get("/me/reviewable", { preHandler: requireRole("PATIENT") }, async (request) => {
+  app.get("/me/reviewable", { preHandler: requireTrusted("PATIENT") }, async (request) => {
     return listReviewableVisits(request.auth!.sub);
   });
 
   app.post<{ Body: { appointmentId: string; rating: number; comment?: string } }>(
     "/reviews",
-    { preHandler: requireRole("PATIENT") },
+    { preHandler: requireTrusted("PATIENT") },
     async (request, reply) => {
       const review = await createReview(request.auth!.sub, request.body.appointmentId, {
         rating: request.body.rating,
@@ -594,19 +606,25 @@ export async function registerRoutes(app: FastifyInstance) {
 
   app.post<{ Body: { fullName: string; birthYear?: number; gender?: "MALE" | "FEMALE" } }>(
     "/me/patients",
-    { preHandler: requireRole("PATIENT") },
+    { preHandler: requireTrusted("PATIENT") },
     async (request, reply) => {
       const created = await addFamilyMember(request.auth!.sub, request.body);
       return reply.status(201).send(created);
     },
   );
 
-  /** بيانات المريض التي تسألها العيادة: الاسم والهاتف والعنوان والعمر */
+  /**
+   * بيانات المريض التي تسألها العيادة: الاسم والهاتف والعنوان والعمر.
+   * الجهاز الغريب يملأ الفارغ ولا يستبدل المكتوب — يحجز لنفسه ولا يعبث
+   * باسم صاحب الحساب ولا بعنوانه.
+   */
   app.patch<{
     Params: { id: string };
     Body: { fullName?: string; phone?: string | null; address?: string | null; birthYear?: number | null; gender?: "MALE" | "FEMALE" | null };
   }>("/me/patients/:id", { preHandler: requireRole("PATIENT") }, async (request) => {
-    return updatePatient(request.auth!.sub, request.params.id, request.body ?? {});
+    return updatePatient(request.auth!.sub, request.params.id, request.body ?? {}, {
+      trusted: request.auth!.trusted,
+    });
   });
 
   // ── لوحة الطبيب ───────────────────────────────────────────────
@@ -706,9 +724,10 @@ export async function registerRoutes(app: FastifyInstance) {
     return reply.status(201).send(result);
   });
 
+  /** الإلغاء إتلافٌ لموعدٍ قائم، فيُشترط له جهازٌ معروف لا رقمُ هاتفٍ وحده */
   app.post<{ Params: { id: string }; Body: { reason?: string } }>(
     "/bookings/:id/cancel",
-    { preHandler: requireRole("PATIENT", "STAFF", "DOCTOR") },
+    { preHandler: requireTrusted("PATIENT", "STAFF", "DOCTOR") },
     async (request, reply) => {
       const cancelledBy = request.auth!.role === "PATIENT" ? "PATIENT" : "CLINIC";
       await cancelBooking(

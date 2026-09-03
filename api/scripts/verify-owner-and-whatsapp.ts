@@ -11,7 +11,8 @@ import { formatIraqiPhoneForDisplay, normalizeIraqiPhone, toLatinDigits } from "
 import { templateSpecs } from "../src/notifications/whatsapp/templates.js";
 import { AppError } from "../src/lib/errors.js";
 import { createDoctorAccount, resetDoctorPassword } from "../src/modules/owner/provisioning.js";
-import { changePassword, loginWithPassword } from "../src/modules/auth/auth.service.js";
+import { changePassword, loginByPhone, loginWithPassword } from "../src/modules/auth/auth.service.js";
+import { getMyPatients, updatePatient } from "../src/modules/discovery/discovery.service.js";
 import { createBooking } from "../src/modules/booking/booking.service.js";
 import { flushPending, setWhatsAppProvider } from "../src/notifications/dispatch.js";
 import { ConsoleProvider, type SendResult, type WhatsAppProvider } from "../src/notifications/whatsapp/provider.js";
@@ -329,6 +330,88 @@ async function main() {
     consoleProvider.sent.length === 1,
     "يصلح للتطوير وكحل يدوي مؤقت قبل اعتماد قوالب ميتا",
   );
+
+  // ── ١٠. دخول المريض بالهاتف: ما يفتحه الجهاز المعروف وما يمنعه الغريب ──
+  //
+  // الحجز بلا رمز تحقّق يعني أنّ رقم الهاتف وحده يفتح جلسة. والرقم يعرفه
+  // غيرُ صاحبه، فالفارق بين صاحب الحساب وغيره هو الجهاز. هذه الاختبارات
+  // تحرس ذلك الفارق: بلا حراسةٍ يعود العنوان وتاريخ المواعيد مكشوفَين لمن
+  // يعرف رقماً — وقد أثبتُّ ذلك عملياً قبل إضافة هذه الطبقة.
+  {
+    const phone = `07${Math.floor(700000000 + Math.random() * 99999999)}`;
+    const own = "device-own-" + Date.now();
+    const stranger = "device-stranger-" + Date.now();
+
+    const first = await loginByPhone(phone, "مريض الأجهزة", own, prisma);
+    check("أول جهازٍ يفتح الحساب يصير جهاز صاحبه", first.trusted, "لا رمز تحقّق، ومع ذلك ملفّه محميّ");
+
+    const again = await loginByPhone(phone, undefined, own, prisma);
+    check("الجهاز نفسه يبقى موثوقاً في المرّات التالية", again.trusted, "لا يُسأل صاحبه شيئاً بعدها");
+
+    const other = await loginByPhone(phone, "منتحل", stranger, prisma);
+    check(
+      "جهازٌ غريب يكتب الرقم نفسه لا يُفتح له الملفّ",
+      !other.trusted,
+      "يحجز — ولا يقرأ المواعيد ولا العنوان",
+    );
+
+    // بيانات صاحب الحساب: نملؤها من جهازه ثم نحاول قراءتها وتبديلها من الغريب
+    const mine = await getMyPatients(first.user.id, { trusted: true }, prisma);
+    await updatePatient(
+      first.user.id,
+      mine[0]!.id,
+      { fullName: "مريض الأجهزة", address: "الكرخ — حي الجامعة", birthYear: 1990 },
+      { trusted: true },
+      prisma,
+    );
+
+    const seenByStranger = await getMyPatients(first.user.id, { trusted: false }, prisma);
+    check(
+      "الغريب لا يرى الاسم ولا العنوان ولا بقيّة العائلة",
+      seenByStranger.length === 1 &&
+        seenByStranger[0]!.fullName === "" &&
+        seenByStranger[0]!.address === null &&
+        seenByStranger[0]!.birthYear === null,
+      "يأخذ معرّفاً يعلّق عليه حجزه فقط",
+    );
+
+    await updatePatient(
+      first.user.id,
+      mine[0]!.id,
+      { fullName: "اسم مدسوس", address: "عنوان مدسوس" },
+      { trusted: false },
+      prisma,
+    );
+    const afterTamper = await getMyPatients(first.user.id, { trusted: true }, prisma);
+    check(
+      "الغريب يملأ الفارغ ولا يمحو المكتوب",
+      afterTamper[0]!.fullName === "مريض الأجهزة" && afterTamper[0]!.address === "الكرخ — حي الجامعة",
+      "حجزُه لا يتلف بيانات صاحب الحساب",
+    );
+
+    // حساب أنشأه السكرتير لمريضٍ حضر بلا تطبيق: بلا أجهزة، فأولُ جهازٍ له
+    const legacyPhone = `07${Math.floor(700000000 + Math.random() * 99999999)}`;
+    await prisma.user.create({
+      data: {
+        phone: normalizeIraqiPhone(legacyPhone),
+        fullName: "مريض العيادة",
+        role: "PATIENT",
+        patients: { create: { fullName: "مريض العيادة", isSelf: true } },
+      },
+    });
+    const claimed = await loginByPhone(legacyPhone, undefined, "device-claim-" + Date.now(), prisma);
+    check(
+      "حسابٌ بلا أجهزة (أنشأه السكرتير) يتبنّاه أول جهازٍ يدخل به",
+      claimed.trusted,
+      "وإلا بقي من حجز عبر العيادة محروماً من مواعيده في التطبيق",
+    );
+
+    // ينظّف الاختبارُ حساباته: منظّف الثوابت يمسح بالإيميل، وهذه بلا إيميل
+    // فلا يطالها — وبلا هذا يتراكم حسابان في كل تشغيل
+    await prisma.user.deleteMany({
+      where: { phone: { in: [normalizeIraqiPhone(phone), normalizeIraqiPhone(legacyPhone)] } },
+    });
+  }
 
   const failed = results.filter((r) => !r.passed);
   console.log(`\n${results.length - failed.length}/${results.length} اختبارات نجحت`);

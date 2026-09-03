@@ -3,7 +3,7 @@ import { Modal, Pressable, ScrollView, View } from "react-native";
 import { useRouter } from "expo-router";
 import { Icon } from "@/components/icons";
 import { Alert, Button, Chips, Divider, Field, IconTile, Input, T } from "@/components/ui";
-import { api, getSession, saveSession, type Patient, type SessionUser } from "@/lib/api";
+import { api, getDeviceId, getSession, saveSession, type Patient, type SessionUser } from "@/lib/api";
 import { countLabel, COUNTS, formatDay, toArabic } from "@/lib/format";
 import { Pop } from "@/motion";
 import { radius, space, usePalette } from "@/theme";
@@ -144,7 +144,7 @@ export function BookingSheet({
       if (!user || user.role !== "PATIENT") {
         const session = await api.post<{ accessToken: string; refreshToken: string; user: SessionUser }>(
           "/auth/phone/login",
-          { phone: phone.trim(), fullName: fullName.trim() },
+          { phone: phone.trim(), fullName: fullName.trim(), deviceId: await getDeviceId() },
         );
         await saveSession(session);
         setUser(session.user);

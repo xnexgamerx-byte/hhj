@@ -481,6 +481,7 @@ async function main() {
       a.account.id,
       a.patient.id,
       { fullName: "سارة كاظم محمد", phone: "07701234567", address: "الكرخ — حي الجامعة، محلة 630", birthYear: 1994 },
+      { trusted: true },
       prisma,
     );
     check(
@@ -489,7 +490,7 @@ async function main() {
       `${updated.fullName} · ${updated.birthYear} · ${updated.address}`,
     );
 
-    const listed = await getMyPatients(a.account.id, prisma);
+    const listed = await getMyPatients(a.account.id, { trusted: true }, prisma);
     check(
       "الشاشة تقرأ ما حُفظ فتملأ الحقول تلقائياً في المرّة القادمة",
       listed[0]?.address === updated.address && listed[0]?.birthYear === 1994,
@@ -498,7 +499,7 @@ async function main() {
 
     let notMine = "";
     try {
-      await updatePatient(b.account.id, a.patient.id, { address: "عنوان مدسوس" }, prisma);
+      await updatePatient(b.account.id, a.patient.id, { address: "عنوان مدسوس" }, { trusted: true }, prisma);
     } catch (error) {
       if (error instanceof AppError) notMine = error.code;
     }
@@ -506,7 +507,7 @@ async function main() {
 
     let badYear = "";
     try {
-      await updatePatient(a.account.id, a.patient.id, { birthYear: 1700 }, prisma);
+      await updatePatient(a.account.id, a.patient.id, { birthYear: 1700 }, { trusted: true }, prisma);
     } catch (error) {
       if (error instanceof AppError) badYear = error.code;
     }

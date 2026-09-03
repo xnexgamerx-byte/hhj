@@ -328,13 +328,28 @@ export async function getMyBookings(accountId: string, client: PrismaClient = de
   }));
 }
 
-/** أفراد العائلة الذين يحجز لهم صاحب الحساب. */
-export async function getMyPatients(accountId: string, client: PrismaClient = defaultPrisma) {
-  return client.patient.findMany({
+/**
+ * أفراد العائلة الذين يحجز لهم صاحب الحساب.
+ *
+ * من جهازٍ لا يعرفه الحساب لا تُسلَّم هذه القائمة: يكفيه معرّفُ صاحب الحساب
+ * وحده ليعلّق عليه حجزه، بلا اسمٍ ولا عمرٍ ولا عنوانٍ ولا بقيّة العائلة —
+ * فتُفتح له شاشةٌ فارغة يملؤها بنفسه. رقم الهاتف يفتح الحجز لا الملفّ.
+ */
+export async function getMyPatients(
+  accountId: string,
+  options: { trusted: boolean } = { trusted: true },
+  client: PrismaClient = defaultPrisma,
+) {
+  const patients = await client.patient.findMany({
     where: { accountId },
     orderBy: [{ isSelf: "desc" }, { createdAt: "asc" }],
     select: { id: true, fullName: true, isSelf: true, birthYear: true, gender: true, phone: true, address: true },
   });
+  if (options.trusted) return patients;
+
+  const self = patients.find((p) => p.isSelf) ?? patients[0];
+  if (!self) return [];
+  return [{ id: self.id, fullName: "", isSelf: true, birthYear: null, gender: null, phone: null, address: null }];
 }
 
 /**
@@ -348,9 +363,13 @@ export async function updatePatient(
   accountId: string,
   patientId: string,
   input: { fullName?: string; phone?: string | null; address?: string | null; birthYear?: number | null; gender?: "MALE" | "FEMALE" | null },
+  options: { trusted: boolean } = { trusted: true },
   client: PrismaClient = defaultPrisma,
 ) {
-  const patient = await client.patient.findUnique({ where: { id: patientId }, select: { accountId: true } });
+  const patient = await client.patient.findUnique({
+    where: { id: patientId },
+    select: { accountId: true, fullName: true, phone: true, address: true, birthYear: true, gender: true },
+  });
   if (!patient) throw notFound("PATIENT_NOT_FOUND", "المريض غير موجود");
   if (patient.accountId !== accountId) throw forbidden("NOT_YOUR_PATIENT", "لا يمكنك تعديل بيانات مريض لا يتبع حسابك");
 
@@ -368,14 +387,18 @@ export async function updatePatient(
     }
   }
 
+  // من جهازٍ غريب: يُملأ الفارغ ولا يُستبدل المكتوب. فمن يحجز برقم غيره لا
+  // يمحو اسمه ولا عنوانه — والحقل الفارغ يبقى مفتوحاً لأن ملأه إضافةٌ لا إتلاف
+  const keep = (current: unknown) => !options.trusted && current !== null && current !== "";
+
   return client.patient.update({
     where: { id: patientId },
     data: {
-      ...(name !== undefined ? { fullName: name } : {}),
-      ...(input.phone !== undefined ? { phone: input.phone?.trim() || null } : {}),
-      ...(input.address !== undefined ? { address: input.address?.trim() || null } : {}),
-      ...(year !== undefined ? { birthYear: year } : {}),
-      ...(input.gender !== undefined ? { gender: input.gender } : {}),
+      ...(name !== undefined && !keep(patient.fullName) ? { fullName: name } : {}),
+      ...(input.phone !== undefined && !keep(patient.phone) ? { phone: input.phone?.trim() || null } : {}),
+      ...(input.address !== undefined && !keep(patient.address) ? { address: input.address?.trim() || null } : {}),
+      ...(year !== undefined && !keep(patient.birthYear) ? { birthYear: year } : {}),
+      ...(input.gender !== undefined && !keep(patient.gender) ? { gender: input.gender } : {}),
     },
     select: { id: true, fullName: true, isSelf: true, birthYear: true, gender: true, phone: true, address: true },
   });
