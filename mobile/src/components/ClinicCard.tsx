@@ -1,7 +1,7 @@
-import { View } from "react-native";
+import { Image, View } from "react-native";
 import { Icon } from "@/components/icons";
 import { Card, T } from "@/components/ui";
-import type { ClinicCard as Clinic } from "@/lib/api";
+import { mediaUrl, type ClinicCard as Clinic } from "@/lib/api";
 import { countLabel, COUNTS, formatFee, toArabic } from "@/lib/format";
 import { font, radius, space, tintFor, useIsDark, usePalette } from "@/theme";
 import { Text } from "react-native";
@@ -23,20 +23,30 @@ export function ClinicCard({
   const palette = usePalette();
   const isDark = useIsDark();
   const tint = tintFor(clinic.nameAr, isDark);
+  const photo = mediaUrl(clinic.photoUrl);
 
   return (
     <Card onPress={onPress} padded={false} style={wide ? { width: 244, overflow: "hidden" } : { overflow: "hidden" }}>
-      {/* شريط لوني بدل الصورة. أقصر في البطاقة العمودية: بلا صورة يصير الفراغ
-          الطويل مساحة ضائعة لا رأس بطاقة */}
+      {/* شريط لوني تحت الصورة لا بدلها: عيادةٌ بلا صورةٍ بعد تبقى برأسٍ ملوّن
+          لا مساحةً فارغة، وصورةٌ بطيئة التحميل لا تترك فجوة رمادية خلفها */}
       <View
         style={{
           height: wide ? 92 : 72,
           backgroundColor: tint.bg,
           alignItems: "center",
           justifyContent: "center",
+          overflow: "hidden",
         }}
       >
         <Icon.pin size={34} color={tint.fg} weight={1.5} />
+        {photo ? (
+          <Image
+            source={{ uri: photo }}
+            style={{ position: "absolute", inset: 0 }}
+            resizeMode="cover"
+            accessibilityIgnoresInvertColors
+          />
+        ) : null}
         {clinic.ratingCount > 0 ? (
           <View
             style={{

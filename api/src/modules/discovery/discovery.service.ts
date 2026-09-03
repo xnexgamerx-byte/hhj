@@ -73,6 +73,7 @@ export async function listClinics(
     select: {
       id: true,
       nameAr: true,
+      photoUrl: true,
       landmark: true,
       governorate: { select: { nameAr: true } },
       district: { select: { nameAr: true } },
@@ -103,6 +104,7 @@ export async function listClinics(
       return {
         id: clinic.id,
         nameAr: clinic.nameAr,
+        photoUrl: clinic.photoUrl,
         landmark: clinic.landmark,
         governorate: clinic.governorate.nameAr,
         district: clinic.district.nameAr,

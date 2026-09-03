@@ -325,6 +325,7 @@ export type Specialty = { id: number; slug: string; nameAr: string; doctorCount:
 export type ClinicCard = {
   id: string;
   nameAr: string;
+  photoUrl: string | null;
   landmark: string | null;
   governorate: string;
   district: string;

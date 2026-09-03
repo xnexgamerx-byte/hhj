@@ -51,7 +51,7 @@ type BannerRow = {
   sortOrder: number;
 };
 
-type Tab = "overview" | "doctors" | "staff" | "banners" | "commissions" | "reviews" | "messages";
+type Tab = "overview" | "doctors" | "clinics" | "staff" | "banners" | "commissions" | "reviews" | "messages";
 
 export default function OwnerDashboard() {
   const router = useRouter();
@@ -78,6 +78,7 @@ export default function OwnerDashboard() {
             [
               ["overview", "نظرة عامة"],
               ["doctors", "الأطباء"],
+              ["clinics", "العيادات"],
               ["staff", "السكرتيرون"],
               ["banners", "واجهة التطبيق"],
               ["commissions", "العمولات"],
@@ -103,6 +104,7 @@ export default function OwnerDashboard() {
 
         {tab === "overview" && <OverviewTab />}
         {tab === "doctors" && <DoctorsTab />}
+        {tab === "clinics" && <ClinicsTab />}
         {tab === "staff" && <StaffTab />}
         {tab === "banners" && <BannersTab />}
         {tab === "commissions" && <CommissionsTab />}
@@ -521,6 +523,155 @@ function DoctorPhoto({ row, onDone }: { row: DoctorRow; onDone: () => void }) {
   );
 }
 
+/* ── العيادات ───────────────────────────────────────────────── */
+
+/**
+ * قائمة العيادات وصورها. لا نموذج تعديلٍ عام للعيادة — تُنشأ عند إعداد
+ * عيادة طبيبٍ أول مرة (‎SetupClinicDialog‎)، وهذه الشاشة وحدها تعدّل
+ * صورتها بعد ذلك. باقي بياناتها (الاسم والموقع) ثابتة بعد الإنشاء عمداً:
+ * تغييرها لاحقاً قد يربك مرضى حجزوا على أساسها.
+ */
+function ClinicsTab() {
+  const [rows, setRows] = useState<ClinicRow[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const load = useCallback(() => {
+    api
+      .get<ClinicRow[]>("/owner/clinics")
+      .then(setRows)
+      .catch((e) => setError(e.message));
+  }, []);
+
+  useEffect(load, [load]);
+
+  return (
+    <>
+      <h2 className="text-[18px] font-bold mb-4" style={{ fontFamily: "var(--font-display)" }}>
+        العيادات
+      </h2>
+
+      {error && (
+        <div className="mb-4">
+          <Alert>{error}</Alert>
+        </div>
+      )}
+
+      {rows === null && <Loading />}
+      {rows?.length === 0 && (
+        <Card>
+          <EmptyState
+            title="لا عيادات بعد"
+            hint="تُنشأ العيادة عند إعداد عيادة طبيبٍ من تبويب «الأطباء»."
+          />
+        </Card>
+      )}
+
+      <div className="grid gap-2.5">
+        {rows?.map((row) => (
+          <Card key={row.id}>
+            <div className="flex gap-3 items-start">
+              <ClinicPhoto row={row} onDone={load} />
+              <div className="min-w-0">
+                <p className="text-[15.5px] font-bold">{row.nameAr}</p>
+                <p className="text-[13px] mt-0.5" style={{ color: "var(--muted)" }}>
+                  {row.district.nameAr} — {row.governorate.nameAr}
+                  {row.landmark ? ` · ${row.landmark}` : ""}
+                </p>
+                <p className="text-[13px] mt-0.5" style={{ color: "var(--primary)" }}>
+                  {countLabel(row._count.practices, {
+                    zero: "بلا طبيب بعد",
+                    one: "طبيبٌ واحد",
+                    two: "طبيبان",
+                    few: "أطباء",
+                    many: "طبيباً",
+                  })}
+                </p>
+              </div>
+            </div>
+          </Card>
+        ))}
+      </div>
+    </>
+  );
+}
+
+/**
+ * صورة العيادة — نفس منطق صورة الطبيب بالضبط: تُرفع وتُبدَّل من هنا،
+ * وأيقونة الموقع تبقى بديلاً حتى تُرفع صورة.
+ */
+function ClinicPhoto({ row, onDone }: { row: ClinicRow; onDone: () => void }) {
+  const [busy, setBusy] = useState(false);
+  const inputId = `clinic-photo-${row.id}`;
+  const photo = mediaUrl(row.photoUrl);
+
+  async function pick(file: File | undefined) {
+    if (!file) return;
+    setBusy(true);
+    try {
+      const { url } = await uploadFile("/owner/uploads", file);
+      await api.patch(`/owner/clinics/${row.id}/photo`, { photoUrl: url });
+      onDone();
+    } catch (e) {
+      alert((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="shrink-0 text-center">
+      <label
+        htmlFor={inputId}
+        className="block w-[62px] h-[68px] rounded-[10px] overflow-hidden cursor-pointer relative grid place-items-center"
+        style={{ background: "var(--primary-soft)", border: "1px solid var(--line)" }}
+        title="اضغط لتغيير الصورة"
+      >
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" style={{ color: "var(--primary)" }}>
+          <path
+            d="M12 21s-7-6.13-7-11a7 7 0 1 1 14 0c0 4.87-7 11-7 11Z"
+            stroke="currentColor"
+            strokeWidth="1.8"
+            strokeLinejoin="round"
+          />
+          <circle cx="12" cy="10" r="2.4" stroke="currentColor" strokeWidth="1.8" />
+        </svg>
+        {photo && (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={photo} alt="" className="absolute inset-0 w-full h-full object-cover" />
+        )}
+        {busy && (
+          <span
+            className="absolute inset-0 grid place-items-center text-[11px] font-semibold"
+            style={{ background: "rgba(0,0,0,.55)", color: "#fff" }}
+          >
+            يُرفع…
+          </span>
+        )}
+      </label>
+      <input
+        id={inputId}
+        type="file"
+        accept="image/png,image/jpeg,image/webp"
+        className="hidden"
+        onChange={(e) => void pick(e.target.files?.[0])}
+      />
+      {row.photoUrl && (
+        <button
+          type="button"
+          className="text-[11.5px] mt-1 underline"
+          style={{ color: "var(--muted)" }}
+          onClick={() => {
+            if (!confirm("حذف صورة العيادة؟")) return;
+            void api.patch(`/owner/clinics/${row.id}/photo`, { photoUrl: null }).then(onDone);
+          }}
+        >
+          حذف الصورة
+        </button>
+      )}
+    </div>
+  );
+}
+
 function SetupClinicDialog({
   doctor,
   onClose,
@@ -904,7 +1055,15 @@ type StaffRow = {
   scope: string;
 };
 
-type ClinicRow = { id: string; nameAr: string; governorate: { nameAr: string }; _count: { practices: number } };
+type ClinicRow = {
+  id: string;
+  nameAr: string;
+  photoUrl: string | null;
+  landmark: string | null;
+  governorate: { nameAr: string };
+  district: { nameAr: string };
+  _count: { practices: number };
+};
 
 function StaffTab() {
   const [rows, setRows] = useState<StaffRow[] | null>(null);

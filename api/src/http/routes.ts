@@ -181,6 +181,7 @@ export async function registerRoutes(app: FastifyInstance) {
       select: {
         id: true,
         nameAr: true,
+        photoUrl: true,
         landmark: true,
         governorate: { select: { nameAr: true } },
         district: { select: { nameAr: true } },
@@ -188,6 +189,32 @@ export async function registerRoutes(app: FastifyInstance) {
       },
     });
   });
+
+  /**
+   * صورة العيادة. لا واجهة تعديلٍ عامة للعيادة بعد — هذا الحقل وحده يُغيَّر
+   * بعد الإنشاء، وبنفس منطق صورة الطبيب: يستبدل لا يراكم، والقديمة تُحذف
+   * بعد نجاح الجديدة لا قبله.
+   */
+  app.patch<{ Params: { id: string }; Body: { photoUrl: string | null } }>(
+    "/owner/clinics/:id/photo",
+    ownerOnly,
+    async (request) => {
+      const clinic = await prisma.clinic.findUnique({
+        where: { id: request.params.id },
+        select: { photoUrl: true },
+      });
+      if (!clinic) throw notFound("CLINIC_NOT_FOUND", "العيادة غير موجودة");
+
+      const next = request.body?.photoUrl?.trim() || null;
+      const updated = await prisma.clinic.update({
+        where: { id: request.params.id },
+        data: { photoUrl: next },
+        select: { id: true, photoUrl: true },
+      });
+      if (clinic.photoUrl && clinic.photoUrl !== next) await removeImage(clinic.photoUrl);
+      return updated;
+    },
+  );
 
   app.get("/owner/doctors", ownerOnly, async () => {
     return prisma.doctor.findMany({

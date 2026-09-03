@@ -15,7 +15,12 @@ import { fileURLToPath } from "node:url";
 import { badRequest } from "./errors.js";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
-export const UPLOAD_DIR = path.resolve(HERE, "..", "..", "uploads");
+// UPLOAD_DIR قابلٌ للتوجيه بمتغيّر بيئة: القرص المحلّي المجاور للشفرة يكفي
+// للتطوير، لكن أغلب منصّات الاستضافة تمسحه مع كل إعادة تشغيل — فحين يُربط
+// قرصٌ دائم هناك، UPLOAD_DIR يشير إليه بدل مسارٍ يُمحى.
+export const UPLOAD_DIR = process.env.UPLOAD_DIR
+  ? path.resolve(process.env.UPLOAD_DIR)
+  : path.resolve(HERE, "..", "..", "uploads");
 export const UPLOAD_ROUTE = "/uploads";
 
 /** ٤ ميغابايت: صورة لافتةٍ بعرض ١٢٠٠ بكسل تبقى دونها بكثير */

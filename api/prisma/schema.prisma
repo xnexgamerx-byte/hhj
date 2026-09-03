@@ -321,6 +321,7 @@ model DoctorSpecialty {
 model Clinic {
   id            String   @id @default(uuid())
   nameAr        String
+  photoUrl      String?
   governorateId Int
   districtId    Int
   areaId        Int?
