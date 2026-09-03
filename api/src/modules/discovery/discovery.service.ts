@@ -5,7 +5,7 @@
 import type { PrismaClient } from "@prisma/client";
 import { prisma as defaultPrisma } from "../../lib/prisma.js";
 import { badRequest, forbidden, notFound } from "../../lib/errors.js";
-import { getNextAvailableDay } from "../availability/availability.service.js";
+import { getNextAvailableDays } from "../availability/availability.service.js";
 
 /** التخصصات مع عدد الأطباء المتاحين في كل منها — تخصص بلا أطباء لا يُعرض. */
 export async function listSpecialtiesWithCounts(
@@ -180,40 +180,45 @@ export async function searchDoctors(search: DoctorSearch, client: PrismaClient =
     },
   });
 
-  // أقرب موعد شاغر لكل طبيب — أهم رقم في بطاقة البحث
-  return Promise.all(
-    doctors.map(async (doctor) => {
-      const primary = doctor.practices[0];
-      const nextDay = primary ? await getNextAvailableDay(primary.id, client) : null;
-
-      return {
-        id: doctor.id,
-        title: doctor.title,
-        fullName: doctor.user.fullName,
-        photoUrl: doctor.photoUrl,
-        yearsOfExperience: doctor.yearsOfExperience,
-        gender: doctor.gender,
-        ratingAvg: doctor.ratingAvg,
-        ratingCount: doctor.ratingCount,
-        specialties: doctor.specialties.map((s) => s.specialty.nameAr),
-        practices: doctor.practices.map((practice) => ({
-          id: practice.id,
-          feeAmount: practice.feeAmount,
-          bookingMode: practice.bookingMode,
-          clinicName: practice.clinic.nameAr,
-          landmark: practice.clinic.landmark,
-          lat: practice.clinic.lat,
-          lng: practice.clinic.lng,
-          governorate: practice.clinic.governorate.nameAr,
-          governorateId: practice.clinic.governorate.id,
-          district: practice.clinic.district.nameAr,
-        })),
-        nextAvailable: nextDay
-          ? { date: nextDay.date, weekdayName: nextDay.weekdayName, freeCount: nextDay.freeCount }
-          : null,
-      };
-    }),
+  // أقرب موعد شاغر لكل طبيب — أهم رقم في بطاقة البحث.
+  // دفعةً واحدة لا واحداً واحداً: النداء المنفرد يجلب لكل طبيبٍ ثلاث مرّات،
+  // فخمسون طبيباً تعني مئةً وخمسين رحلةً إلى القاعدة قبل أن تظهر الصفحة.
+  const nextDays = await getNextAvailableDays(
+    doctors.map((doctor) => doctor.practices[0]?.id).filter((id): id is string => Boolean(id)),
+    client,
   );
+
+  return doctors.map((doctor) => {
+    const primary = doctor.practices[0];
+    const nextDay = primary ? (nextDays.get(primary.id) ?? null) : null;
+
+    return {
+      id: doctor.id,
+      title: doctor.title,
+      fullName: doctor.user.fullName,
+      photoUrl: doctor.photoUrl,
+      yearsOfExperience: doctor.yearsOfExperience,
+      gender: doctor.gender,
+      ratingAvg: doctor.ratingAvg,
+      ratingCount: doctor.ratingCount,
+      specialties: doctor.specialties.map((s) => s.specialty.nameAr),
+      practices: doctor.practices.map((practice) => ({
+        id: practice.id,
+        feeAmount: practice.feeAmount,
+        bookingMode: practice.bookingMode,
+        clinicName: practice.clinic.nameAr,
+        landmark: practice.clinic.landmark,
+        lat: practice.clinic.lat,
+        lng: practice.clinic.lng,
+        governorate: practice.clinic.governorate.nameAr,
+        governorateId: practice.clinic.governorate.id,
+        district: practice.clinic.district.nameAr,
+      })),
+      nextAvailable: nextDay
+        ? { date: nextDay.date, weekdayName: nextDay.weekdayName, freeCount: nextDay.freeCount }
+        : null,
+    };
+  });
 }
 
 export async function getDoctorProfile(doctorId: string, client: PrismaClient = defaultPrisma) {

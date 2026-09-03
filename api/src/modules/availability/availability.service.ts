@@ -68,6 +68,9 @@ type Options = {
   now?: Date;
 };
 
+/** مدى البحث عن «أقرب موعد» في بطاقة الطبيب */
+const SEARCH_HORIZON_DAYS = 14;
+
 export async function getAvailability(
   practiceId: string,
   fromISO: string,
@@ -115,6 +118,47 @@ export async function getAvailability(
       select: { slotStart: true, sessionStart: true, queueNumber: true },
     }),
   ]);
+
+  return computeDays(practice, exceptions, appointments, fromISO, lastISO, { includeTaken, earliest });
+}
+
+/** ما يحتاجه حساب الأوقات من العيادة — لا صفّها كاملاً */
+type PracticeShape = {
+  bookingMode: "SLOT" | "QUEUE";
+  slotMinutes: number;
+  capacityPerSession: number;
+  clinic: { timezone: string };
+  schedules: { weekday: number; startTime: string; endTime: string; slotMinutes: number | null; capacity: number | null }[];
+};
+
+type ExceptionShape = {
+  date: Date;
+  type: string;
+  startTime: string | null;
+  endTime: string | null;
+  capacity: number | null;
+  reason: string | null;
+};
+
+type AppointmentShape = { slotStart: Date; sessionStart: Date; queueNumber: number };
+
+/**
+ * حساب الأيام من بياناتٍ محمّلةٍ سلفاً — بلا أي استعلام.
+ *
+ * فُصل عن التحميل ليُستدعى مرّةً لكل عيادة على بياناتٍ جُلبت لعشرات العيادات
+ * في ثلاثة استعلامات. كان البحث يجلب لكل طبيبٍ على حدة، فخمسون طبيباً تعني
+ * مئةً وخمسين رحلةً إلى القاعدة — واثنتي عشرة ثانية قبل أن تظهر النتائج.
+ */
+function computeDays(
+  practice: PracticeShape,
+  exceptions: ExceptionShape[],
+  appointments: AppointmentShape[],
+  fromISO: string,
+  lastISO: string,
+  options: { includeTaken: boolean; earliest: Date },
+): DayAvailability[] {
+  const { includeTaken, earliest } = options;
+  const timeZone = practice.clinic.timezone;
 
   const takenSlots = new Set(appointments.map((a) => a.slotStart.toISOString()));
   const queueBySession = new Map<string, { count: number; max: number }>();
@@ -264,20 +308,88 @@ export async function getAvailability(
   return days;
 }
 
-/** أقرب يوم فيه مكان شاغر — يظهر في بطاقة الطبيب داخل نتائج البحث. */
-export async function getNextAvailableDay(
-  practiceId: string,
+
+/**
+ * أقرب يومٍ شاغر لعيادات كثيرة دفعةً واحدة.
+ *
+ * ثلاثة استعلامات مهما كان العدد، بدل ثلاثةٍ لكل عيادة. هذا ما يجعل صفحة
+ * البحث تظهر في جزءٍ من ثانية بدل اثنتي عشرة: «أقرب موعد» رقمٌ في كل بطاقة،
+ * وحسابُه واحداً واحداً يضرب كلفة الصفحة في عدد الأطباء.
+ *
+ * والمدى أسبوعان لا شهر: بطاقة البحث تقول «أقرب موعد الخميس»، ومن لا موعد
+ * له خلال أسبوعين لا يفيد المريضَ أن يعرف أنه متاحٌ بعد ثلاثة وعشرين يوماً —
+ * ويفتح صفحته فيرى تقويمه كاملاً على أي حال.
+ */
+export async function getNextAvailableDays(
+  practiceIds: string[],
   client: PrismaClient = defaultPrisma,
-): Promise<DayAvailability | null> {
-  const today = new Date().toISOString().slice(0, 10);
-  const days = await getAvailability(
-    practiceId,
-    today,
-    addDaysISO(today, 30),
-    { includeTaken: false },
-    client,
-  );
-  return days.find((day) => day.freeCount > 0) ?? null;
+): Promise<Map<string, DayAvailability | null>> {
+  const result = new Map<string, DayAvailability | null>();
+  if (practiceIds.length === 0) return result;
+
+  const now = new Date();
+  const today = now.toISOString().slice(0, 10);
+  const lastISO = addDaysISO(today, SEARCH_HORIZON_DAYS);
+
+  const practices = await client.doctorClinic.findMany({
+    where: { id: { in: practiceIds } },
+    include: { clinic: { select: { timezone: true } }, schedules: { where: { isActive: true } } },
+  });
+  if (practices.length === 0) return result;
+
+  // مدى زمنيّ واحدٌ واسعٌ يغطّي كل المناطق: فروق التوقيت بين عيادةٍ وأخرى
+  // ساعاتٌ لا أيام، ويومٌ إضافيٌّ على الطرفين أرخص من استعلامٍ لكل منطقة
+  const rangeStart = new Date(`${addDaysISO(today, -1)}T00:00:00.000Z`);
+  const rangeEnd = new Date(`${addDaysISO(lastISO, 2)}T00:00:00.000Z`);
+
+  const [exceptions, appointments] = await Promise.all([
+    client.scheduleException.findMany({
+      where: {
+        doctorClinicId: { in: practiceIds },
+        date: { gte: new Date(`${today}T00:00:00.000Z`), lte: new Date(`${lastISO}T00:00:00.000Z`) },
+      },
+    }),
+    client.appointment.findMany({
+      where: {
+        doctorClinicId: { in: practiceIds },
+        lockKey: true,
+        sessionStart: { gte: rangeStart, lt: rangeEnd },
+      },
+      select: { doctorClinicId: true, slotStart: true, sessionStart: true, queueNumber: true },
+    }),
+  ]);
+
+  const exceptionsByPractice = new Map<string, ExceptionShape[]>();
+  for (const row of exceptions) {
+    const list = exceptionsByPractice.get(row.doctorClinicId) ?? [];
+    list.push(row);
+    exceptionsByPractice.set(row.doctorClinicId, list);
+  }
+
+  const appointmentsByPractice = new Map<string, AppointmentShape[]>();
+  for (const row of appointments) {
+    const list = appointmentsByPractice.get(row.doctorClinicId) ?? [];
+    list.push(row);
+    appointmentsByPractice.set(row.doctorClinicId, list);
+  }
+
+  for (const practice of practices) {
+    // لا نتجاوز مدى الحجز الذي حدده الطبيب
+    const horizonISO = new Date(now.getTime() + practice.bookingHorizonDays * 86_400_000)
+      .toISOString()
+      .slice(0, 10);
+    const days = computeDays(
+      practice,
+      exceptionsByPractice.get(practice.id) ?? [],
+      appointmentsByPractice.get(practice.id) ?? [],
+      today,
+      lastISO < horizonISO ? lastISO : horizonISO,
+      { includeTaken: false, earliest: now },
+    );
+    result.set(practice.id, days.find((day) => day.freeCount > 0) ?? null);
+  }
+
+  return result;
 }
 
 /** يتحقق أن الوقت الذي اختاره المريض ما زال ضمن دوام الطبيب وغير محجوز. */

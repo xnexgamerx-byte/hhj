@@ -6,18 +6,40 @@
  * أنظمة الحجز — يظهر متأخراً وعلى شكل مواعيد بفارق ساعات.
  */
 
+/**
+ * المنسّقات محفوظة بمفتاح المنطقة الزمنية.
+ *
+ * بناء Intl.DateTimeFormat عمليةٌ ثقيلة — يقرأ قواعد المنطقة الزمنية ويبني
+ * جدولها. وحساب أوقات خمسين عيادةً لأسبوعين يستدعي التحويل عشرات الآلاف من
+ * المرّات، فبناؤه في كل نداء كان يأكل معظم زمن صفحة البحث. والمنسّق لا حالة
+ * له بعد الإنشاء فحفظه آمن.
+ */
+const formatters = new Map<string, Intl.DateTimeFormat>();
+
+function formatter(key: string, build: () => Intl.DateTimeFormat): Intl.DateTimeFormat {
+  const cached = formatters.get(key);
+  if (cached) return cached;
+  const made = build();
+  formatters.set(key, made);
+  return made;
+}
+
 /** فرق المنطقة الزمنية بالمللي ثانية عند لحظة معيّنة. */
 function offsetMsAt(instant: Date, timeZone: string): number {
-  const parts = new Intl.DateTimeFormat("en-US", {
-    timeZone,
-    hour12: false,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-  }).formatToParts(instant);
+  const parts = formatter(
+    `offset:${timeZone}`,
+    () =>
+      new Intl.DateTimeFormat("en-US", {
+        timeZone,
+        hour12: false,
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+      }),
+  ).formatToParts(instant);
 
   const get = (type: string) => Number(parts.find((p) => p.type === type)?.value ?? 0);
   const hour = get("hour") === 24 ? 0 : get("hour");
@@ -44,30 +66,26 @@ export function zonedToUtc(dateISO: string, time: string, timeZone: string): Dat
 
 /** التاريخ بصيغة YYYY-MM-DD كما يقع في المنطقة الزمنية المعطاة. */
 export function utcToZonedDateISO(instant: Date, timeZone: string): string {
-  const parts = new Intl.DateTimeFormat("en-CA", {
-    timeZone,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).formatToParts(instant);
+  const parts = formatter(
+    `date:${timeZone}`,
+    () => new Intl.DateTimeFormat("en-CA", { timeZone, year: "numeric", month: "2-digit", day: "2-digit" }),
+  ).formatToParts(instant);
   const get = (type: string) => parts.find((p) => p.type === type)?.value ?? "";
   return `${get("year")}-${get("month")}-${get("day")}`;
 }
 
 /** الوقت بصيغة HH:MM كما يقع في المنطقة الزمنية المعطاة. */
 export function utcToZonedTime(instant: Date, timeZone: string): string {
-  return new Intl.DateTimeFormat("en-GB", {
-    timeZone,
-    hour12: false,
-    hour: "2-digit",
-    minute: "2-digit",
-  }).format(instant);
+  return formatter(
+    `time:${timeZone}`,
+    () => new Intl.DateTimeFormat("en-GB", { timeZone, hour12: false, hour: "2-digit", minute: "2-digit" }),
+  ).format(instant);
 }
 
 /** رقم اليوم في الأسبوع بتوقيت العيادة: ٠ = الأحد … ٦ = السبت. */
 export function zonedWeekday(dateISO: string, timeZone: string): number {
   const noon = zonedToUtc(dateISO, "12:00", timeZone);
-  const name = new Intl.DateTimeFormat("en-US", { timeZone, weekday: "short" }).format(noon);
+  const name = formatter(`weekday:${timeZone}`, () => new Intl.DateTimeFormat("en-US", { timeZone, weekday: "short" })).format(noon);
   return ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].indexOf(name);
 }
 
