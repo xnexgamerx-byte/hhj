@@ -1,20 +1,15 @@
 /**
  * مساران للدخول:
- *   المريض  → رقم هاتف + رمز تحقق، بلا باسوورد
+ *   المريض  → رقم هاتف فقط، بلا رمز تحقق ولا باسوورد
  *   الطبيب والسكرتير والمالك → إيميل + باسوورد أنشأهما المالك
  */
-import { createHash, randomInt } from "node:crypto";
 import type { PrismaClient, UserRole } from "@prisma/client";
 import { prisma as defaultPrisma } from "../../lib/prisma.js";
 import { hashPassword, validatePasswordStrength, verifyPassword } from "../../lib/password.js";
 import { normalizeIraqiPhone } from "../../lib/phone.js";
 import { createRefreshToken, hashRefreshToken, signAccessToken } from "../../lib/tokens.js";
-import { badRequest, forbidden, unauthorized, tooMany } from "../../lib/errors.js";
+import { badRequest, forbidden, unauthorized } from "../../lib/errors.js";
 
-const OTP_TTL_MINUTES = 5;
-const OTP_MAX_ATTEMPTS = 5;
-// خمسة رموز في الساعة تكفي من نسي أو تأخّرت رسالته، ولا تكفي من يقصف رقماً
-const OTP_MAX_PER_HOUR = 5;
 const LOGIN_MAX_FAILURES = 5;
 const LOGIN_LOCK_MINUTES = 15;
 
@@ -119,72 +114,19 @@ export async function changePassword(
   });
 }
 
-// ── دخول المريض برمز تحقق ────────────────────────────────────────
+// ── دخول المريض برقم الهاتف ───────────────────────────────────────
 
-/** يُرجع الرمز نصاً في بيئة التطوير فقط؛ في الإنتاج يُرسل بالرسائل النصية. */
-export async function requestOtp(
+/**
+ * دخولٌ فوريّ بلا تحقق: يكفي الرقم ليُنشأ الحساب أو يُستأنف. القيد الوحيد
+ * هو حدّ الطلبات على المسار نفسه (انظر `gate` في routes.ts) — لا حدّ رسائل
+ * لأنه لا رسالة تُرسل أصلاً.
+ */
+export async function loginByPhone(
   rawPhone: string,
-  client: PrismaClient = defaultPrisma,
-): Promise<{ phone: string; expiresAt: Date; devCode?: string }> {
-  const phone = normalizeIraqiPhone(rawPhone);
-
-  // الحدّ هنا على الرقم لا على عنوان الشبكة، ومن جهتين:
-  //
-  // الأولى أنّ كل طلب يرسل رسالة لها ثمن، وبلا حدٍّ يستطيع أيّ أحد أن يغرق
-  // هاتف غيره برسائل ويستنزف الرصيد معاً.
-  //
-  // والثانية أنّ الحدّ على العنوان وحده لا يصلح هنا: شبكات الهاتف في العراق
-  // تُخرج آلاف المشتركين من عناوين عامة قليلة، فحدٌّ ضيّق على العنوان يحجب
-  // شبكة بأكملها عن الدخول.
-  const now = new Date();
-  const [sinceMinute, sinceHour] = await Promise.all([
-    client.otpCode.count({ where: { phone, createdAt: { gt: new Date(now.getTime() - 60_000) } } }),
-    client.otpCode.count({ where: { phone, createdAt: { gt: new Date(now.getTime() - 3_600_000) } } }),
-  ]);
-  if (sinceMinute > 0) {
-    throw tooMany("OTP_COOLDOWN", "أرسلنا رمزاً للتو. انتظر دقيقة قبل طلب رمز جديد.");
-  }
-  if (sinceHour >= OTP_MAX_PER_HOUR) {
-    throw tooMany("OTP_LIMIT", "طلبت رموزاً كثيرة لهذا الرقم. حاول بعد ساعة.");
-  }
-
-  const code = String(randomInt(100000, 1000000));
-  const expiresAt = new Date(now.getTime() + OTP_TTL_MINUTES * 60_000);
-
-  await client.otpCode.create({
-    data: { phone, codeHash: createHash("sha256").update(code).digest("hex"), expiresAt },
-  });
-
-  return {
-    phone,
-    expiresAt,
-    devCode: process.env.NODE_ENV === "production" ? undefined : code,
-  };
-}
-
-export async function verifyOtp(
-  rawPhone: string,
-  code: string,
   fullName: string | undefined,
   client: PrismaClient = defaultPrisma,
 ): Promise<Session> {
   const phone = normalizeIraqiPhone(rawPhone);
-  const codeHash = createHash("sha256").update(code.trim()).digest("hex");
-
-  const record = await client.otpCode.findFirst({
-    where: { phone, consumedAt: null, expiresAt: { gt: new Date() } },
-    orderBy: { createdAt: "desc" },
-  });
-  if (!record) throw unauthorized("OTP_EXPIRED", "الرمز منتهي أو غير موجود. اطلب رمزاً جديداً");
-  if (record.attempts >= OTP_MAX_ATTEMPTS) {
-    throw forbidden("OTP_ATTEMPTS_EXCEEDED", "تجاوزت عدد المحاولات. اطلب رمزاً جديداً");
-  }
-  if (record.codeHash !== codeHash) {
-    await client.otpCode.update({ where: { id: record.id }, data: { attempts: record.attempts + 1 } });
-    throw unauthorized("OTP_INVALID", "الرمز غير صحيح");
-  }
-
-  await client.otpCode.update({ where: { id: record.id }, data: { consumedAt: new Date() } });
 
   let user = await client.user.findUnique({ where: { phone } });
   if (!user) {

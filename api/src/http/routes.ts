@@ -3,11 +3,10 @@ import { prisma } from "../lib/prisma.js";
 import { authenticate, requireRole } from "./guard.js";
 import {
   changePassword,
+  loginByPhone,
   loginWithPassword,
   logout,
   refreshSession,
-  requestOtp,
-  verifyOtp,
 } from "../modules/auth/auth.service.js";
 import {
   createDoctorAccount,
@@ -107,30 +106,20 @@ export async function registerRoutes(app: FastifyInstance) {
   });
 
   // أبواب الدخول أضيق من العامّ، وأوسع مما يبدو لازماً: خلف CGNAT يشترك
-  // مشتركو شبكةٍ كاملة في عنوان واحد. الحارس الحقيقي هنا ليس العنوان بل
-  // قفلُ الحساب بعد محاولات فاشلة، وحدُّ الرقم في طلب الرمز — وكلاهما يميّز
-  // الفاعل بعينه. هذا الحدّ يوقف الآلة التي تمرّ على آلاف الحسابات فحسب.
+  // مشتركو شبكةٍ كاملة في عنوان واحد. هذا الحدّ يوقف الآلة التي تمرّ على
+  // آلاف الحسابات فحسب — لا يميّز الفاعل بعينه، فليس بديلاً عن التحقق.
   const gate = { config: { rateLimit: { max: 30, timeWindow: "10 minutes" } } };
-  const otpGate = { config: { rateLimit: { max: 60, timeWindow: "10 minutes" } } };
 
   // ── دخول المريض برقم الهاتف ───────────────────────────────────
-  // المسارات المفتوحة تقرأ حقولها عبر requireText: جسمٌ ناقصٌ أو بحقلٍ من
-  // نوعٍ آخر يجب أن يرجع ٤٠٠ لا ٥٠٠ — انظر تعليقها في lib/errors.ts
-  app.post<{ Body: { phone: string } }>("/auth/otp/request", otpGate, async (request) => {
-    return requestOtp(requireText(request.body?.phone, "رقم الهاتف"));
+  // بلا رمز تحقق: الرقم وحده يكفي ليُنشأ الحساب أو يُستأنف، فيصير الحجز
+  // ضغطةً واحدة. المسارات المفتوحة تقرأ حقولها عبر requireText: جسمٌ ناقصٌ
+  // أو بحقلٍ من نوعٍ آخر يجب أن يرجع ٤٠٠ لا ٥٠٠ — انظر تعليقها في lib/errors.ts
+  app.post<{ Body: { phone: string; fullName?: string } }>("/auth/phone/login", gate, async (request) => {
+    return loginByPhone(
+      requireText(request.body?.phone, "رقم الهاتف"),
+      optionalText(request.body?.fullName, "الاسم"),
+    );
   });
-
-  app.post<{ Body: { phone: string; code: string; fullName?: string } }>(
-    "/auth/otp/verify",
-    gate,
-    async (request) => {
-      return verifyOtp(
-        requireText(request.body?.phone, "رقم الهاتف"),
-        requireText(request.body?.code, "رمز التحقق"),
-        optionalText(request.body?.fullName, "الاسم"),
-      );
-    },
-  );
 
   // ── دخول الطبيب والسكرتير والمالك ─────────────────────────────
   app.post<{ Body: { email: string; password: string } }>("/auth/login", gate, async (request) => {

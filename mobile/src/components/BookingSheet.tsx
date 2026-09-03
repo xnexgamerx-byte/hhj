@@ -40,12 +40,13 @@ function localPhone(value: string | null | undefined): string {
 }
 
 /**
- * لوحة الحجز: دخول برقم الهاتف إن لزم، ثم بيانات المريض والتأكيد.
+ * لوحة الحجز: بيانات المريض ثم لمسة تثبّت الموعد.
  *
- * المبدأ الذي يجعلها سهلة: نسأل مرّةً واحدة.
- * العيادة تسأل الاسم والهاتف والعنوان والعمر في كل زيارة أولى، فنسألها في
- * أول حجز ونحفظها في المريض. الحجز الثاني يعرضها في سطرٍ مع «تعديل» — لمسةٌ
- * واحدة تثبّت الموعد. أربعة حقول في كل مرّة ليست شاشةً بسيطة مهما رُتّبت.
+ * المبدأ الذي يجعلها سهلة: نسأل مرّةً واحدة، وبلا رمز تحقق. العيادة تسأل
+ * الاسم والهاتف والعنوان والعمر في كل زيارة أولى، فنسألها في أول حجز
+ * ونحفظها في المريض — الاسم والهاتف نفسهما يفتحان حسابه في الخلفية دون
+ * خطوةٍ منفصلة يشعر بها. الحجز الثاني يعرضها في سطرٍ مع «تعديل»، فتصير
+ * لمسةً واحدة تثبّت الموعد.
  */
 export function BookingSheet({
   practiceId,
@@ -76,8 +77,8 @@ export function BookingSheet({
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState<{ dailyNumber: number; reference: string; queueNumber: number } | null>(null);
 
-  // بيانات المريض
-  const [editing, setEditing] = useState(false);
+  // بيانات المريض — تبدأ مفتوحةً لأنّ من لم يسجّل الدخول بعد لا بيانات محفوظة له
+  const [editing, setEditing] = useState(true);
   const [fullName, setFullName] = useState("");
   const [phone, setPhone] = useState("");
   const [address, setAddress] = useState("");
@@ -86,13 +87,6 @@ export function BookingSheet({
   // الملاحظة
   const [conditions, setConditions] = useState<string[]>([]);
   const [note, setNote] = useState("");
-
-  // الدخول
-  const [loginPhone, setLoginPhone] = useState("");
-  const [loginName, setLoginName] = useState("");
-  const [code, setCode] = useState("");
-  const [otpSent, setOtpSent] = useState(false);
-  const [devCode, setDevCode] = useState<string | null>(null);
 
   const patient = patients.find((p) => p.id === patientId);
 
@@ -127,38 +121,6 @@ export function BookingSheet({
     });
   }, [loadPatients]);
 
-  async function requestCode() {
-    setBusy(true);
-    setError(null);
-    try {
-      const result = await api.post<{ devCode?: string }>("/auth/otp/request", { phone: loginPhone });
-      setOtpSent(true);
-      setDevCode(result.devCode ?? null);
-    } catch (e) {
-      setError((e as Error).message);
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function verifyCode() {
-    setBusy(true);
-    setError(null);
-    try {
-      const session = await api.post<{ accessToken: string; refreshToken: string; user: SessionUser }>(
-        "/auth/otp/verify",
-        { phone: loginPhone, code, fullName: loginName },
-      );
-      await saveSession(session);
-      setUser(session.user);
-      loadPatients(session.user.phone);
-    } catch (e) {
-      setError((e as Error).message);
-    } finally {
-      setBusy(false);
-    }
-  }
-
   /** الملاحظة النهائية: ما لُمس من الحالات ثم ما كُتب بحرّية */
   const composedNote = useMemo(() => {
     const parts = [];
@@ -175,11 +137,28 @@ export function BookingSheet({
     setBusy(true);
     setError(null);
     try {
+      let activePatientId = patientId;
+
+      // لا جلسة بعد؟ الاسم والهاتف اللذان كتبهما للتوّ في نموذج البيانات
+      // يفتحان حسابه مباشرة — بلا رمزٍ يُرسَل أو يُكتب في خطوة منفصلة
+      if (!user || user.role !== "PATIENT") {
+        const session = await api.post<{ accessToken: string; refreshToken: string; user: SessionUser }>(
+          "/auth/phone/login",
+          { phone: phone.trim(), fullName: fullName.trim() },
+        );
+        await saveSession(session);
+        setUser(session.user);
+        const list = await api.get<Patient[]>("/me/patients");
+        setPatients(list);
+        activePatientId = list.find((p) => p.isSelf)?.id ?? list[0]?.id ?? "";
+        setPatientId(activePatientId);
+      }
+
       // البيانات تُحفظ في المريض قبل الحجز: هي صفته لا صفة موعده، فتصلح
       // للحجز القادم أيضاً. وفشلها لا يُفشل الحجز — الموعد أهمّ من العنوان
       if (editing) {
         try {
-          const saved = await api.patch<Patient>(`/me/patients/${patientId}`, {
+          const saved = await api.patch<Patient>(`/me/patients/${activePatientId}`, {
             fullName: fullName.trim(),
             phone: phone.trim() || null,
             address: address.trim() || null,
@@ -194,7 +173,7 @@ export function BookingSheet({
 
       const result = await api.post<{ dailyNumber: number; reference: string; queueNumber: number }>("/bookings", {
         doctorClinicId: practiceId,
-        patientId,
+        patientId: activePatientId,
         startAt: chosen.startAt,
         patientNote: composedNote || undefined,
       });
@@ -261,161 +240,117 @@ export function BookingSheet({
 
               {error ? <Alert message={error} /> : null}
 
-              {!user || user.role !== "PATIENT" ? (
-                <View style={{ gap: space(3) }}>
-                  <T size={13.5} tone="muted">
-                    أدخل رقم هاتفك ليصلك رمز تحقق — بلا كلمة مرور.
-                  </T>
-                  <Field label="رقم الهاتف">
-                    <Input
-                      value={loginPhone}
-                      onChangeText={setLoginPhone}
-                      placeholder="07701234567"
-                      keyboardType="phone-pad"
-                      editable={!otpSent}
-                    />
-                  </Field>
-
-                  {!otpSent ? (
-                    <Button
-                      label="إرسال الرمز"
-                      full
-                      loading={busy}
-                      disabled={loginPhone.length < 10}
-                      onPress={requestCode}
-                    />
-                  ) : (
-                    <>
-                      <Field label="الاسم الكامل" hint="يظهر للطبيب في قائمة مرضاه">
-                        <Input value={loginName} onChangeText={setLoginName} placeholder="الاسم الثلاثي" />
-                      </Field>
-                      <Field label="رمز التحقق" hint={devCode ? `رمز التطوير: ${devCode}` : "وصلك برسالة نصية"}>
-                        <Input
-                          value={code}
-                          onChangeText={setCode}
-                          placeholder="******"
-                          keyboardType="number-pad"
-                          maxLength={6}
-                          style={{ textAlign: "center", letterSpacing: 8 }}
-                        />
-                      </Field>
-                      <Button label="تأكيد الرمز" full loading={busy} disabled={code.length < 6} onPress={verifyCode} />
-                    </>
-                  )}
-                </View>
-              ) : (
-                <View style={{ gap: space(4) }}>
-                  {patients.length > 1 ? (
-                    <Field label="الموعد لمن؟">
-                      <View style={{ flexDirection: "row", flexWrap: "wrap", gap: space(2) }}>
-                        {patients.map((p) => {
-                          const active = p.id === patientId;
-                          return (
-                            <Pressable
-                              key={p.id}
-                              accessibilityRole="button"
-                              accessibilityState={{ selected: active }}
-                              onPress={() => {
-                                setPatientId(p.id);
-                                adopt(p, user.phone);
-                              }}
-                              style={{
-                                paddingHorizontal: space(3.5),
-                                paddingVertical: space(2.25),
-                                borderRadius: radius.pill,
-                                backgroundColor: active ? palette.primary : palette.surface2,
-                                borderWidth: 1.4,
-                                borderColor: active ? palette.primary : palette.lineStrong,
-                              }}
-                            >
-                              <T size={13.5} weight="semibold" tone={active ? "onPrimary" : "ink"}>
-                                {p.fullName}
-                                {p.isSelf ? " (أنا)" : ""}
-                              </T>
-                            </Pressable>
-                          );
-                        })}
-                      </View>
-                    </Field>
-                  ) : null}
-
-                  {editing ? (
-                    <View style={{ gap: space(3) }}>
-                      <T size={13.5} tone="muted">
-                        تسألها العيادة مرّةً واحدة، ونحفظها لحجوزك القادمة.
-                      </T>
-                      <Field label="اسم المريض">
-                        <Input value={fullName} onChangeText={setFullName} placeholder="الاسم الثلاثي" />
-                      </Field>
-                      <Field label="رقم الهاتف">
-                        <Input
-                          value={phone}
-                          onChangeText={setPhone}
-                          placeholder="07701234567"
-                          keyboardType="phone-pad"
-                        />
-                      </Field>
-                      <Field label="العنوان" hint="القضاء والحي يكفيان">
-                        <Input value={address} onChangeText={setAddress} placeholder="الكرخ — حي الجامعة" />
-                      </Field>
-                      <Field label="العمر" hint={ageValid ? undefined : "اكتب العمر بالسنين"}>
-                        <Input
-                          value={age}
-                          onChangeText={setAge}
-                          placeholder="32"
-                          keyboardType="number-pad"
-                          maxLength={3}
-                        />
-                      </Field>
+              <View style={{ gap: space(4) }}>
+                {patients.length > 1 ? (
+                  <Field label="الموعد لمن؟">
+                    <View style={{ flexDirection: "row", flexWrap: "wrap", gap: space(2) }}>
+                      {patients.map((p) => {
+                        const active = p.id === patientId;
+                        return (
+                          <Pressable
+                            key={p.id}
+                            accessibilityRole="button"
+                            accessibilityState={{ selected: active }}
+                            onPress={() => {
+                              setPatientId(p.id);
+                              adopt(p, user?.phone);
+                            }}
+                            style={{
+                              paddingHorizontal: space(3.5),
+                              paddingVertical: space(2.25),
+                              borderRadius: radius.pill,
+                              backgroundColor: active ? palette.primary : palette.surface2,
+                              borderWidth: 1.4,
+                              borderColor: active ? palette.primary : palette.lineStrong,
+                            }}
+                          >
+                            <T size={13.5} weight="semibold" tone={active ? "onPrimary" : "ink"}>
+                              {p.fullName}
+                              {p.isSelf ? " (أنا)" : ""}
+                            </T>
+                          </Pressable>
+                        );
+                      })}
                     </View>
-                  ) : (
-                    <SavedDetails
-                      fullName={fullName}
-                      phone={phone}
-                      address={address}
-                      age={age}
-                      onEdit={() => setEditing(true)}
-                    />
-                  )}
-
-                  <Divider />
-
-                  <Field label="عندك حالة يعرفها الطبيب؟" hint="اختياري — يلمسها المريض فتصل مع الحجز">
-                    <Chips
-                      options={CONDITIONS}
-                      selected={conditions}
-                      onToggle={(value) =>
-                        setConditions((list) =>
-                          list.includes(value) ? list.filter((c) => c !== value) : [...list, value],
-                        )
-                      }
-                    />
                   </Field>
+                ) : null}
 
-                  <Input
-                    value={note}
-                    onChangeText={setNote}
-                    placeholder="أي شيء آخر للطبيب — مثلاً: ألم في الصدر منذ يومين"
-                    multiline
-                    numberOfLines={2}
+                {editing ? (
+                  <View style={{ gap: space(3) }}>
+                    <T size={13.5} tone="muted">
+                      تسألها العيادة مرّةً واحدة، ونحفظها لحجوزك القادمة.
+                    </T>
+                    <Field label="اسم المريض">
+                      <Input value={fullName} onChangeText={setFullName} placeholder="الاسم الثلاثي" />
+                    </Field>
+                    <Field label="رقم الهاتف">
+                      <Input
+                        value={phone}
+                        onChangeText={setPhone}
+                        placeholder="07701234567"
+                        keyboardType="phone-pad"
+                      />
+                    </Field>
+                    <Field label="العنوان" hint="القضاء والحي يكفيان">
+                      <Input value={address} onChangeText={setAddress} placeholder="الكرخ — حي الجامعة" />
+                    </Field>
+                    <Field label="العمر" hint={ageValid ? undefined : "اكتب العمر بالسنين"}>
+                      <Input
+                        value={age}
+                        onChangeText={setAge}
+                        placeholder="32"
+                        keyboardType="number-pad"
+                        maxLength={3}
+                      />
+                    </Field>
+                  </View>
+                ) : (
+                  <SavedDetails
+                    fullName={fullName}
+                    phone={phone}
+                    address={address}
+                    age={age}
+                    onEdit={() => setEditing(true)}
                   />
+                )}
 
-                  <T size={12.5} tone="faint">
-                    يمكنك الإلغاء حتى {toArabic(Math.round(cancelCutoffMinutes / 60))} ساعة قبل الموعد.
-                  </T>
+                <Divider />
 
-                  <Button
-                    label="تثبيت الحجز"
-                    variant="primary"
-                    size="lg"
-                    full
-                    loading={busy}
-                    disabled={!patientId || !detailsReady}
-                    onPress={confirm}
+                <Field label="عندك حالة يعرفها الطبيب؟" hint="اختياري — يلمسها المريض فتصل مع الحجز">
+                  <Chips
+                    options={CONDITIONS}
+                    selected={conditions}
+                    onToggle={(value) =>
+                      setConditions((list) =>
+                        list.includes(value) ? list.filter((c) => c !== value) : [...list, value],
+                      )
+                    }
                   />
-                  <Button label="رجوع" variant="ghost" full onPress={onClose} />
-                </View>
-              )}
+                </Field>
+
+                <Input
+                  value={note}
+                  onChangeText={setNote}
+                  placeholder="أي شيء آخر للطبيب — مثلاً: ألم في الصدر منذ يومين"
+                  multiline
+                  numberOfLines={2}
+                />
+
+                <T size={12.5} tone="faint">
+                  يمكنك الإلغاء حتى {toArabic(Math.round(cancelCutoffMinutes / 60))} ساعة قبل الموعد.
+                </T>
+
+                <Button
+                  label="تثبيت الحجز"
+                  variant="primary"
+                  size="lg"
+                  full
+                  loading={busy}
+                  disabled={!detailsReady || (patients.length > 0 && !patientId)}
+                  onPress={confirm}
+                />
+                <Button label="رجوع" variant="ghost" full onPress={onClose} />
+              </View>
             </>
           )}
         </ScrollView>

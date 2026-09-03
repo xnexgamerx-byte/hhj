@@ -187,13 +187,7 @@ await page.getByRole("button", { name: "متابعة الحجز" }).click();
 await page.waitForTimeout(1200);
 
 await page.getByPlaceholder("07701234567").fill(`077${stamp}`);
-await page.getByRole("button", { name: "إرسال الرمز" }).click();
-await page.waitForTimeout(1500);
-const code = (await page.getByText(/رمز التطوير/).textContent()).match(/(\d{6})/)[1];
 await page.getByPlaceholder("الاسم الثلاثي").fill("مريض الاختبار");
-await page.getByPlaceholder("******").fill(code);
-await page.getByRole("button", { name: "تأكيد الرمز" }).click();
-await page.waitForTimeout(2000);
 
 await page.getByPlaceholder(/ألم في الصدر/).fill("ملاحظة اختبارية");
 await shot("m4-booking");

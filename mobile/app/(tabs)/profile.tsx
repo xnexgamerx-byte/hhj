@@ -31,7 +31,7 @@ export default function ProfileScreen() {
   );
 
   function askLogout() {
-    RNAlert.alert("تسجيل الخروج", "راح تحتاج رمز تحقق جديد عند الحجز القادم.", [
+    RNAlert.alert("تسجيل الخروج", "راح تحتاج تكتب اسمك ورقم هاتفك من جديد عند الحجز القادم.", [
       { text: "تراجع", style: "cancel" },
       {
         text: "خروج",

@@ -149,14 +149,7 @@ await slots.nth(2).click();
 await patient.waitForTimeout(700);
 
 await patient.getByLabel("رقم الهاتف").fill(`077${stamp}`);
-await patient.getByRole("button", { name: "إرسال الرمز" }).click();
-await patient.waitForTimeout(1200);
-const code = (await patient.getByText(/رمز التطوير/).textContent()).match(/(\d{6})/)[1];
 await patient.getByLabel("الاسم الكامل").fill("مريض الاختبار");
-await patient.getByLabel("رمز التحقق").fill(code);
-await patient.getByRole("button", { name: "تأكيد الرمز" }).click();
-await patient.waitForTimeout(1500);
-
 await patient.getByLabel("ملاحظة للطبيب").fill("ملاحظة اختبارية");
 await patient.getByRole("button", { name: "تثبيت الحجز" }).click();
 await patient.waitForTimeout(2500);

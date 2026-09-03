@@ -421,7 +421,7 @@ function SessionBlock({
   );
 }
 
-/** لوحة الحجز: تسجيل الدخول برقم الهاتف إن لزم، ثم اختيار المريض والتأكيد. */
+/** لوحة الحجز: بيانات المريض إن لزم، ثم اختيار المريض والتأكيد — بلا رمز تحقق. */
 function BookingPanel({
   practiceId,
   doctorName,
@@ -449,12 +449,9 @@ function BookingPanel({
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState<{ reference: string; queueNumber: number } | null>(null);
 
-  // خطوات تسجيل الدخول برقم الهاتف
+  // بيانات المريض: الاسم والهاتف نفساهما يفتحان الحساب أيضاً، بلا رمز تحقق
   const [phone, setPhone] = useState("");
   const [fullName, setFullName] = useState("");
-  const [code, setCode] = useState("");
-  const [otpSent, setOtpSent] = useState(false);
-  const [devCode, setDevCode] = useState<string | null>(null);
 
   const loadPatients = useCallback(() => {
     api
@@ -472,45 +469,32 @@ function BookingPanel({
     if (session?.role === "PATIENT") loadPatients();
   }, [loadPatients]);
 
-  async function requestCode() {
-    setBusy(true);
-    setError(null);
-    try {
-      const result = await api.post<{ devCode?: string }>("/auth/otp/request", { phone });
-      setOtpSent(true);
-      setDevCode(result.devCode ?? null);
-    } catch (e) {
-      setError((e as Error).message);
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function verifyCode() {
-    setBusy(true);
-    setError(null);
-    try {
-      const session = await api.post<{ accessToken: string; refreshToken: string; user: SessionUser }>(
-        "/auth/otp/verify",
-        { phone, code, fullName },
-      );
-      saveSession(session);
-      setUser(session.user);
-      loadPatients();
-    } catch (e) {
-      setError((e as Error).message);
-    } finally {
-      setBusy(false);
-    }
-  }
+  const loggedIn = user?.role === "PATIENT";
+  const canConfirm = loggedIn ? Boolean(patientId) : phone.trim().length >= 10 && fullName.trim().length >= 3;
 
   async function confirm() {
     setBusy(true);
     setError(null);
     try {
+      let activePatientId = patientId;
+
+      // لا جلسة بعد؟ الاسم والهاتف يفتحان حسابه مباشرة — بلا رمزٍ يُرسَل أو يُكتب
+      if (!loggedIn) {
+        const session = await api.post<{ accessToken: string; refreshToken: string; user: SessionUser }>(
+          "/auth/phone/login",
+          { phone, fullName },
+        );
+        saveSession(session);
+        setUser(session.user);
+        const list = await api.get<Patient[]>("/me/patients");
+        setPatients(list);
+        activePatientId = list.find((p) => p.isSelf)?.id ?? list[0]?.id ?? "";
+        setPatientId(activePatientId);
+      }
+
       const result = await api.post<{ reference: string; queueNumber: number }>("/bookings", {
         doctorClinicId: practiceId,
-        patientId,
+        patientId: activePatientId,
         startAt: chosen.startAt,
         patientNote: note.trim() || undefined,
       });
@@ -590,47 +574,20 @@ function BookingPanel({
               </div>
             )}
 
-            {!user || user.role !== "PATIENT" ? (
-              <div className="grid gap-3">
-                <p className="text-[13.5px]" style={{ color: "var(--muted)" }}>
-                  أدخل رقم هاتفك ليصلك رمز تحقق — بلا كلمة مرور.
-                </p>
-                <Field label="رقم الهاتف">
-                  <Input
-                    value={phone}
-                    onChange={(e) => setPhone(e.target.value)}
-                    placeholder="07701234567"
-                    inputMode="tel"
-                    disabled={otpSent}
-                  />
-                </Field>
-
-                {!otpSent ? (
-                  <Button full loading={busy} onClick={requestCode} disabled={phone.length < 10}>
-                    إرسال الرمز
-                  </Button>
-                ) : (
-                  <>
-                    <Field label="الاسم الكامل" hint="يظهر للطبيب في قائمة مرضاه">
-                      <Input value={fullName} onChange={(e) => setFullName(e.target.value)} placeholder="الاسم الثلاثي" />
-                    </Field>
-                    <Field label="رمز التحقق" hint={devCode ? `رمز التطوير: ${devCode}` : "وصلك برسالة نصية"}>
-                      <Input
-                        value={code}
-                        onChange={(e) => setCode(e.target.value)}
-                        placeholder="******"
-                        inputMode="numeric"
-                        className="tnum tracking-[0.4em] text-center"
-                      />
-                    </Field>
-                    <Button full loading={busy} onClick={verifyCode} disabled={code.length < 6}>
-                      تأكيد الرمز
-                    </Button>
-                  </>
-                )}
-              </div>
-            ) : (
-              <div className="grid gap-3">
+            <div className="grid gap-3">
+              {!loggedIn ? (
+                <>
+                  <p className="text-[13.5px]" style={{ color: "var(--muted)" }}>
+                    أدخل اسمك ورقم هاتفك — بلا كلمة مرور ولا رمز تحقق.
+                  </p>
+                  <Field label="رقم الهاتف">
+                    <Input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="07701234567" inputMode="tel" />
+                  </Field>
+                  <Field label="الاسم الكامل" hint="يظهر للطبيب في قائمة مرضاه">
+                    <Input value={fullName} onChange={(e) => setFullName(e.target.value)} placeholder="الاسم الثلاثي" />
+                  </Field>
+                </>
+              ) : patients.length > 1 ? (
                 <Field label="الموعد لمن؟" hint="تستطيع الحجز لأفراد عائلتك من حسابك">
                   <Select value={patientId} onChange={(e) => setPatientId(e.target.value)}>
                     {patients.map((p) => (
@@ -640,23 +597,23 @@ function BookingPanel({
                     ))}
                   </Select>
                 </Field>
+              ) : null}
 
-                <Field label="ملاحظة للطبيب" hint="اختياري — تصل مع تفاصيل الحجز">
-                  <Input value={note} onChange={(e) => setNote(e.target.value)} placeholder="مثلاً: ألم في الصدر منذ يومين" />
-                </Field>
+              <Field label="ملاحظة للطبيب" hint="اختياري — تصل مع تفاصيل الحجز">
+                <Input value={note} onChange={(e) => setNote(e.target.value)} placeholder="مثلاً: ألم في الصدر منذ يومين" />
+              </Field>
 
-                <p className="text-[12.5px]" style={{ color: "var(--faint)" }}>
-                  يمكنك الإلغاء حتى {toArabic(Math.round(cancelCutoffMinutes / 60))} ساعة قبل الموعد.
-                </p>
+              <p className="text-[12.5px]" style={{ color: "var(--faint)" }}>
+                يمكنك الإلغاء حتى {toArabic(Math.round(cancelCutoffMinutes / 60))} ساعة قبل الموعد.
+              </p>
 
-                <Button variant="accent" size="lg" full loading={busy} onClick={confirm} disabled={!patientId}>
-                  تثبيت الحجز
-                </Button>
-                <Button variant="ghost" full onClick={onClose}>
-                  رجوع
-                </Button>
-              </div>
-            )}
+              <Button variant="accent" size="lg" full loading={busy} onClick={confirm} disabled={!canConfirm}>
+                تثبيت الحجز
+              </Button>
+              <Button variant="ghost" full onClick={onClose}>
+                رجوع
+              </Button>
+            </div>
           </>
         )}
       </div>
