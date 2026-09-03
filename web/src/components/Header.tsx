@@ -23,13 +23,13 @@ export function Header({ subtitle }: { subtitle?: string }) {
     >
       <div className="max-w-6xl mx-auto px-4 h-14 flex items-center gap-3">
         <Link href="/" className="flex items-center gap-2 shrink-0">
+          {/* الشعار نفسه فوق الزمرّدي نفسه، كما في أيقونة التطبيق */}
           <span
-            className="grid place-items-center w-8 h-8 rounded-[9px] text-[15px] font-bold"
-            // ريم كوفي جميل في الكلمة لكن حرف «د» وحده يذوب في هذا الحجم،
-            // فنستعمل خطّ النصّ ليطابق أيقونة التطبيق.
-            style={{ background: "var(--primary)", color: "var(--on-primary)", fontFamily: "var(--font-sans)" }}
+            className="grid place-items-center w-8 h-8 rounded-[9px]"
+            style={{ background: "var(--primary)" }}
           >
-            د
+            {/* eslint-disable-next-line @next/next/no-img-element -- صورةٌ ثابتة بحجمٍ ثابت، لا حاجة لتحسين next/image */}
+            <img src="/brand-mark.png" alt="" width={20} height={20} />
           </span>
           <span className="text-[17px] font-bold" style={{ fontFamily: "var(--font-display)" }}>
             دكتورلي

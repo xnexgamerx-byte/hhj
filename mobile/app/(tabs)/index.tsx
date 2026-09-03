@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Modal, Pressable, RefreshControl, ScrollView, View } from "react-native";
+import { Image, Modal, Pressable, RefreshControl, ScrollView, View } from "react-native";
 import { useFocusEffect, useRouter } from "expo-router";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Banner, slidesFrom } from "@/components/Banner";
@@ -173,10 +173,14 @@ export default function HomeScreen() {
               justifyContent: "center",
             }}
           >
-            {/* العلامة زمرّدية وحدها: نفس لون أيقونة التطبيق على الشاشة الرئيسية */}
-            <T size={17} weight="bold" tone="onPrimary" align="center">
-              د
-            </T>
+            {/* الشعار نفسه فوق الزمرّدي نفسه: من يرى الأيقونة على شاشة هاتفه
+                يجد الشيء ذاته أعلى التطبيق */}
+            <Image
+              source={require("../../assets/brand-mark.png")}
+              style={{ width: 22, height: 22 }}
+              resizeMode="contain"
+              accessibilityIgnoresInvertColors
+            />
           </View>
 
           <Pressable

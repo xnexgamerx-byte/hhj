@@ -1,10 +1,10 @@
-import { useEffect } from "react";
 import { I18nManager } from "react-native";
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { useFonts } from "expo-font";
 import * as SplashScreen from "expo-splash-screen";
 import { SafeAreaProvider } from "react-native-safe-area-context";
+import { SplashGate } from "@/components/SplashGate";
 import { font, usePalette } from "@/theme";
 import { ThemeProvider, useThemeMode } from "@/theme-mode";
 
@@ -36,11 +36,8 @@ export default function RootLayout() {
     [font.bold]: require("../assets/fonts/IBMPlexSansArabic-700.ttf"),
   });
 
-  useEffect(() => {
-    // نُخفي شاشة البداية عند جهوزية الخطوط، أو عند فشلها حتى لا يعلق التطبيق
-    if (fontsLoaded || fontError) SplashScreen.hideAsync().catch(() => {});
-  }, [fontsLoaded, fontError]);
-
+  // شاشة البداية تبقى حتى تجهز الخطوط أو تفشل — وSplashGate هو من يُخفيها
+  // بعد أن يفرش طبقته فوقها، فلا يظهر التطبيق بخطٍّ احتياطي ثم يقفز
   if (!fontsLoaded && !fontError) return null;
 
   // المزوّد يلفّ كل ما يقرأ اللوحة، وهذا يشمل هذه الشاشة نفسها — فالمحتوى
@@ -48,7 +45,9 @@ export default function RootLayout() {
   return (
     <ThemeProvider>
       <SafeAreaProvider>
-        <Shell />
+        <SplashGate>
+          <Shell />
+        </SplashGate>
       </SafeAreaProvider>
     </ThemeProvider>
   );
