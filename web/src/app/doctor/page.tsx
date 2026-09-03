@@ -301,7 +301,7 @@ function TodayTab({ context, practiceId }: { context: ClinicContext; practiceId:
 
                   <p className="text-[13px] mt-0.5 tnum" style={{ color: "var(--muted)" }}>
                     {row.bookingMode === "QUEUE"
-                      ? `الدور ${toArabic(row.queueNumber)} · ${formatClock(row.sessionStart)} – ${formatClock(row.sessionEnd)}`
+                      ? `الدور ${toArabic(row.queueNumber)} — ${formatClock(row.sessionStart)} – ${formatClock(row.sessionEnd)}`
                       : formatClock(row.slotStart)}
                     {" · "}
                     {row.reference}
@@ -406,7 +406,7 @@ function WalkInDialog({
   const options = (days?.[0]?.sessions ?? []).flatMap((session) =>
     session.bookingMode === "SLOT"
       ? session.slots.filter((slot) => !slot.taken).map((slot) => ({ value: slot.start, label: formatTimeLabel(slot.time) }))
-      : [{ value: session.sessionStart, label: `الدور التالي · ${formatTimeLabel(session.startTime)} – ${formatTimeLabel(session.endTime)}` }],
+      : [{ value: session.sessionStart, label: `الدور التالي — ${formatTimeLabel(session.startTime)} – ${formatTimeLabel(session.endTime)}` }],
   );
 
   async function submit() {

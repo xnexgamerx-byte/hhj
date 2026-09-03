@@ -6,7 +6,7 @@ import Link from "next/link";
 import { Header } from "@/components/Header";
 import { Alert, Badge, Button, Card, EmptyState, Field, Input, Loading, Select } from "@/components/ui";
 import { api, getSession, saveSession, type SessionUser } from "@/lib/api";
-import { formatDay, formatFee, formatTimeLabel, toArabic, todayISO, WEEKDAYS } from "@/lib/format";
+import { countLabel, COUNTS, formatDay, formatFee, formatTimeLabel, toArabic, todayISO, WEEKDAYS } from "@/lib/format";
 
 type Profile = {
   id: string;
@@ -143,10 +143,10 @@ export default function DoctorProfilePage() {
               <div className="flex gap-2 mt-2.5 flex-wrap">
                 <Badge tone="primary">{formatFee(practice.feeAmount)}</Badge>
                 {profile.yearsOfExperience && (
-                  <Badge tone="muted">خبرة {toArabic(profile.yearsOfExperience)} سنة</Badge>
+                  <Badge tone="muted">خبرة {countLabel(profile.yearsOfExperience, COUNTS.year)}</Badge>
                 )}
                 <Badge tone={practice.bookingMode === "QUEUE" ? "accent" : "muted"}>
-                  {practice.bookingMode === "QUEUE" ? "نظام أدوار" : `كشف ${toArabic(practice.slotMinutes)} دقيقة`}
+                  {practice.bookingMode === "QUEUE" ? "نظام أدوار" : `كشف ${countLabel(practice.slotMinutes, COUNTS.minute)}`}
                 </Badge>
               </div>
             </div>
@@ -317,7 +317,7 @@ function DayStrip({
             : !day.hasSchedule
               ? "لا دوام"
               : available
-                ? `${toArabic(day.freeCount)} مكان`
+                ? countLabel(day.freeCount, COUNTS.seat)
                 : "ممتلئ";
           return (
             <button
@@ -392,7 +392,9 @@ function SessionBlock({
     <div>
       <div className="flex items-center justify-between gap-2 mb-2.5">
         <span className="text-[14px] font-semibold tnum">{range}</span>
-        <Badge tone="ok">{toArabic(session.remaining)} وقت شاغر</Badge>
+        <Badge tone="ok">
+          {countLabel(session.remaining, COUNTS.slot)}
+        </Badge>
       </div>
       {/* المحجوز لا يصل أصلاً من الخادم — ما يظهر هنا شاغر كله */}
       <div className="grid gap-2 grid-cols-3 sm:grid-cols-4">

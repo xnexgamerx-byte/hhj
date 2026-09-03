@@ -6,7 +6,7 @@ import { DoctorRow } from "@/components/DoctorRow";
 import { Icon } from "@/components/icons";
 import { Alert, Button, Card, EmptyState, Loading, T } from "@/components/ui";
 import { api, type DoctorCard, type Specialty } from "@/lib/api";
-import { toArabic } from "@/lib/format";
+import { countLabel, COUNTS, toArabic } from "@/lib/format";
 import { Appear } from "@/motion";
 import { radius, shadow, space, usePalette } from "@/theme";
 
@@ -125,7 +125,7 @@ export default function DoctorsScreen() {
           {sorted && sorted.length > 0 ? (
             <View style={{ flexDirection: "row", alignItems: "center", gap: space(2) }}>
               <T size={13.5} tone="muted">
-                {toArabic(sorted.length)} طبيب
+                {countLabel(sorted.length, COUNTS.doctor)}
               </T>
               <View style={{ flex: 1 }} />
               <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: space(1.5) }}>

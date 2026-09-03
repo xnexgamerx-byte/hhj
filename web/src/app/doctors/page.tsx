@@ -6,7 +6,7 @@ import { Suspense, useEffect, useState } from "react";
 import { Header } from "@/components/Header";
 import { Badge, Card, EmptyState, Input, Loading, Select } from "@/components/ui";
 import { api } from "@/lib/api";
-import { formatFee, toArabic } from "@/lib/format";
+import { countLabel, COUNTS, formatFee, toArabic } from "@/lib/format";
 
 type Doctor = {
   id: string;
@@ -178,14 +178,15 @@ function DoctorsInner() {
                     <div className="flex items-center gap-2 mt-3 flex-wrap">
                       {doctor.nextAvailable ? (
                         <Badge tone="ok">
-                          أقرب موعد: {doctor.nextAvailable.weekdayName} · {toArabic(doctor.nextAvailable.freeCount)} مكان
+                          أقرب موعد: {doctor.nextAvailable.weekdayName} —{" "}
+                          {countLabel(doctor.nextAvailable.freeCount, COUNTS.seat)}
                         </Badge>
                       ) : (
                         <Badge tone="muted">لا توجد أوقات متاحة حالياً</Badge>
                       )}
                       {practice?.bookingMode === "QUEUE" && <Badge tone="accent">نظام أدوار</Badge>}
                       {doctor.yearsOfExperience && (
-                        <Badge tone="muted">خبرة {toArabic(doctor.yearsOfExperience)} سنة</Badge>
+                        <Badge tone="muted">خبرة {countLabel(doctor.yearsOfExperience, COUNTS.year)}</Badge>
                       )}
                     </div>
                   </div>

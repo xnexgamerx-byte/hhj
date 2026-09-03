@@ -19,7 +19,7 @@ import {
   type SessionUser,
   type Specialty,
 } from "@/lib/api";
-import { toArabic } from "@/lib/format";
+import { countLabel, COUNTS, toArabic } from "@/lib/format";
 import { Appear } from "@/motion";
 import { radius, shadow, space, usePalette } from "@/theme";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -62,18 +62,6 @@ export default function HomeScreen() {
     api.get<BannerFeed>("/banners").then(setFeed).catch(() => {});
   }, []);
 
-  // العدّاد عند كل عودة للشاشة، لا مرّةً عند التركيب: المريض يفتح الإشعارات
-  // ويقرأها ثم يرجع، فلو بقيت الشارة لظنّ أن شيئاً لم يُقرأ. والزائر بلا
-  // حساب لا عدّاد له — الخطأ يُبتلع ويبقى صفراً
-  useFocusEffect(
-    useCallback(() => {
-      api
-        .get<{ unread: number }>("/me/notifications/unread")
-        .then((r) => setUnread(r.unread))
-        .catch(() => setUnread(0));
-    }, []),
-  );
-
   const load = useCallback(
     (id: number) =>
       Promise.all([
@@ -101,9 +89,25 @@ export default function HomeScreen() {
     load(governorateId);
   }, [governorateId, load]);
 
+  // عند كل عودة للشاشة لا مرّةً عند التركيب: المريض يفتح الإشعارات ويقرأها
+  // ثم يرجع، فلو بقيت الشارة لظنّ أن شيئاً لم يُقرأ.
+  //
+  // والعدّاد لا يُطلب إلا لمن له حساب: الزائر ليس عنده إشعارات أصلاً، ونداءٌ
+  // بلا رمزٍ يرجع ٤٠١ — رحلةٌ ضائعة على شبكة الجوال وخطأٌ أحمر في السجلّ
+  // مقابل صفرٍ كنّا نعرفه قبل أن نسأل.
   useFocusEffect(
     useCallback(() => {
-      getSession().then(setUser);
+      getSession().then((session) => {
+        setUser(session);
+        if (!session) {
+          setUnread(0);
+          return;
+        }
+        api
+          .get<{ unread: number }>("/me/notifications/unread")
+          .then((r) => setUnread(r.unread))
+          .catch(() => setUnread(0));
+      });
     }, []),
   );
 
@@ -267,7 +271,7 @@ export default function HomeScreen() {
                 <Appear key={specialty.id} index={Math.floor(i / 4)} style={{ width: "25%" }}>
                   <Pressable
                     accessibilityRole="button"
-                    accessibilityLabel={`${specialty.nameAr} — ${toArabic(specialty.doctorCount)} طبيب`}
+                    accessibilityLabel={`${specialty.nameAr} — ${countLabel(specialty.doctorCount, COUNTS.doctor)}`}
                     onPress={() =>
                       router.push(`/doctors?governorateId=${governorateId}&specialtyId=${specialty.id}`)
                     }

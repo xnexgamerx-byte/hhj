@@ -45,6 +45,62 @@ export function toArabic(value: string | number): string {
 }
 
 /**
+ * صيغة المعدود في العربية تتبع العدد، ولا تكفيها إضافة رقمٍ إلى اسمٍ مفرد.
+ *
+ *   واحد   ⇐ «وقت شاغر»            بلا رقم، فالمفرد يقوله بنفسه
+ *   اثنان  ⇐ «وقتان شاغران»        المثنّى كذلك
+ *   ٣–١٠   ⇐ «٣ أوقات شاغرة»       جمعٌ بعد العدد
+ *   ١١+    ⇐ «١١ وقتاً شاغراً»      مفردٌ منصوب بعد العدد
+ *
+ * والقواعد من Intl لا من شرطٍ نكتبه بأيدينا: هي نفسها في كل مكان يقرأ العربية.
+ */
+const arabicPlural = new Intl.PluralRules("ar-IQ");
+
+export type CountForms = {
+  /** ما يُكتب عند الصفر. افتراضه «لا» والجمعُ، فلا يظهر «٠» وحيداً */
+  zero?: string;
+  one: string;
+  two: string;
+  /** ٣–١٠ */
+  few: string;
+  /** ١١ فأكثر */
+  many: string;
+};
+
+export function countLabel(value: number, forms: CountForms): string {
+  switch (arabicPlural.select(value)) {
+    case "zero":
+      // «٠ طبيباً» ليست عربية، و«٠» وحدها نقطةٌ تبدو كعطل عرض
+      return forms.zero ?? `لا ${forms.few}`;
+    case "one":
+      return forms.one;
+    case "two":
+      return forms.two;
+    case "few":
+      return `${toArabic(value)} ${forms.few}`;
+    default:
+      return `${toArabic(value)} ${forms.many}`;
+  }
+}
+
+/**
+ * المعدودات المتكرّرة في الواجهة، بأشكالها الأربعة.
+ *
+ * المفرد والمثنّى يحملان العدد في صيغتهما فلا يُسبقان برقم: «طبيب واحد» لا
+ * «١ طبيب». والجمع بعد ٣–١٠، ثم المفرد المنصوب من ١١ فأكثر.
+ */
+export const COUNTS = {
+  doctor: { one: "طبيب واحد", two: "طبيبان", few: "أطباء", many: "طبيباً" },
+  clinic: { one: "عيادة واحدة", two: "عيادتان", few: "عيادات", many: "عيادة" },
+  seat: { one: "مكان واحد", two: "مكانان", few: "أماكن", many: "مكاناً" },
+  slot: { one: "وقت شاغر", two: "وقتان شاغران", few: "أوقات شاغرة", many: "وقتاً شاغراً" },
+  year: { zero: "أقل من سنة", one: "سنة واحدة", two: "سنتان", few: "سنوات", many: "سنة" },
+  minute: { one: "دقيقة واحدة", two: "دقيقتان", few: "دقائق", many: "دقيقة" },
+  visit: { one: "زيارة واحدة", two: "زيارتان", few: "زيارات", many: "زيارة" },
+  message: { one: "رسالة واحدة", two: "رسالتان", few: "رسائل", many: "رسالة" },
+} as const satisfies Record<string, CountForms>;
+
+/**
  * للأرقام في لوحات الإحصاء: الصفر المفرد في العربية «٠» نقطةٌ صغيرة تبدو
  * كعطل عرض لا كقيمة. الشرطة أوضح وهي عُرف متعارف عليه في لوحات البيانات.
  */

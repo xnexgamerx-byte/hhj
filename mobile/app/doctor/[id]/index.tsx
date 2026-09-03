@@ -171,9 +171,13 @@ export default function DoctorScreen() {
                   <IconTile size={34} round bg={palette.primaryTint}>
                     <Icon.clock size={17} color={palette.primary} />
                   </IconTile>
+                  {/* اليوم في عمودٍ ثابت والوقت بعده: الفصل بالتخطيط لا
+                      بنقطةٍ تلتبس بـ«٠» حين تلاصق «٤:٠٠» */}
+                  <T size={13.5} weight="semibold" style={{ width: 62 }}>
+                    {WEEKDAYS[schedule.weekday]}
+                  </T>
                   <T size={13.5} tone="muted" style={{ flex: 1 }}>
-                    {WEEKDAYS[schedule.weekday]} · {formatTimeLabel(schedule.startTime)} –{" "}
-                    {formatTimeLabel(schedule.endTime)}
+                    {formatTimeLabel(schedule.startTime)} – {formatTimeLabel(schedule.endTime)}
                   </T>
                 </View>
               ))}

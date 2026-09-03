@@ -7,7 +7,7 @@ import { ClinicCard } from "@/components/ClinicCard";
 import { Icon } from "@/components/icons";
 import { Alert, Card, EmptyState, Loading, T } from "@/components/ui";
 import { api, type ClinicCard as Clinic } from "@/lib/api";
-import { toArabic } from "@/lib/format";
+import { countLabel, COUNTS } from "@/lib/format";
 import { space, usePalette } from "@/theme";
 
 const GOVERNORATE_KEY = "mawid.governorate";
@@ -77,7 +77,7 @@ export default function ClinicsScreen() {
 
         {shown && shown.length > 0 ? (
           <T size={13} tone="muted">
-            {toArabic(shown.length)} عيادة
+            {countLabel(shown.length, COUNTS.clinic)}
           </T>
         ) : null}
 

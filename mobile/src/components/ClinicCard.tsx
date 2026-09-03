@@ -2,7 +2,7 @@ import { View } from "react-native";
 import { Icon } from "@/components/icons";
 import { Card, T } from "@/components/ui";
 import type { ClinicCard as Clinic } from "@/lib/api";
-import { formatFee, toArabic } from "@/lib/format";
+import { countLabel, COUNTS, formatFee, toArabic } from "@/lib/format";
 import { font, radius, space, tintFor, useIsDark, usePalette } from "@/theme";
 import { Text } from "react-native";
 
@@ -76,7 +76,7 @@ export function ClinicCard({
         </T>
         <View style={{ flexDirection: "row", alignItems: "center", gap: space(2), marginTop: 2 }}>
           <T size={12} weight="semibold" tone="primary">
-            {toArabic(clinic.doctorCount)} طبيب
+            {countLabel(clinic.doctorCount, COUNTS.doctor)}
           </T>
           <View style={{ width: 1, height: 10, backgroundColor: palette.line }} />
           <T size={12} tone="muted">

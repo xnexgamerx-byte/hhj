@@ -5,7 +5,7 @@ import { PlainHeader } from "@/components/PlainHeader";
 import { Icon } from "@/components/icons";
 import { Alert, Badge, Button, Card, EmptyState, IconTile, Loading, T } from "@/components/ui";
 import { api, getSession, type ClinicAppointment, type SessionUser } from "@/lib/api";
-import { formatClock, formatDay, formatPhone, statNumber, toArabic, todayISO } from "@/lib/format";
+import { countLabel, COUNTS, formatClock, formatDay, formatPhone, statNumber, toArabic, todayISO } from "@/lib/format";
 import { Appear } from "@/motion";
 import { radius, space, usePalette } from "@/theme";
 
@@ -236,7 +236,8 @@ function BookingCard({
           <T size={13} tone="muted">
             {row.bookingMode === "SLOT"
               ? formatClock(row.slotStart)
-              : `الدور ${toArabic(row.queueNumber)} · ${formatClock(row.sessionStart)}`}
+              : // شرطةٌ لا نقطة: «·» بحجم «٠» فتُقرأ «الدور ٣٠ ٤:٠٠»
+                `الدور ${toArabic(row.queueNumber)} — ${formatClock(row.sessionStart)}`}
           </T>
         </View>
         <View style={{ alignItems: "flex-end", gap: space(1) }}>
@@ -260,7 +261,7 @@ function BookingCard({
           </Pressable>
         ) : null}
 
-        {row.patientAge ? <Detail icon="user" text={`${toArabic(row.patientAge)} سنة`} /> : null}
+        {row.patientAge ? <Detail icon="user" text={countLabel(row.patientAge, COUNTS.year)} /> : null}
         {row.patientAddress ? <Detail icon="pin" text={row.patientAddress} /> : null}
       </View>
 

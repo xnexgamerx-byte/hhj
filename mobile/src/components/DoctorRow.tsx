@@ -2,7 +2,7 @@ import { Image, View } from "react-native";
 import { Icon } from "@/components/icons";
 import { Badge, Card, T } from "@/components/ui";
 import { mediaUrl, type DoctorCard } from "@/lib/api";
-import { formatFee, toArabic } from "@/lib/format";
+import { countLabel, COUNTS, formatFee, toArabic } from "@/lib/format";
 import { font, radius, space, tintFor, useIsDark, usePalette } from "@/theme";
 import { Text } from "react-native";
 
@@ -118,7 +118,7 @@ export function DoctorRow({ doctor, onPress }: { doctor: DoctorCard; onPress: ()
           </T>
           <View style={{ flex: 1 }} />
           <T size={12} tone="faint">
-            {toArabic(doctor.nextAvailable.freeCount)} مكان
+            {countLabel(doctor.nextAvailable.freeCount, COUNTS.seat)}
           </T>
         </View>
       ) : null}

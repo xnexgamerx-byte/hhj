@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { Pressable, View } from "react-native";
 import { Icon } from "@/components/icons";
 import { T } from "@/components/ui";
-import { toArabic } from "@/lib/format";
+import { countLabel, COUNTS, toArabic } from "@/lib/format";
 import { radius, space, usePalette } from "@/theme";
 
 /** حالة اليوم في الشبكة — تحدّد لونه وقابليته للضغط */
@@ -119,7 +119,7 @@ export function Calendar({
                   accessibilityRole="button"
                   accessibilityState={{ selected: active, disabled: !open }}
                   accessibilityLabel={`${toArabic(day)} ${MONTHS_AR[cursor.m - 1]}${
-                    open ? ` — ${toArabic(info!.free)} مكان` : " — لا مواعيد"
+                    open ? ` — ${countLabel(info!.free, COUNTS.seat)}` : " — لا مواعيد"
                   }`}
                   disabled={!open}
                   onPress={() => onSelect(date)}

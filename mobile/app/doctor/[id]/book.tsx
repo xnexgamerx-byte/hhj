@@ -7,7 +7,7 @@ import { BookingSheet, type Chosen } from "@/components/BookingSheet";
 import { Icon } from "@/components/icons";
 import { Alert, Avatar, Badge, Button, EmptyState, IconTile, Loading, T } from "@/components/ui";
 import { api, mediaUrl, type Day, type DoctorProfile, type Session } from "@/lib/api";
-import { formatDay, formatFee, formatTimeLabel, toArabic, todayISO } from "@/lib/format";
+import { countLabel, COUNTS, formatDay, formatFee, formatTimeLabel, toArabic, todayISO } from "@/lib/format";
 import { radius, shadow, space, usePalette } from "@/theme";
 
 /**
@@ -147,7 +147,8 @@ export default function BookScreen() {
                         {option.clinicName}
                       </T>
                       <T size={12.5} tone="muted">
-                        {option.district} · {formatFee(option.feeAmount)}
+                        {/* شرطةٌ لا نقطة: «·» تلتبس بـ«٠» حين تلاصق رقماً */}
+                        {option.district} — {formatFee(option.feeAmount)}
                       </T>
                     </View>
                   </Pressable>
@@ -312,7 +313,10 @@ function SessionBlock({
         <T size={14} weight="semibold" style={{ flex: 1 }}>
           {range}
         </T>
-        <Badge tone="ok" label={`${toArabic(session.remaining)} وقت شاغر`} />
+        <Badge
+          tone="ok"
+          label={countLabel(session.remaining, COUNTS.slot)}
+        />
       </View>
       <View style={{ flexDirection: "row", flexWrap: "wrap", gap: space(2) }}>
         {session.slots.map((slot) => {

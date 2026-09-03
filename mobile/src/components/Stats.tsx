@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { Pressable, View } from "react-native";
 import { IconTile, T } from "@/components/ui";
+import { toArabic } from "@/lib/format";
 import { space, usePalette } from "@/theme";
 
 /** أربع خانات دائرية بالأرقام المهمة — نمط الكيت المرجعي في صفحة الطبيب */
@@ -62,7 +63,9 @@ export function Tabs<K extends string>({
           >
             <T size={14} weight={on ? "bold" : "medium"} tone={on ? "primary" : "faint"}>
               {tab.label}
-              {tab.count !== undefined ? ` (${tab.count})` : ""}
+              {/* أرقامٌ عربية كبقية التطبيق. والصفر لا يُكتب: «(٠)» نقطةٌ
+                  تبدو كعطل، والتبويب الفارغ يقول فراغه حين يُفتح */}
+              {tab.count ? ` (${toArabic(tab.count)})` : ""}
             </T>
           </Pressable>
         );

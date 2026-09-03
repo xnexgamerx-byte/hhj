@@ -4,7 +4,7 @@ import { useRouter } from "expo-router";
 import { Icon } from "@/components/icons";
 import { Alert, Button, Chips, Divider, Field, IconTile, Input, T } from "@/components/ui";
 import { api, getSession, saveSession, type Patient, type SessionUser } from "@/lib/api";
-import { formatDay, toArabic } from "@/lib/format";
+import { countLabel, COUNTS, formatDay, toArabic } from "@/lib/format";
 import { Pop } from "@/motion";
 import { radius, space, usePalette } from "@/theme";
 
@@ -255,7 +255,7 @@ export function BookingSheet({
                 </T>
                 <T size={14} weight="semibold" tone="primary">
                   {formatDay(date)} — {chosen.label}
-                  {chosen.queue !== null ? ` · الدور ${toArabic(chosen.queue)}` : ""}
+                  {chosen.queue !== null ? ` — الدور ${toArabic(chosen.queue)}` : ""}
                 </T>
               </View>
 
@@ -469,7 +469,7 @@ function SavedDetails({
         </T>
         {age ? (
           <T size={13} tone="muted">
-            {toArabic(age)} سنة
+            {countLabel(Number(age), COUNTS.year)}
           </T>
         ) : null}
       </View>

@@ -6,7 +6,7 @@ import { Header } from "@/components/Header";
 import { Card, EmptyState, Loading, Select } from "@/components/ui";
 import { SpecialtyArt } from "@/components/SpecialtyArt";
 import { api } from "@/lib/api";
-import { toArabic } from "@/lib/format";
+import { countLabel, COUNTS } from "@/lib/format";
 
 type Governorate = { id: number; slug: string; nameAr: string };
 type Specialty = { id: number; slug: string; nameAr: string; nameEn: string; doctorCount: number };
@@ -120,7 +120,7 @@ export default function HomePage() {
                   </span>
                   <span className="block text-[15px] font-semibold leading-snug">{specialty.nameAr}</span>
                   <span className="block text-[12.5px] mt-1 tnum" style={{ color: "var(--muted)" }}>
-                    {toArabic(specialty.doctorCount)} طبيب
+                    {countLabel(specialty.doctorCount, COUNTS.doctor)}
                   </span>
                 </Link>
               ))}

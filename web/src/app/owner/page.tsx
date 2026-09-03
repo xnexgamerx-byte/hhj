@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { Header } from "@/components/Header";
 import { Alert, Badge, Button, Card, Dialog, EmptyState, Field, Input, Loading, SectionTitle, Select, StatTile } from "@/components/ui";
 import { api, getSession, mediaUrl, uploadFile } from "@/lib/api";
-import { formatClock, formatDay, formatFee, statNumber, toArabic, WEEKDAYS } from "@/lib/format";
+import { countLabel, formatClock, formatDay, formatFee, statNumber, toArabic, WEEKDAYS } from "@/lib/format";
 
 type Summary = {
   doctors: { total: number; active: number; awaitingFirstLogin: number; withoutWhatsApp: number; withoutSchedule: number };
@@ -279,7 +279,7 @@ function OverviewTab() {
                       {row.doctorName}
                     </td>
                     <td className="py-2.5 tnum" style={{ color: "var(--muted)" }}>
-                      {formatDay(row.sessionStart.slice(0, 10))} · {formatClock(row.sessionStart)}
+                      {formatDay(row.sessionStart.slice(0, 10))} — {formatClock(row.sessionStart)}
                     </td>
                   </tr>
                 ))}
@@ -1449,7 +1449,7 @@ function CommissionsTab() {
                 <div className="min-w-0">
                   <p className="text-[15.5px] font-bold">{row.clinicName}</p>
                   <p className="text-[13px] mt-0.5" style={{ color: "var(--muted)" }}>
-                    {row.governorate} · {toArabic(row.visits)} زيارة
+                    {row.governorate} — {countLabel(row.visits, { one: "زيارة", two: "زيارتان", few: "زيارات", many: "زيارة" })}
                     {row.lastVisitAt && ` · آخرها ${formatDay(row.lastVisitAt.slice(0, 10))}`}
                   </p>
                 </div>
@@ -1565,7 +1565,7 @@ function ClinicDuesDialog({
   return (
     <Dialog
       title={clinic.clinicName}
-      hint={`${toArabic(clinic.visits)} زيارة · ${formatFee(clinic.amount)} مستحقة`}
+      hint={`${countLabel(clinic.visits, { one: "زيارة", two: "زيارتان", few: "زيارات", many: "زيارة" })} — ${formatFee(clinic.amount)} مستحقة`}
       onClose={onClose}
     >
       {error && (
