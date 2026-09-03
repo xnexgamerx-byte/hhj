@@ -1300,6 +1300,7 @@ function BannersTab() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
+  const [editing, setEditing] = useState<BannerRow | null>(null);
 
   const load = useCallback(() => {
     api
@@ -1422,6 +1423,9 @@ function BannersTab() {
               </div>
 
               <div className="flex flex-wrap gap-2 items-center">
+                <Button variant="outline" size="sm" onClick={() => setEditing(banner)}>
+                  تعديل
+                </Button>
                 <Button
                   variant="outline"
                   size="sm"
@@ -1468,10 +1472,21 @@ function BannersTab() {
       </div>
 
       {adding && (
-        <AddBannerDialog
+        <BannerDialog
           onClose={() => setAdding(false)}
           onDone={() => {
             setAdding(false);
+            load();
+          }}
+        />
+      )}
+
+      {editing && (
+        <BannerDialog
+          banner={editing}
+          onClose={() => setEditing(null)}
+          onDone={() => {
+            setEditing(null);
             load();
           }}
         />
@@ -1480,9 +1495,21 @@ function BannersTab() {
   );
 }
 
-function AddBannerDialog({ onClose, onDone }: { onClose: () => void; onDone: () => void }) {
-  const [title, setTitle] = useState("");
-  const [body, setBody] = useState("");
+/**
+ * نافذة اللافتة: إضافة وتعديل معاً — الفرق تمريرُ `banner` أو لا.
+ * في التعديل، صورةٌ جديدة تستبدل القديمة، وبلا اختيار ملفٍّ تبقى كما هي.
+ */
+function BannerDialog({
+  banner,
+  onClose,
+  onDone,
+}: {
+  banner?: BannerRow;
+  onClose: () => void;
+  onDone: () => void;
+}) {
+  const [title, setTitle] = useState(banner?.title ?? "");
+  const [body, setBody] = useState(banner?.body ?? "");
   const [file, setFile] = useState<File | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -1503,10 +1530,20 @@ function AddBannerDialog({ onClose, onDone }: { onClose: () => void; onDone: () 
     setBusy(true);
     setError(null);
     try {
-      // الصورة تُرفع أولاً ثم تُنشأ اللافتة: لافتةٌ بلا صورتها أسوأ من صورةٍ
-      // يتيمةٍ على القرص، والثانية يمكن تنظيفها لاحقاً
-      const imageUrl = file ? (await uploadFile("/owner/uploads", file)).url : null;
-      await api.post("/owner/banners", { imageUrl, title: title.trim() || null, body: body.trim() || null });
+      if (banner) {
+        // بلا ملفٍّ جديد: imageUrl تغيب عن الجسم فيتركها الخادم كما هي
+        const imageUrl = file ? (await uploadFile("/owner/uploads", file)).url : undefined;
+        await api.patch(`/owner/banners/${banner.id}`, {
+          ...(imageUrl !== undefined ? { imageUrl } : {}),
+          title: title.trim() || null,
+          body: body.trim() || null,
+        });
+      } else {
+        // الصورة تُرفع أولاً ثم تُنشأ اللافتة: لافتةٌ بلا صورتها أسوأ من صورةٍ
+        // يتيمةٍ على القرص، والثانية يمكن تنظيفها لاحقاً
+        const imageUrl = file ? (await uploadFile("/owner/uploads", file)).url : null;
+        await api.post("/owner/banners", { imageUrl, title: title.trim() || null, body: body.trim() || null });
+      }
       onDone();
     } catch (e) {
       setError((e as Error).message);
@@ -1515,11 +1552,20 @@ function AddBannerDialog({ onClose, onDone }: { onClose: () => void; onDone: () 
     }
   }
 
+  const currentImage = banner ? mediaUrl(banner.imageUrl) : null;
+
   return (
-    <Dialog title="لافتة جديدة" onClose={onClose}>
+    <Dialog title={banner ? "تعديل اللافتة" : "لافتة جديدة"} onClose={onClose}>
       {error && <Alert>{error}</Alert>}
 
-      <Field label="الصورة" hint="PNG أو JPG أو WEBP · حتى ٤ ميغابايت · الأفضل بعرض ١٢٠٠×٤٢٠">
+      <Field
+        label="الصورة"
+        hint={
+          banner
+            ? "اختر ملفاً فقط إن أردت استبدال الصورة الحالية"
+            : "PNG أو JPG أو WEBP · حتى ٤ ميغابايت · الأفضل بعرض ١٢٠٠×٤٢٠"
+        }
+      >
         <input
           type="file"
           accept="image/png,image/jpeg,image/webp"
@@ -1528,13 +1574,13 @@ function AddBannerDialog({ onClose, onDone }: { onClose: () => void; onDone: () 
         />
       </Field>
 
-      {preview && (
+      {(preview ?? currentImage) && (
         <div
           className="w-full h-[120px] rounded-[10px] overflow-hidden"
           style={{ border: "1px solid var(--line)" }}
         >
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={preview} alt="" className="w-full h-full object-cover" />
+          <img src={preview ?? currentImage ?? ""} alt="" className="w-full h-full object-cover" />
         </div>
       )}
 
@@ -1550,8 +1596,11 @@ function AddBannerDialog({ onClose, onDone }: { onClose: () => void; onDone: () 
         <Button variant="outline" onClick={onClose}>
           إلغاء
         </Button>
-        <Button disabled={busy || (!file && !title.trim())} onClick={submit}>
-          {busy ? "يُحفظ…" : "أضف اللافتة"}
+        <Button
+          disabled={busy || (!banner && !file && !title.trim())}
+          onClick={submit}
+        >
+          {busy ? "يُحفظ…" : banner ? "احفظ التعديلات" : "أضف اللافتة"}
         </Button>
       </div>
     </Dialog>
