@@ -139,9 +139,11 @@ export function BookingSheet({
     try {
       let activePatientId = patientId;
 
-      // لا جلسة بعد؟ الاسم والهاتف اللذان كتبهما للتوّ في نموذج البيانات
-      // يفتحان حسابه مباشرة — بلا رمزٍ يُرسَل أو يُكتب في خطوة منفصلة
-      if (!user || user.role !== "PATIENT") {
+      // المعيار «هل بيدنا مريضٌ نحجز له؟» لا «هل يبدو مسجّلاً؟»: جلسةٌ منتهية
+      // تترك الشاشة تظنّه داخلاً بينما لا مريض بيدها، فكان الحجز يفشل برسالة
+      // «المريض غير موجود». الاسم والهاتف المكتوبان أمامه يفتحان حسابه من
+      // جديد بدل ذلك — بلا رمزٍ يُرسَل أو يُكتب في خطوة منفصلة
+      if (!activePatientId) {
         const session = await api.post<{ accessToken: string; refreshToken: string; user: SessionUser }>(
           "/auth/phone/login",
           { phone: phone.trim(), fullName: fullName.trim(), deviceId: await getDeviceId() },

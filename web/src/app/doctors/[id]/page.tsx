@@ -469,8 +469,12 @@ function BookingPanel({
     if (session?.role === "PATIENT") loadPatients();
   }, [loadPatients]);
 
-  const loggedIn = user?.role === "PATIENT";
-  const canConfirm = loggedIn ? Boolean(patientId) : phone.trim().length >= 10 && fullName.trim().length >= 3;
+  // المعيار «هل بيدنا مريضٌ نحجز له؟» لا «هل يبدو مسجّلاً؟»: جلسةٌ منتهية
+  // تترك الصفحة تظنّه داخلاً ولا مريض بيدها، فيُطلب اسمه ورقمه من جديد
+  const needsIdentity = !patientId;
+  const canConfirm = needsIdentity
+    ? phone.trim().length >= 10 && fullName.trim().length >= 3
+    : true;
 
   async function confirm() {
     setBusy(true);
@@ -478,8 +482,8 @@ function BookingPanel({
     try {
       let activePatientId = patientId;
 
-      // لا جلسة بعد؟ الاسم والهاتف يفتحان حسابه مباشرة — بلا رمزٍ يُرسَل أو يُكتب
-      if (!loggedIn) {
+      // لا مريض بيدنا؟ الاسم والهاتف يفتحان حسابه مباشرة — بلا رمزٍ يُرسَل أو يُكتب
+      if (!activePatientId) {
         const session = await api.post<{ accessToken: string; refreshToken: string; user: SessionUser }>(
           "/auth/phone/login",
           { phone, fullName, deviceId: getDeviceId() },
@@ -575,7 +579,7 @@ function BookingPanel({
             )}
 
             <div className="grid gap-3">
-              {!loggedIn ? (
+              {needsIdentity ? (
                 <>
                   <p className="text-[13.5px]" style={{ color: "var(--muted)" }}>
                     أدخل اسمك ورقم هاتفك — بلا كلمة مرور ولا رمز تحقق.
