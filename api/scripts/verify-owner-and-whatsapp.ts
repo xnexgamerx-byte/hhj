@@ -8,6 +8,7 @@
 import { PrismaClient } from "@prisma/client";
 import { hashPassword } from "../src/lib/password.js";
 import { formatIraqiPhoneForDisplay, normalizeIraqiPhone, toLatinDigits } from "../src/lib/phone.js";
+import { templateSpecs } from "../src/notifications/whatsapp/templates.js";
 import { AppError } from "../src/lib/errors.js";
 import { createDoctorAccount, resetDoctorPassword } from "../src/modules/owner/provisioning.js";
 import { changePassword, loginWithPassword } from "../src/modules/auth/auth.service.js";
@@ -200,19 +201,56 @@ async function main() {
     prisma,
   );
 
+  // بيانات المريض التي تسألها العيادة — نضعها قبل الفحص لأنها ما يجب أن يصل
+  await prisma.patient.update({
+    where: { id: patient.id },
+    data: { birthYear: new Date().getFullYear() - 32, address: "الكرخ — حي الجامعة" },
+  });
+  const detailed = await createBooking(
+    {
+      doctorClinicId: practice.id,
+      patientId: patient.id,
+      bookedByUserId: account.id,
+      startAt: new Date(sessionStart.getTime() + 7 * 24 * 3_600_000),
+      patientNote: "عنده سكري وضغط",
+    },
+    prisma,
+  );
+
   const message = provider.sent.at(-1);
   const body = message?.message.body ?? "";
+  const params = message?.message.params ?? [];
   check(
-    "تفاصيل الحجز تُرسل لواتساب الطبيب",
-    booking.whatsapp.delivered &&
+    "تفاصيل الحجز كلها تصل واتساب الطبيب",
+    detailed.whatsapp.delivered &&
       message?.to === "9647701234567" &&
       body.includes("علي حسن") &&
-      body.includes(booking.reference) &&
       body.includes("عيادة النور") &&
-      body.includes("الدور ١") &&
+      body.includes("٣٢ سنة") &&
+      body.includes("حي الجامعة") &&
       body.includes(formatIraqiPhoneForDisplay(patientPhone)) &&
-      body.includes("الطفل عنده حرارة"),
+      body.includes("عنده سكري وضغط"),
     `أُرسلت إلى ${message?.to} بالقالب ${message?.message.templateName}`,
+  );
+
+  // ما يخرج من params لا تعرضه ميتا: هي تركّب الرسالة من قالبها المعتمد
+  // ووسائطنا لا من النصّ الذي نبنيه للسجل
+  check(
+    "كل تفصيلة وسيطةٌ لا نصٌّ محليّ",
+    params.length === 8 &&
+      params.some((v) => v.includes("عنده سكري")) &&
+      params.some((v) => v.includes("حي الجامعة")) &&
+      params.some((v) => v.includes("٣٢ سنة")),
+    `${params.length} وسيطة — الملاحظة والعنوان والعمر منها`,
+  );
+
+  // القالب المقدَّم إلى ميتا مشتقٌّ من بنية الرسالة، فلا يفترقان
+  const spec = templateSpecs().find((t) => t.name === "new_booking");
+  const specSlots = new Set(spec?.body.match(/\{\{\d+\}\}/g) ?? []).size;
+  check(
+    "نصّ القالب المعروض للتقديم يطابق ما يُرسَل",
+    specSlots === params.length,
+    `القالب فيه ${specSlots} موضعاً والكود يرسل ${params.length} وسيطة`,
   );
   console.log("\n--- نص الرسالة كما وصلت الطبيب ---");
   console.log(body);

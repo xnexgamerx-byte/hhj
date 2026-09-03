@@ -406,6 +406,29 @@ export type Notification = {
 
 export type InboxFeed = { items: Notification[]; unread: number };
 
+/** حجزٌ كما تراه العيادة — الطبيب والسكرتير */
+export type ClinicAppointment = {
+  id: string;
+  reference: string;
+  status: string;
+  bookingMode: "SLOT" | "QUEUE";
+  queueNumber: number;
+  dailyNumber: number | null;
+  slotStart: string;
+  sessionStart: string;
+  sessionEnd: string;
+  patientName: string;
+  patientPhone: string | null;
+  patientAddress: string | null;
+  patientAge: number | null;
+  patientNote: string | null;
+  clinicName: string;
+  doctorName: string;
+  practiceId: string;
+  arrivedAt: string | null;
+  isWalkIn: boolean;
+};
+
 export type Slot = { start: string; time: string; taken: boolean };
 
 export type Session = {

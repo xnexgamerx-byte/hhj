@@ -216,8 +216,15 @@ type AppointmentWithRelations = {
   sessionStart: Date;
   sessionEnd: Date;
   queueNumber: number;
+  dailyNumber: number | null;
   patientNote: string | null;
-  patient: { fullName: string; phone: string | null; account: { phone: string | null } };
+  patient: {
+    fullName: string;
+    phone: string | null;
+    birthYear: number | null;
+    address: string | null;
+    account: { phone: string | null };
+  };
   doctorClinic: { clinic: { nameAr: string } };
 };
 
@@ -227,6 +234,10 @@ function toBookingSummary(appointment: AppointmentWithRelations): BookingSummary
     patientName: appointment.patient.fullName,
     // رقم المريض نفسه إن وُجد، وإلا رقم الحساب الذي حجز له
     patientPhone: appointment.patient.phone ?? appointment.patient.account.phone ?? "",
+    // العمر يُحسب لا يُخزَّن: سنة الميلاد لا تشيخ، والعمر يشيخ كل سنة
+    patientAge: appointment.patient.birthYear ? new Date().getFullYear() - appointment.patient.birthYear : null,
+    patientAddress: appointment.patient.address,
+    dailyNumber: appointment.dailyNumber,
     clinicName: appointment.doctorClinic.clinic.nameAr,
     bookingMode: appointment.bookingMode,
     slotStart: appointment.slotStart,

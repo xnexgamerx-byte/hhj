@@ -45,11 +45,42 @@ export default function ProfileScreen() {
     ]);
   }
 
-  if (!user || user.role !== "PATIENT") {
+  // الطبيب والسكرتير حسابٌ آخر بمسارٍ آخر: يفتحان لوحة عيادتهما لا حساب مريض
+  if (user && (user.role === "DOCTOR" || user.role === "STAFF")) {
     return (
       <View style={{ flex: 1, backgroundColor: palette.bg }}>
         <PlainHeader title="حسابي" />
-        <View style={{ padding: space(4) }}>
+        <ScrollView contentContainerStyle={{ padding: space(4), gap: space(4) }}>
+          <Card level={2} style={{ flexDirection: "row", alignItems: "center", gap: space(3.5) }}>
+            <Avatar name={user.fullName} size={62} ring />
+            <View style={{ flex: 1, gap: 2 }}>
+              <T size={16.5} weight="bold" numberOfLines={1}>
+                {user.fullName}
+              </T>
+              <T size={13} tone="faint">
+                {user.role === "DOCTOR" ? "طبيب" : "سكرتير"}
+              </T>
+            </View>
+          </Card>
+
+          <Button
+            label="حجوزات عيادتي"
+            size="lg"
+            full
+            icon={(c, s) => <Icon.calendar size={s} color={c} />}
+            onPress={() => router.push("/clinic")}
+          />
+          <Button label="تسجيل الخروج" variant="outline" full onPress={askLogout} />
+        </ScrollView>
+      </View>
+    );
+  }
+
+  if (!user) {
+    return (
+      <View style={{ flex: 1, backgroundColor: palette.bg }}>
+        <PlainHeader title="حسابي" />
+        <View style={{ padding: space(4), gap: space(3) }}>
           <Card>
             <EmptyState
               icon={(c, s) => <Icon.user size={s} color={c} />}
@@ -58,6 +89,18 @@ export default function ProfileScreen() {
               action={<Button label="ابحث عن طبيب" onPress={() => router.replace("/")} />}
             />
           </Card>
+          {/* مدخل الأطباء أسفل الشاشة وبوزنٍ خفيف: هم قلّةٌ بين المستخدمين،
+              وإبرازه يجعل كل مريضٍ يتساءل أين إيميله وباسووردُه */}
+          <Pressable
+            accessibilityRole="button"
+            onPress={() => router.push("/staff-login")}
+            style={{ alignSelf: "center", padding: space(2) }}
+            hitSlop={8}
+          >
+            <T size={13.5} weight="semibold" tone="muted">
+              طبيب أو سكرتير؟ ادخل من هنا
+            </T>
+          </Pressable>
         </View>
       </View>
     );

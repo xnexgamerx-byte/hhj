@@ -50,3 +50,22 @@ export const STATUS_LABELS: Record<string, { label: string; tone: "ok" | "warn" 
   CANCELLED_BY_PATIENT: { label: "ألغيتَه", tone: "muted" },
   CANCELLED_BY_CLINIC: { label: "ألغته العيادة", tone: "danger" },
 };
+
+/**
+ * ‎+9647701110001 ⇐ ‎0770 111 0001.
+ *
+ * بأرقام لاتينية لا عربية-هندية: الرقم يُقرأ ليُطلَب، ولوحة الاتصال في
+ * الهاتف لاتينية — وقارئه في العيادة يقارن ما يرى بما يكتب.
+ *
+ * ومحاطٌ بعازل اتجاهٍ (U+2066 … U+2069): ثلاث مجموعاتٍ لاتينية تفصلها مسافات
+ * داخل فقرةٍ عربية يعكس محرّك ثنائيّ الاتجاه ترتيبها، فيُعرض ٠٧٧٠ ١١١ ٠٠٠١
+ * مقلوباً «0001 111 0770» — رقمٌ خاطئٌ يُطلَب فيردّ غريب. رأيتها على الشاشة.
+ * والعازل يفعل ذلك في أي واجهة تعرض النصّ، فلا يُنسى في موضعٍ ويُذكر في آخر.
+ */
+export function formatPhone(value: string | null | undefined): string {
+  if (!value) return "";
+  const digits = value.replace(/\D/g, "");
+  const local = digits.startsWith("964") ? `0${digits.slice(3)}` : digits;
+  const spaced = local.length === 11 ? `${local.slice(0, 4)} ${local.slice(4, 7)} ${local.slice(7)}` : local;
+  return `\u2066${spaced}\u2069`;
+}

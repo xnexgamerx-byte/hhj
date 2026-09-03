@@ -1713,9 +1713,21 @@ type MessageRow = {
   status: string;
   attempts: number;
   error: string | null;
+  renderedBody: string | null;
   sentAt: string | null;
   createdAt: string;
 };
+
+/**
+ * رابطٌ يفتح محادثة واتساب مع الرقم والنصّ معبّأً.
+ *
+ * لأن الإرسال التلقائي يحتاج اعتماد ميتا، وقد لا يكون جاهزاً بعد أو قد
+ * تُرفض رسالةٌ بعينها. حينها لا تضيع: يفتحها المالك بلمسةٍ ويضغط إرسال.
+ */
+function waMeLink(to: string | null, body: string | null): string | null {
+  if (!to || !body) return null;
+  return `https://wa.me/${to.replace(/[^\d]/g, "")}?text=${encodeURIComponent(body)}`;
+}
 
 const MESSAGE_STATUS: Record<string, { label: string; tone: "ok" | "warn" | "danger" }> = {
   SENT: { label: "وصلت", tone: "ok" },
@@ -1792,6 +1804,7 @@ function MessagesTab() {
                   <th className="text-start font-medium px-4 py-2.5">الحالة</th>
                   <th className="text-start font-medium px-4 py-2.5">المحاولات</th>
                   <th className="text-start font-medium px-4 py-2.5">الوقت</th>
+                  <th className="text-start font-medium px-4 py-2.5"> </th>
                 </tr>
               </thead>
               <tbody>
@@ -1816,6 +1829,19 @@ function MessagesTab() {
                       </td>
                       <td className="px-4 py-2.5 tnum" style={{ color: "var(--muted)" }}>
                         {formatClock(row.sentAt ?? row.createdAt)}
+                      </td>
+                      <td className="px-4 py-2.5">
+                        {row.status !== "SENT" && waMeLink(row.toAddress, row.renderedBody) && (
+                          <a
+                            href={waMeLink(row.toAddress, row.renderedBody) ?? "#"}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-[12.5px] font-semibold whitespace-nowrap"
+                            style={{ color: "var(--primary)" }}
+                          >
+                            أرسلها بنفسك ↗
+                          </a>
+                        )}
                       </td>
                     </tr>
                   );

@@ -15,6 +15,8 @@ import { resolveScope, assertOwns } from "./access.js";
 import { accrueCommission, reverseCommission } from "../commissions/commissions.service.js";
 import { notifyPatientToReview } from "../../notifications/dispatch.js";
 
+const thisYear = new Date().getFullYear();
+
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 
 /** المالك ينشئ حساب السكرتير — كما ينشئ حساب الطبيب تماماً. */
@@ -261,7 +263,9 @@ export async function getScopedAppointments(
     },
     orderBy: [{ slotStart: "asc" }, { queueNumber: "asc" }],
     include: {
-      patient: { select: { fullName: true, phone: true, address: true, account: { select: { phone: true } } } },
+      patient: {
+        select: { fullName: true, phone: true, address: true, birthYear: true, account: { select: { phone: true } } },
+      },
       createdByStaff: { select: { id: true } },
       doctorClinic: {
         include: {
@@ -295,6 +299,8 @@ export async function getScopedAppointments(
       patientName: appointment.patient.fullName,
       patientPhone: appointment.patient.phone ?? appointment.patient.account.phone,
       patientAddress: appointment.patient.address,
+      // العمر يُحسب لا يُخزَّن: سنة الميلاد لا تشيخ
+      patientAge: appointment.patient.birthYear ? thisYear - appointment.patient.birthYear : null,
       patientNote: appointment.patientNote,
       clinicName: appointment.doctorClinic.clinic.nameAr,
       doctorName: `${appointment.doctorClinic.doctor.title} ${appointment.doctorClinic.doctor.user.fullName}`,

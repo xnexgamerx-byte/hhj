@@ -51,6 +51,11 @@ export type BookingSummary = {
   patientName: string;
   /** رقم المريض بصيغة E.164 */
   patientPhone: string;
+  /** العمر بالسنين — يُشتقّ من سنة الميلاد كي لا يشيخ الرقم في القاعدة */
+  patientAge: number | null;
+  patientAddress: string | null;
+  /** رقم المريض ذلك اليوم في تلك العيادة — به يُنادى عند الحضور */
+  dailyNumber: number | null;
   clinicName: string;
   bookingMode: "SLOT" | "QUEUE";
   slotStart: Date;
@@ -60,8 +65,14 @@ export type BookingSummary = {
   patientNote?: string | null;
 };
 
+/** ما تحتاجه صياغة الوقت وحدها — لا الملخّص كاملاً */
+export type AppointmentTiming = Pick<
+  BookingSummary,
+  "bookingMode" | "slotStart" | "sessionStart" | "sessionEnd" | "queueNumber"
+>;
+
 /** «الأحد، ٣٠ آب ٢٠٢٦ — ٤:٢٠ م» أو «… — الدور ١٢ بين ٤:٠٠ م و٧:٠٠ م» */
-export function describeAppointmentTime(booking: BookingSummary): string {
+export function describeAppointmentTime(booking: AppointmentTiming): string {
   const day = dateFormatter.format(booking.slotStart);
   if (booking.bookingMode === "SLOT") {
     return `${day} — ${timeFormatter.format(booking.slotStart)}`;
@@ -71,61 +82,154 @@ export function describeAppointmentTime(booking: BookingSummary): string {
   return `${day} — الدور ${toArabicDigits(booking.queueNumber)} بين ${from} و${to}`;
 }
 
+/* ── بنية القوالب ────────────────────────────────────────────── */
+
 /**
- * حجز جديد. اسم القالب لدى ميتا: new_booking
- * وسائطه بالترتيب: اسم المريض · هاتفه · الموعد · العيادة · الرقم المرجعي
+ * جزءٌ من سطر: نصٌّ ثابت، أو رقم وسيطةٍ صفريّ الأساس.
+ *
+ * القالب يُوصف بنيةً لا نصّاً، ومن البنية يُشتقّ شيئان: الرسالة المرسلة
+ * (بالقيم) والنصّ المقدَّم إلى ميتا (بعلامات {{n}}). فلا يفترقان أبداً.
+ *
+ * والبديل — كتابة النصّين يدوياً أو استخراج أحدهما بالبحث والاستبدال — جرّبناه
+ * فانكسر: قيمتان متطابقتان («—» للعمر و«—» في تنسيق التاريخ) جعلتا الاستبدال
+ * يضع علامةً واحدة في ثلاثة مواضع.
  */
-export function newBookingMessage(booking: BookingSummary): WhatsAppMessage {
-  const when = describeAppointmentTime(booking);
-  // الهاتف بأرقام لاتينية ليبقى قابلاً للنقر والاتصال داخل واتساب
-  const phone = formatIraqiPhoneForDisplay(booking.patientPhone);
+type Segment = string | number;
+type Line = Segment[];
 
-  const params = [booking.patientName, phone, when, booking.clinicName, booking.reference].map(
-    sanitizeParam,
-  );
+type TemplateDef = {
+  name: string;
+  language: string;
+  lines: Line[];
+  /** قيمٌ مثالية تطلبها ميتا عند المراجعة */
+  example: string[];
+};
 
-  const lines = [
-    "🗓 حجز جديد",
-    "",
-    `المريض: ${params[0]}`,
-    `الهاتف: ${params[1]}`,
-    `الموعد: ${params[2]}`,
-    `العيادة: ${params[3]}`,
-    `الرقم المرجعي: ${params[4]}`,
-  ];
-  if (booking.patientNote) lines.push("", `ملاحظة المريض: ${sanitizeParam(booking.patientNote)}`);
-
-  return { templateName: "new_booking", languageCode: "ar", params, body: lines.join("\n") };
+function renderBody(lines: Line[], params: string[]): string {
+  return lines.map((line) => line.map((s) => (typeof s === "number" ? params[s] : s)).join("")).join("\n");
 }
 
-/** إلغاء حجز. اسم القالب لدى ميتا: booking_cancelled */
+function renderTemplate(lines: Line[]): string {
+  return lines.map((line) => line.map((s) => (typeof s === "number" ? `{{${s + 1}}}` : s)).join("")).join("\n");
+}
+
+function placeholderCount(lines: Line[]): number {
+  const indexes = lines.flat().filter((s): s is number => typeof s === "number");
+  return indexes.length === 0 ? 0 : Math.max(...indexes) + 1;
+}
+
+function compose(def: TemplateDef, rawParams: string[]): WhatsAppMessage {
+  const params = rawParams.map(sanitizeParam);
+  return { templateName: def.name, languageCode: def.language, params, body: renderBody(def.lines, params) };
+}
+
+/** ما يُوضع مكان حقلٍ لم يملأه المريض — ميتا ترفض الوسيطة الفارغة */
+const BLANK = "—";
+
+/* ── القوالب ─────────────────────────────────────────────────── */
+
+/**
+ * حجز جديد إلى واتساب الطبيب.
+ *
+ * كل تفصيلةٍ وسيطةٌ لا نصٌّ محليّ: ما يخرج من `params` لا يصل الطبيب إطلاقاً،
+ * لأن ميتا تركّب الرسالة من قالبها المعتمد ووسائطنا لا من `body` عندنا. وهذا
+ * ما كان يحدث لملاحظة المريض — تُكتب في المعاينة ولا تُرسل.
+ *
+ * وعددها ثابتٌ دائماً: القالب يتوقّع ثمانياً، وإرسال سبعٍ لأن المريض لم يكتب
+ * ملاحظةً يُرَدّ بخطأ ٤xx ولا تصل الرسالة أصلاً — لذلك BLANK لا حذف.
+ */
+const NEW_BOOKING: TemplateDef = {
+  name: "new_booking",
+  language: "ar",
+  lines: [
+    ["🗓 حجز جديد"],
+    [],
+    ["المريض: ", 0],
+    ["الهاتف: ", 1],
+    ["العمر: ", 2],
+    ["العنوان: ", 3],
+    ["الموعد: ", 4],
+    ["العيادة: ", 5],
+    ["رقمه اليوم: ", 6],
+    ["ملاحظة: ", 7],
+    [],
+    ["القائمة كاملة في التطبيق."],
+  ],
+  example: [
+    "أحمد الجبوري",
+    "0770 123 4567",
+    "٣٢ سنة",
+    "الكرخ — حي الجامعة",
+    "الأحد، ٦ أيلول ٢٠٢٦ — ٤:٢٠ م",
+    "عيادة النور",
+    "٧",
+    "عنده سكري وضغط",
+  ],
+};
+
+export function newBookingMessage(booking: BookingSummary): WhatsAppMessage {
+  return compose(NEW_BOOKING, [
+    booking.patientName,
+    // الهاتف بأرقام لاتينية ليبقى قابلاً للنقر والاتصال داخل واتساب
+    formatIraqiPhoneForDisplay(booking.patientPhone),
+    booking.patientAge ? `${toArabicDigits(booking.patientAge)} سنة` : BLANK,
+    booking.patientAddress || BLANK,
+    describeAppointmentTime(booking),
+    booking.clinicName,
+    booking.dailyNumber ? toArabicDigits(booking.dailyNumber) : BLANK,
+    booking.patientNote || BLANK,
+  ]);
+}
+
+const BOOKING_CANCELLED: TemplateDef = {
+  name: "booking_cancelled",
+  language: "ar",
+  lines: [
+    ["❌ إلغاء حجز"],
+    [],
+    ["المريض: ", 0],
+    ["الموعد: ", 1],
+    ["الرقم المرجعي: ", 2],
+    ["أُلغي بواسطة: ", 3],
+  ],
+  example: ["أحمد الجبوري", "الأحد، ٦ أيلول ٢٠٢٦ — ٤:٢٠ م", "QJK-TAF", "المريض"],
+};
+
 export function bookingCancelledMessage(
   booking: BookingSummary,
   cancelledBy: "PATIENT" | "CLINIC",
 ): WhatsAppMessage {
-  const params = [
+  return compose(BOOKING_CANCELLED, [
     booking.patientName,
     describeAppointmentTime(booking),
     booking.reference,
     cancelledBy === "PATIENT" ? "المريض" : "العيادة",
-  ].map(sanitizeParam);
-
-  const body = [
-    "❌ إلغاء حجز",
-    "",
-    `المريض: ${params[0]}`,
-    `الموعد: ${params[1]}`,
-    `الرقم المرجعي: ${params[2]}`,
-    `أُلغي بواسطة: ${params[3]}`,
-  ].join("\n");
-
-  return { templateName: "booking_cancelled", languageCode: "ar", params, body };
+  ]);
 }
 
 /**
- * تذكير المريض قبل موعده. اسم القالب لدى ميتا: appointment_reminder
- * وسائطه: متى (غداً/بعد ساعتين) · الطبيب · الموعد · العيادة · الرقم المرجعي
+ * تذكير المريض قبل موعده.
+ *
+ * العنوان وسيطةٌ ثابتة لا سطرٌ يظهر ويغيب: جسم القالب لدى ميتا واحدٌ لكل
+ * الرسائل، فسطرٌ يُضاف لبعضها يعني قالبين لا قالباً — وقد كان يسقط صامتاً.
  */
+const APPOINTMENT_REMINDER: TemplateDef = {
+  name: "appointment_reminder",
+  language: "ar",
+  lines: [
+    ["⏰ تذكير: موعدك ", 0],
+    [],
+    ["الطبيب: ", 1],
+    ["الموعد: ", 2],
+    ["العيادة: ", 3],
+    ["العنوان: ", 4],
+    ["الرقم المرجعي: ", 5],
+    [],
+    ["إن تعذّر حضورك، ألغِ الحجز من التطبيق ليستفيد غيرك."],
+  ],
+  example: ["غداً", "د. سارة العبيدي", "الأحد، ٦ أيلول ٢٠٢٦ — ٤:٢٠ م", "عيادة النور", "قرب مستشفى ابن البيطار", "QJK-TAF"],
+};
+
 export function patientReminderMessage(
   booking: {
     patientName: string;
@@ -141,30 +245,34 @@ export function patientReminderMessage(
   },
   whenLabel: string,
 ): WhatsAppMessage {
-  const when = describeAppointmentTime({
-    reference: booking.reference,
-    patientName: booking.patientName,
-    patientPhone: "",
-    clinicName: booking.clinicName,
-    bookingMode: booking.bookingMode,
-    slotStart: booking.slotStart,
-    sessionStart: booking.sessionStart,
-    sessionEnd: booking.sessionEnd,
-    queueNumber: booking.queueNumber,
-  });
+  return compose(APPOINTMENT_REMINDER, [
+    whenLabel,
+    booking.doctorName,
+    describeAppointmentTime(booking),
+    booking.clinicName,
+    booking.landmark || BLANK,
+    booking.reference,
+  ]);
+}
 
-  const params = [whenLabel, booking.doctorName, when, booking.clinicName, booking.reference].map(sanitizeParam);
+/* ── ما يُقدَّم إلى ميتا ──────────────────────────────────────── */
 
-  const lines = [
-    `⏰ تذكير: موعدك ${params[0]}`,
-    "",
-    `الطبيب: ${params[1]}`,
-    `الموعد: ${params[2]}`,
-    `العيادة: ${params[3]}`,
-  ];
-  if (booking.landmark) lines.push(`العنوان: ${sanitizeParam(booking.landmark)}`);
-  lines.push(`الرقم المرجعي: ${params[4]}`);
-  lines.push("", "إن تعذّر حضورك، ألغِ الحجز من التطبيق ليستفيد غيرك.");
+export type TemplateSpec = {
+  name: string;
+  language: string;
+  /** نصّ الجسم كما يُلصق في مدير القوالب، بعلامات {{n}} في مواضع الوسائط */
+  body: string;
+  placeholders: number;
+  example: string[];
+};
 
-  return { templateName: "appointment_reminder", languageCode: "ar", params, body: lines.join("\n") };
+/** القوالب الواجب اعتمادها لدى ميتا — مشتقّةٌ من بنية الرسائل نفسها */
+export function templateSpecs(): TemplateSpec[] {
+  return [NEW_BOOKING, BOOKING_CANCELLED, APPOINTMENT_REMINDER].map((def) => ({
+    name: def.name,
+    language: def.language,
+    body: renderTemplate(def.lines),
+    placeholders: placeholderCount(def.lines),
+    example: def.example,
+  }));
 }

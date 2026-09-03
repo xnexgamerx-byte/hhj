@@ -451,6 +451,8 @@ export async function registerRoutes(app: FastifyInstance) {
         status: true,
         attempts: true,
         error: true,
+        // النصّ كما بُني: منه يصنع المالك رابط wa.me فيرسل بيده ما لم يُرسَل
+        renderedBody: true,
         sentAt: true,
         createdAt: true,
       },
