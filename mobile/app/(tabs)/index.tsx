@@ -20,6 +20,7 @@ import {
   type Specialty,
 } from "@/lib/api";
 import { toArabic } from "@/lib/format";
+import { Appear } from "@/motion";
 import { radius, shadow, space, usePalette } from "@/theme";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -259,38 +260,40 @@ export default function HomeScreen() {
           ) : null}
 
           <View style={{ flexDirection: "row", flexWrap: "wrap", rowGap: space(4) }}>
-            {shown?.map((specialty) => {
+            {shown?.map((specialty, i) => {
               return (
-                <Pressable
-                  key={specialty.id}
-                  accessibilityRole="button"
-                  accessibilityLabel={`${specialty.nameAr} — ${toArabic(specialty.doctorCount)} طبيب`}
-                  onPress={() =>
-                    router.push(`/doctors?governorateId=${governorateId}&specialtyId=${specialty.id}`)
-                  }
-                  style={({ pressed }) => ({
-                    width: "25%",
-                    alignItems: "center",
-                    gap: space(2),
-                    opacity: pressed ? 0.75 : 1,
-                  })}
-                >
-                  <View
-                    style={{
-                      width: 62,
-                      height: 62,
-                      borderRadius: radius.lg,
-                      backgroundColor: palette.artTile,
+                /* التدرّج بالصفوف لا بالبلاطات: أربعُ بلاطاتٍ في صفٍّ واحد
+                   تظهر معاً كما تُقرأ، والعين تنزل صفاً صفاً */
+                <Appear key={specialty.id} index={Math.floor(i / 4)} style={{ width: "25%" }}>
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={`${specialty.nameAr} — ${toArabic(specialty.doctorCount)} طبيب`}
+                    onPress={() =>
+                      router.push(`/doctors?governorateId=${governorateId}&specialtyId=${specialty.id}`)
+                    }
+                    style={({ pressed }) => ({
                       alignItems: "center",
-                      justifyContent: "center",
-                    }}
+                      gap: space(2),
+                      opacity: pressed ? 0.75 : 1,
+                    })}
                   >
-                    <SpecialtyArt slug={specialty.slug} size={44} color={palette.ink} />
-                  </View>
-                  <T size={11.5} weight="semibold" align="center" numberOfLines={2} lineHeight={15}>
-                    {specialty.nameAr}
-                  </T>
-                </Pressable>
+                    <View
+                      style={{
+                        width: 62,
+                        height: 62,
+                        borderRadius: radius.lg,
+                        backgroundColor: palette.artTile,
+                        alignItems: "center",
+                        justifyContent: "center",
+                      }}
+                    >
+                      <SpecialtyArt slug={specialty.slug} size={44} color={palette.ink} />
+                    </View>
+                    <T size={11.5} weight="semibold" align="center" numberOfLines={2} lineHeight={15}>
+                      {specialty.nameAr}
+                    </T>
+                  </Pressable>
+                </Appear>
               );
             })}
           </View>

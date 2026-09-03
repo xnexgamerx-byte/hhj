@@ -7,6 +7,7 @@ import { Icon } from "@/components/icons";
 import { Alert, Badge, Button, Card, EmptyState, Field, IconTile, Input, Loading, T } from "@/components/ui";
 import { api, getSession, type Booking, type SessionUser } from "@/lib/api";
 import { formatClock, formatDay, formatFee, STATUS_LABELS, toArabic } from "@/lib/format";
+import { Appear } from "@/motion";
 import { radius, space, usePalette } from "@/theme";
 
 export default function BookingsScreen() {
@@ -124,14 +125,15 @@ export default function BookingsScreen() {
       {tab === "upcoming" ? (
         upcoming.length > 0 ? (
           <View style={{ gap: space(3) }}>
-            {upcoming.map((booking) => (
-              <BookingCard
-                key={booking.id}
-                booking={booking}
-                onCancel={() => askCancel(booking)}
-                onReview={() => setReviewing(booking)}
-                cancelling={cancelling === booking.id}
-              />
+            {upcoming.map((booking, i) => (
+              <Appear key={booking.id} index={i}>
+                <BookingCard
+                  booking={booking}
+                  onCancel={() => askCancel(booking)}
+                  onReview={() => setReviewing(booking)}
+                  cancelling={cancelling === booking.id}
+                />
+              </Appear>
             ))}
           </View>
         ) : bookings && bookings.length > 0 ? (
@@ -146,8 +148,10 @@ export default function BookingsScreen() {
         ) : null
       ) : past.length > 0 ? (
         <View style={{ gap: space(3) }}>
-          {past.map((booking) => (
-            <BookingCard key={booking.id} booking={booking} onReview={() => setReviewing(booking)} />
+          {past.map((booking, i) => (
+            <Appear key={booking.id} index={i}>
+              <BookingCard booking={booking} onReview={() => setReviewing(booking)} />
+            </Appear>
           ))}
         </View>
       ) : bookings && bookings.length > 0 ? (

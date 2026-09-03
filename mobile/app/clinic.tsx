@@ -6,6 +6,7 @@ import { Icon } from "@/components/icons";
 import { Alert, Badge, Button, Card, EmptyState, IconTile, Loading, T } from "@/components/ui";
 import { api, getSession, type ClinicAppointment, type SessionUser } from "@/lib/api";
 import { formatClock, formatDay, formatPhone, statNumber, toArabic, todayISO } from "@/lib/format";
+import { Appear } from "@/motion";
 import { radius, space, usePalette } from "@/theme";
 
 /** يوم الأمس/اليوم/غد بصيغة ISO — التنقّل بين الأيام بلا تقويم كامل */
@@ -163,8 +164,10 @@ export default function ClinicScreen() {
           </Card>
         ) : null}
 
-        {rows?.map((row) => (
-          <BookingCard key={row.id} row={row} busy={busy === row.id} onMark={(s) => mark(row.id, s)} />
+        {rows?.map((row, i) => (
+          <Appear key={row.id} index={i}>
+            <BookingCard row={row} busy={busy === row.id} onMark={(s) => mark(row.id, s)} />
+          </Appear>
         ))}
       </ScrollView>
     </View>

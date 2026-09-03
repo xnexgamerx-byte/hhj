@@ -5,6 +5,7 @@ import { Icon } from "@/components/icons";
 import { Alert, Button, Chips, Divider, Field, IconTile, Input, T } from "@/components/ui";
 import { api, getSession, saveSession, type Patient, type SessionUser } from "@/lib/api";
 import { formatDay, toArabic } from "@/lib/format";
+import { Pop } from "@/motion";
 import { radius, space, usePalette } from "@/theme";
 
 /** ما اختاره المريض: وقت محدّد أو دور ضمن فترة */
@@ -506,16 +507,20 @@ function Confirmation({
   return (
     <View style={{ gap: space(4), paddingVertical: space(2) }}>
       <View style={{ alignItems: "center", gap: space(2) }}>
-        <IconTile size={64} round bg={palette.okSoft}>
-          <Icon.checkCircle size={32} color={palette.ok} />
-        </IconTile>
+        <Pop>
+          <IconTile size={64} round bg={palette.okSoft}>
+            <Icon.checkCircle size={32} color={palette.ok} />
+          </IconTile>
+        </Pop>
         <T size={19} weight="bold" align="center">
           تم تثبيت حجزك
         </T>
       </View>
 
-      {/* الرقم بأكبر خطٍّ في التطبيق: هو ما يُطلب منه عند البابِ لا الكود */}
-      <View
+      {/* الرقم بأكبر خطٍّ في التطبيق: هو ما يُطلب منه عند البابِ لا الكود.
+          ويصل نابضاً بعد علامة النجاح بلحظة: العين تتبع ما تحرّك أخيراً */}
+      <Pop
+        delay={140}
         style={{
           alignItems: "center",
           backgroundColor: palette.primary,
@@ -534,7 +539,7 @@ function Confirmation({
         <T size={13.5} weight="semibold" tone="onPrimary" align="center" style={{ opacity: 0.9 }}>
           {patientName}
         </T>
-      </View>
+      </Pop>
 
       <T size={13} tone="muted" align="center" lineHeight={20}>
         احفظ الرقم. عند الحضور قل رقمك واسمك — الرقم مسجَّل باسمك في قائمة اليوم.

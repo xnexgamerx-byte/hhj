@@ -5,6 +5,7 @@ import { PlainHeader } from "@/components/PlainHeader";
 import { Icon } from "@/components/icons";
 import { Alert, Button, Card, EmptyState, IconTile, Loading, T } from "@/components/ui";
 import { api, getSession, type InboxFeed, type Notification, type SessionUser } from "@/lib/api";
+import { Appear } from "@/motion";
 import { radius, space, usePalette } from "@/theme";
 
 /**
@@ -127,8 +128,10 @@ export default function NotificationsScreen() {
           />
         ) : null}
 
-        {feed?.items.map((item) => (
-          <NotificationCard key={item.id} item={item} onPress={() => open(item)} />
+        {feed?.items.map((item, i) => (
+          <Appear key={item.id} index={i}>
+            <NotificationCard item={item} onPress={() => open(item)} />
+          </Appear>
         ))}
       </ScrollView>
     </View>

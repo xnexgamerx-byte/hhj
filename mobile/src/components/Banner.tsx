@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { AccessibilityInfo, FlatList, Image, Platform, Pressable, View, type ViewToken } from "react-native";
+import { FlatList, Image, Platform, Pressable, View, type ViewToken } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { Icon } from "@/components/icons";
 import { T } from "@/components/ui";
 import { mediaUrl, type BannerItem } from "@/lib/api";
+import { useReduceMotion } from "@/motion";
 import { radius, space, usePalette } from "@/theme";
 
 export type Slide = {
@@ -43,19 +44,13 @@ export function Banner({
   const palette = usePalette();
   const [index, setIndex] = useState(0);
   const [width, setWidth] = useState(0);
-  const [reduceMotion, setReduceMotion] = useState(false);
+  const reduceMotion = useReduceMotion();
   const listRef = useRef<FlatList<Slide>>(null);
 
   // مهلةٌ يُؤجَّل إليها استئناف التبديل بعد تدخّل المريض
   const heldUntil = useRef(0);
   const indexRef = useRef(0);
   indexRef.current = index;
-
-  useEffect(() => {
-    AccessibilityInfo.isReduceMotionEnabled().then(setReduceMotion).catch(() => {});
-    const sub = AccessibilityInfo.addEventListener("reduceMotionChanged", setReduceMotion);
-    return () => sub.remove();
-  }, []);
 
   /**
    * ينتقل إلى شريحةٍ بعينها.

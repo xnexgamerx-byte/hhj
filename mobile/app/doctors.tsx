@@ -7,6 +7,7 @@ import { Icon } from "@/components/icons";
 import { Alert, Button, Card, EmptyState, Loading, T } from "@/components/ui";
 import { api, type DoctorCard, type Specialty } from "@/lib/api";
 import { toArabic } from "@/lib/format";
+import { Appear } from "@/motion";
 import { radius, shadow, space, usePalette } from "@/theme";
 
 type SortKey = "soonest" | "rating" | "fee";
@@ -181,8 +182,10 @@ export default function DoctorsScreen() {
           ) : null}
 
           <View style={{ gap: space(3) }}>
-            {sorted?.map((doctor) => (
-              <DoctorRow key={doctor.id} doctor={doctor} onPress={() => router.push(`/doctor/${doctor.id}`)} />
+            {sorted?.map((doctor, i) => (
+              <Appear key={doctor.id} index={i}>
+                <DoctorRow doctor={doctor} onPress={() => router.push(`/doctor/${doctor.id}`)} />
+              </Appear>
             ))}
           </View>
         </View>
