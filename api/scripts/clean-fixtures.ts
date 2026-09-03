@@ -29,6 +29,11 @@ const FIXTURE_EMAILS = [
   "rev.%@clinic.iq",
   "slot.%@clinic.iq",
   "st.%@clinic.iq",
+  "com.%@doctorli.iq",
+  "own.%@doctorli.iq",
+  "owner.%@doctorli.iq",
+  // النطاق القديم قبل تسمية التطبيق «دكتورلي» — يبقى ليمسح ما خلّفته
+  // الاختبارات قبل التسمية من قواعد التطوير القائمة
   "com.%@mawid.iq",
   "own.%@mawid.iq",
   "owner.%@mawid.iq",

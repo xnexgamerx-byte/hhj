@@ -10,7 +10,7 @@ import { api, type ClinicCard as Clinic } from "@/lib/api";
 import { countLabel, COUNTS } from "@/lib/format";
 import { space, usePalette } from "@/theme";
 
-const GOVERNORATE_KEY = "mawid.governorate";
+const GOVERNORATE_KEY = "doctorli.governorate";
 
 /** العيادات في محافظة المستخدم — مدخل ثانٍ للبحث غير التخصص. */
 export default function ClinicsScreen() {

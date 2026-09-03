@@ -14,7 +14,7 @@ import * as SecureStore from "expo-secure-store";
 
 export type ThemeMode = "system" | "light" | "dark";
 
-const KEY = "mawid.theme";
+const KEY = "doctorli.theme";
 
 type ThemeState = {
   /** ما اختاره المستخدم */

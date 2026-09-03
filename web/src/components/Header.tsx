@@ -25,14 +25,14 @@ export function Header({ subtitle }: { subtitle?: string }) {
         <Link href="/" className="flex items-center gap-2 shrink-0">
           <span
             className="grid place-items-center w-8 h-8 rounded-[9px] text-[15px] font-bold"
-            // ريم كوفي جميل في الكلمة لكن حرف «م» وحده يذوب في هذا الحجم،
+            // ريم كوفي جميل في الكلمة لكن حرف «د» وحده يذوب في هذا الحجم،
             // فنستعمل خطّ النصّ ليطابق أيقونة التطبيق.
             style={{ background: "var(--primary)", color: "var(--on-primary)", fontFamily: "var(--font-sans)" }}
           >
-            م
+            د
           </span>
           <span className="text-[17px] font-bold" style={{ fontFamily: "var(--font-display)" }}>
-            موعد
+            دكتورلي
           </span>
         </Link>
 

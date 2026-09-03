@@ -24,7 +24,7 @@ import { Appear } from "@/motion";
 import { radius, shadow, space, usePalette } from "@/theme";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-const GOVERNORATE_KEY = "mawid.governorate";
+const GOVERNORATE_KEY = "doctorli.governorate";
 const PREVIEW_COUNT = 8;
 
 export default function HomeScreen() {
@@ -175,7 +175,7 @@ export default function HomeScreen() {
           >
             {/* العلامة زمرّدية وحدها: نفس لون أيقونة التطبيق على الشاشة الرئيسية */}
             <T size={17} weight="bold" tone="onPrimary" align="center">
-              م
+              د
             </T>
           </View>
 

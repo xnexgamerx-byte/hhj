@@ -1,4 +1,4 @@
-# تطبيق وسيط لحجز مواعيد الأطباء
+# دكتورلي — تطبيق وسيط لحجز مواعيد الأطباء
 
 منصة تربط المريض بالطبيب: بحث حسب المحافظة والتخصص، أوقات متاحة حقيقية، حجز مثبّت،
 و**تفاصيل كل حجز تصل واتساب الطبيب فور إتمامه**.
@@ -116,7 +116,7 @@ OWNER_EMAIL=you@example.com OWNER_PASSWORD=ChangeMe12345 bash setup.sh
 يشغّل قاعدة البيانات بدوكر، وينشئ `api/.env` بسر توقيع عشوائي، ويعبّئ
 المحافظات والتخصصات وحساب المالك، ويثبّت اعتماديات المشاريع الثلاثة.
 
-بلا المتغيّرين يستعمل `owner@mawid.iq` / `MawidOwner2026`. لو مرّرتهما وكان
+بلا المتغيّرين يستعمل `owner@doctorli.iq` / `DoctorliOwner2026`. لو مرّرتهما وكان
 `api/.env` موجوداً من تشغيل سابق، يُحدَّث سطرا المالك وحدهما ويبقى سرّ التوقيع
 ورابط القاعدة كما هما.
 
@@ -187,8 +187,8 @@ cd api && npm run db:demo
 
 اثنا عشر طبيباً في بغداد بتخصصات وعيادات ودوام وتقييمات، بنمطَي الحجز معاً.
 الأمر لا يكرّر ما أضافه سابقاً، و`npm run db:demo -- --clean` يحذفهم أولاً.
-كلهم موسومون بـ`demo.mawid` في البريد فلا يختلطون بأطباء حقيقيين، ودخول أيٍّ
-منهم: `<التخصص>.demo.mawid.iq` / `DemoDoctor2026`.
+كلهم موسومون بـ`demo.doctorli` في البريد فلا يختلطون بأطباء حقيقيين، ودخول أيٍّ
+منهم: `<التخصص>.demo.doctorli.iq` / `DemoDoctor2026`.
 
 ### تشغيله بجانب مشروع آخر
 
@@ -248,7 +248,7 @@ cd ~/hhj/mobile && EXPO_PUBLIC_API_PORT=3010 npm start -- --port 8082
 فالمنفذ مفتوح والعطل في مكان آخر. وإن علّق، افتح PowerShell **كمسؤول**:
 
 ```powershell
-New-NetFirewallRule -DisplayName "Mawid API" -Direction Inbound -LocalPort 3000 -Protocol TCP -Action Allow -Profile Private
+New-NetFirewallRule -DisplayName "Doctorli API" -Direction Inbound -LocalPort 3000 -Protocol TCP -Action Allow -Profile Private
 ```
 
 #### تطبيق خاص بك بدل Expo Go

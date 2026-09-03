@@ -124,10 +124,10 @@ const LOST = Platform.OS !== "web" && /^https?:\/\/(localhost|127\.0\.0\.1)\b/.t
 const REQUEST_TIMEOUT_MS = 15_000;
 
 if (__DEV__) {
-  console.log(`[موعد] عنوان الخادم: ${BASE}`);
+  console.log(`[دكتورلي] عنوان الخادم: ${BASE}`);
   if (LOST) {
     console.warn(
-      "[موعد] تعذّر معرفة عنوان حاسوبك، وlocalhost داخل الهاتف يعني الهاتف نفسه.\n" +
+      "[دكتورلي] تعذّر معرفة عنوان حاسوبك، وlocalhost داخل الهاتف يعني الهاتف نفسه.\n" +
         "        اكتب العنوان يدوياً في mobile/.env ثم أعد تشغيل Metro:\n" +
         "          EXPO_PUBLIC_API_URL=http://<عنوان-حاسوبك>:" +
         API_PORT,
@@ -135,10 +135,10 @@ if (__DEV__) {
   }
 }
 
-const ACCESS_KEY = "mawid.access";
+const ACCESS_KEY = "doctorli.access";
 
-const REFRESH_KEY = "mawid.refresh";
-const USER_KEY = "mawid.user";
+const REFRESH_KEY = "doctorli.refresh";
+const USER_KEY = "doctorli.user";
 
 export type SessionUser = {
   id: string;

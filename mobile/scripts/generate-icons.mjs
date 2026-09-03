@@ -2,8 +2,8 @@
  * يولّد أيقونات التطبيق وشاشة البداية والويب من تعريف واحد للهوية،
  * كي لا تتفرّق العلامة بين الحزمتين.
  *
- * العلامة: حرف «م» أبيض بخط IBM Plex Sans Arabic 700 فوق تدرّج زمرّدي،
- * والكلمة «موعد» بخط ريم كوفي 700 كما في واجهة الويب.
+ * العلامة: حرف «د» أبيض بخط IBM Plex Sans Arabic 700 فوق تدرّج زمرّدي،
+ * والكلمة «دكتورلي» بخط ريم كوفي 700 كما في واجهة الويب.
  *
  *   npx playwright install chromium   # مرّة واحدة
  *   node scripts/generate-icons.mjs
@@ -33,12 +33,16 @@ const EMERALD = "#0E5140";
 const EMERALD_DEEP = "#073328";
 const WHITE = "#FFFFFF";
 
+// العلامة في موضعٍ واحد: تغييرها يمسّ ثماني صور
+const MARK_LETTER = "د";
+const WORDMARK = "دكتورلي";
+
 const SANS = path.join(ASSETS, "fonts", "IBMPlexSansArabic-700.ttf");
 const DISPLAY = path.resolve(ROOT, "..", "web", "public", "fonts", "reem-kufi-700-arabic.woff2");
 
 if (!existsSync(SANS)) throw new Error(`لم أجد خطّ العلامة: ${SANS}`);
 const hasDisplay = existsSync(DISPLAY);
-if (!hasDisplay) console.warn(`تنبيه: لم أجد ريم كوفي في ${DISPLAY} — سأكتب «موعد» بخط بلكس.`);
+if (!hasDisplay) console.warn(`تنبيه: لم أجد ريم كوفي في ${DISPLAY} — سأكتب «${WORDMARK}» بخط بلكس.`);
 
 // نسبة الحرف من ضلع المربّع في الأيقونة الكاملة.
 const MARK_SPAN = 0.52;
@@ -59,12 +63,12 @@ const gradient = (w, h) => `
 
 /** نصّ يُقاس صندوقه بعد تحميل الخط ثم يُوسَّط ويُقاس إلى المدى المطلوب. */
 const fitted = (text, { cx, cy, span, by = "max", family = "Sans", fill = WHITE }) =>
-  `<text data-fit='${JSON.stringify({ cx, cy, span, by })}'
+  `<text data-fit='${JSON.stringify({ cx, cy, span, by, family })}'
          font-family="${family}" font-weight="700" font-size="100"
          fill="${fill}" xml:lang="ar">${text}</text>`;
 
 const mark = (size, fill = WHITE, ratio = MARK_SPAN) =>
-  fitted("م", { cx: size / 2, cy: size / 2, span: size * ratio, fill });
+  fitted(MARK_LETTER, { cx: size / 2, cy: size / 2, span: size * ratio, fill });
 
 function html({ width, height, body, transparent }) {
   return `<!doctype html><meta charset="utf-8"><style>
@@ -113,8 +117,8 @@ const assets = [
     note: "شاشة البداية — العلامة والكلمة بالأبيض فوق خلفية زمرّدية",
     width: SPLASH, height: SPLASH, transparent: true,
     body: () =>
-      fitted("م", { cx: SPLASH / 2, cy: 420, span: 230 }) +
-      fitted("موعد", { cx: SPLASH / 2, cy: 640, span: 480, by: "width", family: wordFamily }),
+      fitted(MARK_LETTER, { cx: SPLASH / 2, cy: 420, span: 230 }) +
+      fitted(WORDMARK, { cx: SPLASH / 2, cy: 640, span: 480, by: "width", family: wordFamily }),
   },
   {
     file: "favicon.png",
@@ -149,18 +153,35 @@ for (const a of assets) {
   await page.setContent(html({ ...a, body }), { waitUntil: "load" });
   await page.evaluate(() => document.fonts.ready);
 
-  // نقيس صندوق كل نصّ بعد أن يجهز الخط، ثم نضعه في مركزه بالمقاس المطلوب.
+  // نقيس حبر كل نصّ بعد أن يجهز الخط، ثم نضعه في مركزه بالمقاس المطلوب.
+  //
+  // بالقياس على canvas لا بـgetBBox: الأخير يعيد صندوق سطرٍ كامل بارتفاع الخطّ
+  // (١١٧ لكل حرفٍ مهما كان)، فحرفٌ قصيرٌ كـ«د» — حبره ٤٥ — يُقاس على ١١٧
+  // فيخرج بثلث الحجم المطلوب وينزل عن المركز. وactualBoundingBox* يعطي حدود
+  // الحبر نفسه، فتملأ العلامةُ المدى الذي طُلب لها أياً كان الحرف.
   const missing = await page.evaluate(() => {
     const out = [];
+    const ctx = document.createElement("canvas").getContext("2d");
+    // ltr ليطابق اتجاه ‎<text>‎ في هذا الملف: لا direction عليه، فيرسم من نقطة
+    // الإرساء إلى اليمين وإن كانت حروفه عربية. وrtl هنا يقلب إشارة القياس
+    // فتخرج العلامة خارج الإطار.
+    ctx.direction = "ltr";
     for (const t of document.querySelectorAll("text[data-fit]")) {
-      const { cx, cy, span, by } = JSON.parse(t.dataset.fit);
-      const b = t.getBBox();
-      if (!b.width || !b.height) { out.push(t.textContent); continue; }
-      const basis = by === "width" ? b.width : Math.max(b.width, b.height);
+      const { cx, cy, span, by, family } = JSON.parse(t.dataset.fit);
+      ctx.font = `700 100px '${family}'`;
+      const m = ctx.measureText(t.textContent);
+      const box = {
+        x: -m.actualBoundingBoxLeft,
+        y: -m.actualBoundingBoxAscent,
+        width: m.actualBoundingBoxLeft + m.actualBoundingBoxRight,
+        height: m.actualBoundingBoxAscent + m.actualBoundingBoxDescent,
+      };
+      if (!box.width || !box.height) { out.push(t.textContent); continue; }
+      const basis = by === "width" ? box.width : Math.max(box.width, box.height);
       const s = span / basis;
       t.setAttribute(
         "transform",
-        `translate(${cx},${cy}) scale(${s}) translate(${-(b.x + b.width / 2)},${-(b.y + b.height / 2)})`
+        `translate(${cx},${cy}) scale(${s}) translate(${-(box.x + box.width / 2)},${-(box.y + box.height / 2)})`
       );
     }
     return out;

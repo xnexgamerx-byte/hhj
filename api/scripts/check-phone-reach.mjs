@@ -76,7 +76,7 @@ console.log(
     "",
     "  ظهرت صفحة  ⇒ المنفذ مفتوح والعطل في مكان آخر.",
     "  علّق أو رفض ⇒ جدار الحماية. افتح PowerShell كمسؤول ونفّذ:",
-    `      New-NetFirewallRule -DisplayName "Mawid API" -Direction Inbound -LocalPort ${PORT} -Protocol TCP -Action Allow`,
+    `      New-NetFirewallRule -DisplayName "Doctorli API" -Direction Inbound -LocalPort ${PORT} -Protocol TCP -Action Allow`,
     "",
   ].join("\n"),
 );
