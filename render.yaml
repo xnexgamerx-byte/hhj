@@ -1,0 +1,59 @@
+# مخطّط نشر Render — بلوبرنت واحد يُنشئ الخادم وقاعدة البيانات معاً.
+#
+# التشغيل: Render Dashboard → New → Blueprint → اختر هذا المستودع والفرع.
+# يقرأ Render هذا الملف من جذر المستودع تلقائياً.
+#
+# عند فتح البلوبرنت سيسألك Render عن خطّة كل خدمة — لم نثبّتها هنا عمداً
+# لأن أسماء الخطط وأسعارها تتغيّر، وستراها حيّةً في لوحته:
+#   • قاعدة البيانات: أي خطّة، حتى الأصغر تكفي هذا الحجم من البيانات.
+#   • خادم الـAPI: اختر خطّةً تبقى مستيقظة دائماً لا التي تنام بعد الخمول —
+#     تطبيقٌ على المتجر يفتحه المستخدم لا يحتمل ٣٠ ثانية انتظارٍ عند أول
+#     طلب، وعميلٌ يجرّب التطبيق غداً كذلك.
+#
+# بعد أول نشر: افتح إعدادات خدمة الـAPI وأضف من "Environment" يدوياً —
+#   OWNER_EMAIL, OWNER_PASSWORD  (حساب المالك الأول)
+#   WEB_ORIGIN                   (روابط Vercel بعد نشرها — الخطوة التالية)
+#   WHATSAPP_TOKEN, WHATSAPP_PHONE_NUMBER_ID  (متى صار حساب واتساب جاهزاً)
+# هذه أسرارٌ ومتغيّراتٌ تُعرف بعد النشر لا قبله، فلا معنى لتثبيتها هنا.
+
+databases:
+  - name: doctorsehti-db
+    databaseName: doctorsehti
+    user: doctorsehti
+    region: frankfurt
+
+services:
+  - type: web
+    name: doctorsehti-api
+    runtime: node
+    region: frankfurt
+    rootDir: api
+    buildCommand: npm ci
+    startCommand: npm run db:migrate:deploy && npm run db:seed && npm start
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        fromDatabase:
+          name: doctorsehti-db
+          property: connectionString
+      - key: JWT_SECRET
+        generateValue: true
+      - key: DEFAULT_TIMEZONE
+        value: Asia/Baghdad
+      - key: TRUST_PROXY
+        value: "true"
+      # الأربعة التالية بلا قيمة هنا عمداً — تُملأ من لوحة Render بعد النشر،
+      # فهي إما سرٌّ لا يُكتب في مستودعٍ (الباسوورد، رمز الواتساب) أو قيمةٌ
+      # لا تُعرف إلا بعد أن يوجد الرابط الذي تصفه (روابط الواجهة)
+      - key: OWNER_EMAIL
+        sync: false
+      - key: OWNER_PASSWORD
+        sync: false
+      - key: WEB_ORIGIN
+        sync: false
+      - key: WHATSAPP_TOKEN
+        sync: false
+      - key: WHATSAPP_PHONE_NUMBER_ID
+        sync: false
