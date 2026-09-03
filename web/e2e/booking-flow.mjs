@@ -5,7 +5,7 @@
  * من شاشة المريض بمجرد حجزه؟
  *
  * التشغيل (الخادم على ٣٠٠٠ والواجهة على ٣٠٠١):
- *   OWNER_EMAIL=owner@doctorli.iq OWNER_PASSWORD=... node e2e/booking-flow.mjs
+ *   OWNER_EMAIL=owner@doctorsehti.iq OWNER_PASSWORD=... node e2e/booking-flow.mjs
  *
  * يجهّز بياناته بنفسه عبر واجهة المالك، فلا يحتاج قاعدة بيانات معدّة مسبقاً.
  */
@@ -13,7 +13,7 @@ import { chromium } from "playwright";
 
 const API = process.env.API_URL ?? "http://localhost:3000";
 const WEB = process.env.WEB_URL ?? "http://localhost:3001";
-const OWNER_EMAIL = process.env.OWNER_EMAIL ?? "owner@doctorli.iq";
+const OWNER_EMAIL = process.env.OWNER_EMAIL ?? "owner@doctorsehti.iq";
 const OWNER_PASSWORD = process.env.OWNER_PASSWORD;
 const CHROME = process.env.CHROME_PATH; // مسار متصفح جاهز، وإلا استُعمل متصفح Playwright
 

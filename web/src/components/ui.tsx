@@ -63,10 +63,10 @@ export function Spinner({ size = 14 }: { size?: number }) {
         borderTopColor: "transparent",
         borderRadius: "50%",
         display: "inline-block",
-        animation: "doctorli-spin .7s linear infinite",
+        animation: "doctorsehti-spin .7s linear infinite",
       }}
     >
-      <style>{`@keyframes doctorli-spin{to{transform:rotate(360deg)}}`}</style>
+      <style>{`@keyframes doctorsehti-spin{to{transform:rotate(360deg)}}`}</style>
     </span>
   );
 }

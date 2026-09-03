@@ -234,7 +234,7 @@ async function main() {
   // ═══ لوحة السكرتير ═══════════════════════════════════════════
   {
     const owner = await prisma.user.create({
-      data: { email: `own.${suffix}@doctorli.iq`, fullName: "مالك", role: "OWNER", passwordHash: await hashPassword("Owner12345") },
+      data: { email: `own.${suffix}@doctorsehti.iq`, fullName: "مالك", role: "OWNER", passwordHash: await hashPassword("Owner12345") },
     });
     const mine = await buildClinic(`s${suffix}`);
     const other = await buildClinic(`o${suffix}`);
@@ -321,7 +321,7 @@ async function main() {
   // ═══ العمولة ═════════════════════════════════════════════════
   {
     const owner = await prisma.user.create({
-      data: { email: `com.${suffix}@doctorli.iq`, fullName: "مالك العمولات", role: "OWNER", passwordHash: await hashPassword("Owner12345") },
+      data: { email: `com.${suffix}@doctorsehti.iq`, fullName: "مالك العمولات", role: "OWNER", passwordHash: await hashPassword("Owner12345") },
     });
     const { practice, clinic } = await buildClinic(`c${suffix}`, 5000);
     const { account, patient } = await buildPatient(`5${suffix.slice(1)}`);

@@ -8,13 +8,13 @@
  * التشغيل:
  *   npm run export:web
  *   node scripts/serve-web-export.mjs &        # على المنفذ ٣٠٠٢
- *   OWNER_EMAIL=owner@doctorli.iq OWNER_PASSWORD=... npm run e2e
+ *   OWNER_EMAIL=owner@doctorsehti.iq OWNER_PASSWORD=... npm run e2e
  */
 import { chromium } from "playwright";
 
 const API = process.env.API_URL ?? "http://localhost:3000";
 const APP = process.env.APP_URL ?? "http://localhost:3002";
-const OWNER_EMAIL = process.env.OWNER_EMAIL ?? "owner@doctorli.iq";
+const OWNER_EMAIL = process.env.OWNER_EMAIL ?? "owner@doctorsehti.iq";
 const OWNER_PASSWORD = process.env.OWNER_PASSWORD;
 const CHROME = process.env.CHROME_PATH;
 const SHOTS = process.env.SHOTS;

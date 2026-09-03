@@ -14,9 +14,9 @@ export function mediaUrl(path: string | null | undefined): string | null {
   return `${BASE}${path.startsWith("/") ? path : `/${path}`}`;
 }
 
-const ACCESS_KEY = "doctorli.access";
-const REFRESH_KEY = "doctorli.refresh";
-const USER_KEY = "doctorli.user";
+const ACCESS_KEY = "doctorsehti.access";
+const REFRESH_KEY = "doctorsehti.refresh";
+const USER_KEY = "doctorsehti.user";
 
 export type SessionUser = { id: string; fullName: string; role: "PATIENT" | "DOCTOR" | "STAFF" | "OWNER" };
 

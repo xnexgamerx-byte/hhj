@@ -58,7 +58,7 @@ async function main() {
   // ── تهيئة: حساب المالك ──────────────────────────────────────────
   const owner = await prisma.user.create({
     data: {
-      email: `owner.${suffix}@doctorli.iq`,
+      email: `owner.${suffix}@doctorsehti.iq`,
       fullName: "المالك",
       role: "OWNER",
       passwordHash: await hashPassword("OwnerPass123"),

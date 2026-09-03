@@ -24,7 +24,7 @@ import { Appear } from "@/motion";
 import { radius, shadow, space, usePalette } from "@/theme";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-const GOVERNORATE_KEY = "doctorli.governorate";
+const GOVERNORATE_KEY = "doctorsehti.governorate";
 const PREVIEW_COUNT = 8;
 
 export default function HomeScreen() {

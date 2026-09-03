@@ -11,7 +11,7 @@ import { countLabel, COUNTS } from "@/lib/format";
 type Governorate = { id: number; slug: string; nameAr: string };
 type Specialty = { id: number; slug: string; nameAr: string; nameEn: string; doctorCount: number };
 
-const GOVERNORATE_KEY = "doctorli.governorate";
+const GOVERNORATE_KEY = "doctorsehti.governorate";
 
 export default function HomePage() {
   const [governorates, setGovernorates] = useState<Governorate[]>([]);

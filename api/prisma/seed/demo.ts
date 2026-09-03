@@ -15,7 +15,7 @@ import { hashPassword } from "../../src/lib/password.js";
 const prisma = new PrismaClient();
 
 /** يميّز صفوف العرض عن الحقيقية في كل عمليات الحذف والبحث */
-const DEMO_TAG = "demo.doctorli";
+const DEMO_TAG = "demo.doctorsehti";
 const DEMO_PASSWORD = "DemoDoctor2026";
 
 type Seed = {

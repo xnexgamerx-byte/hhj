@@ -32,7 +32,7 @@ export function Header({ subtitle }: { subtitle?: string }) {
             <img src="/brand-mark.png" alt="" width={20} height={20} />
           </span>
           <span className="text-[17px] font-bold" style={{ fontFamily: "var(--font-display)" }}>
-            دكتورلي
+            دكتور صحتي
           </span>
         </Link>
 

@@ -11,8 +11,8 @@ die() { printf "\n\033[1;31m%s\033[0m\n" "$1" >&2; exit 1; }
 #   OWNER_EMAIL=you@example.com OWNER_PASSWORD='...' bash setup.sh
 # نتذكّر هل مُرّرا صراحةً، كي نحدّث ملفاً موجوداً من تشغيل سابق
 OWNER_GIVEN="${OWNER_EMAIL:-}${OWNER_PASSWORD:-}"
-OWNER_EMAIL="${OWNER_EMAIL:-owner@doctorli.iq}"
-OWNER_PASSWORD="${OWNER_PASSWORD:-DoctorliOwner2026}"
+OWNER_EMAIL="${OWNER_EMAIL:-owner@doctorsehti.iq}"
+OWNER_PASSWORD="${OWNER_PASSWORD:-DoctorsehtiOwner2026}"
 
 command -v node >/dev/null || die "لم أجد Node.js — ثبّته أولاً من nodejs.org"
 

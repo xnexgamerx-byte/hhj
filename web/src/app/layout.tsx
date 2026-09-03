@@ -2,7 +2,7 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "دكتورلي · حجز مواعيد الأطباء",
+  title: "دكتور صحتي · حجز مواعيد الأطباء",
   description: "احجز موعدك عند طبيبك في محافظتك — أوقات محدّثة وحجز مثبّت",
 };
 
