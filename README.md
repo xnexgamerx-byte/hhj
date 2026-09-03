@@ -567,6 +567,7 @@ setup.sh                        تهيئة المشروع كاملاً بأمر 
 docker-compose.yml              قاعدة البيانات للتطوير
 api/
   prisma/schema.prisma          نموذج البيانات
+  prisma/migrations/            تاريخ الترحيل — npm run db:migrate:deploy في الإنتاج
   prisma/seed/                  بيانات العراق والتخصصات وحساب المالك الأول
   src/lib/                      الباسوورد، الرموز، أرقام الهواتف، المناطق الزمنية
   src/modules/availability/     حساب الأوقات المتاحة
