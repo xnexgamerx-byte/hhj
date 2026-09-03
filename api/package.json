@@ -5,6 +5,7 @@
   "description": "خادم تطبيق حجز مواعيد الأطباء",
   "type": "module",
   "scripts": {
+    "postinstall": "prisma generate",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
     "db:push": "prisma db push",
@@ -44,12 +45,12 @@
     "@fastify/static": "^10.1.3",
     "@prisma/client": "^6.2.1",
     "fastify": "^5.12.1",
-    "jose": "^6.2.10"
+    "jose": "^6.2.10",
+    "prisma": "^6.2.1",
+    "tsx": "^4.19.2"
   },
   "devDependencies": {
     "@types/node": "^22.10.5",
-    "prisma": "^6.2.1",
-    "tsx": "^4.19.2",
     "typescript": "^5.7.3"
   }
 }
