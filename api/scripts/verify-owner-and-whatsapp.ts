@@ -41,6 +41,8 @@ function check(name: string, passed: boolean, detail: string) {
 /** مزوّد اختباري يمكن جعله يفشل عند الطلب، لمحاكاة تعطّل واتساب. */
 class FlakyProvider implements WhatsAppProvider {
   readonly name = "flaky-test";
+  /** يحاكي مزوّداً حقيقياً: نجاحه يعني وصول الرسالة فعلاً */
+  readonly automatic = true;
   readonly sent: { to: string; message: WhatsAppMessage }[] = [];
   failNext = false;
 
@@ -329,6 +331,38 @@ async function main() {
     "المزوّد الاحتياطي يسجّل الرسالة ويعطي رابط wa.me",
     consoleProvider.sent.length === 1,
     "يصلح للتطوير وكحل يدوي مؤقت قبل اعتماد قوالب ميتا",
+  );
+
+  // ── ٩.١ إبلاغ الطبيب من واتساب المريض حين لا يوجد إرسالٌ تلقائي ──
+  //
+  // قوالب ميتا تحتاج حساباً واعتماداً يأخذ أياماً، وحتى ذلك الحين لا يصل
+  // الطبيبَ شيء. فالحجز يعيد رابطاً يفتح واتساب المريض والرسالة مكتوبة،
+  // ويبقى عليه «إرسال» — الطبيب يُبلَّغ اليوم، ومن رقم مريضه فيردّ عليه.
+  await prisma.doctor.update({ where: { id: created.doctorId }, data: { whatsappEnabled: true } });
+  setWhatsAppProvider(new ConsoleProvider(() => {}));
+  const manual = await createBooking(
+    { doctorClinicId: practice.id, patientId: patient.id, bookedByUserId: account.id, startAt: sessionStart },
+    prisma,
+  );
+  const link = manual.whatsapp.link ?? "";
+  const decoded = decodeURIComponent(link);
+  check(
+    "بلا إرسالٍ تلقائي: الحجز يعيد رابط واتساب جاهزاً للمريض",
+    link.startsWith("https://wa.me/") && decoded.includes("حجز جديد") && decoded.includes(String(manual.dailyNumber)),
+    link.slice(0, 60) + "…",
+  );
+
+  // وحين يصل الطبيبَ إشعارٌ تلقائيّ فعلاً، لا رابط: رسالتان عن حجزٍ واحد ضجيج
+  provider.failNext = false;
+  setWhatsAppProvider(provider);
+  const automatic = await createBooking(
+    { doctorClinicId: practice.id, patientId: patient.id, bookedByUserId: account.id, startAt: sessionStart },
+    prisma,
+  );
+  check(
+    "مع الإرسال التلقائي يختفي الرابط فلا يصل الطبيب الخبر مرّتين",
+    automatic.whatsapp.delivered && automatic.whatsapp.link === undefined,
+    "الزرّ يظهر حيث يلزم وحده",
   );
 
   // ── ١٠. دخول المريض بالهاتف: ما يفتحه الجهاز المعروف وما يمنعه الغريب ──

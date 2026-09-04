@@ -11,7 +11,7 @@ import { prisma as defaultPrisma } from "../lib/prisma.js";
 import { notifyInApp } from "./inbox.js";
 import { toWhatsAppAddress } from "../lib/phone.js";
 import type { WhatsAppProvider } from "./whatsapp/provider.js";
-import { createWhatsAppProvider } from "./whatsapp/provider.js";
+import { createWhatsAppProvider, waMeLink } from "./whatsapp/provider.js";
 import type { WhatsAppMessage } from "./whatsapp/templates.js";
 import { newBookingMessage, bookingCancelledMessage } from "./whatsapp/templates.js";
 import type { BookingSummary } from "./whatsapp/templates.js";
@@ -135,7 +135,7 @@ export function resolveDoctorWhatsApp(practice: {
 export async function notifyDoctorOfNewBooking(
   appointmentId: string,
   client: PrismaClient = defaultPrisma,
-): Promise<{ queued: boolean; delivered: boolean; reason?: string }> {
+): Promise<{ queued: boolean; delivered: boolean; reason?: string; link?: string }> {
   const appointment = await client.appointment.findUnique({
     where: { id: appointmentId },
     include: {
@@ -167,7 +167,12 @@ export async function notifyDoctorOfNewBooking(
   );
 
   const delivered = await deliver(logId, client);
-  return { queued: true, delivered };
+  // ما لم تصل الرسالة الطبيبَ من تلقائها، نعطي المريض رابطاً يفتح واتسابه
+  // بالنصّ نفسه جاهزاً ليضغط «إرسال». هذا يجعل الطبيب يُبلَّغ اليوم بلا حساب
+  // ميتا ولا اعتماد قوالب، ومن رقم مريضه فيردّ عليه مباشرة. وحين يُفعَّل
+  // الإرسال التلقائي يختفي الزرّ وحده، فلا يصل الطبيب الخبرُ مرّتين.
+  const link = provider.automatic && delivered ? undefined : waMeLink(to, message.body);
+  return { queued: true, delivered, link };
 }
 
 /** إشعار الطبيب بإلغاء حجز. */

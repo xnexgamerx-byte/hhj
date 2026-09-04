@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Modal, Pressable, ScrollView, View } from "react-native";
+import { Linking, Modal, Pressable, ScrollView, View } from "react-native";
 import { useRouter } from "expo-router";
 import { Icon } from "@/components/icons";
 import { Alert, Button, Chips, Divider, Field, IconTile, Input, T } from "@/components/ui";
@@ -75,7 +75,7 @@ export function BookingSheet({
   const [patientId, setPatientId] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [done, setDone] = useState<{ dailyNumber: number; reference: string; queueNumber: number } | null>(null);
+  const [done, setDone] = useState<{ dailyNumber: number; reference: string; queueNumber: number; whatsapp?: { link?: string } } | null>(null);
 
   // بيانات المريض — تبدأ مفتوحةً لأنّ من لم يسجّل الدخول بعد لا بيانات محفوظة له
   const [editing, setEditing] = useState(true);
@@ -173,7 +173,7 @@ export function BookingSheet({
         }
       }
 
-      const result = await api.post<{ dailyNumber: number; reference: string; queueNumber: number }>("/bookings", {
+      const result = await api.post<{ dailyNumber: number; reference: string; queueNumber: number; whatsapp?: { link?: string } }>("/bookings", {
         doctorClinicId: practiceId,
         patientId: activePatientId,
         startAt: chosen.startAt,
@@ -431,7 +431,7 @@ function Confirmation({
   onOpenBookings,
   onClose,
 }: {
-  done: { dailyNumber: number; reference: string; queueNumber: number };
+  done: { dailyNumber: number; reference: string; queueNumber: number; whatsapp?: { link?: string } };
   patientName: string;
   doctorName: string;
   clinicName: string;
@@ -505,6 +505,24 @@ function Confirmation({
           </T>
         ) : null}
       </View>
+
+      {/* الطبيب يُبلَّغ من واتساب المريض نفسه: الرسالة تُفتح مكتوبةً كاملة
+          ولا يبقى عليه إلا «إرسال». يظهر هذا حين لا يصل الطبيبَ إشعارٌ
+          تلقائيّ — ويختفي وحده متى فُعِّل الإرسال من الخادم */}
+      {done.whatsapp?.link ? (
+        <View style={{ gap: space(2) }}>
+          <Button
+            label="أبلغ الطبيب بالواتساب"
+            variant="primary"
+            size="lg"
+            full
+            onPress={() => Linking.openURL(done.whatsapp!.link!)}
+          />
+          <T size={12.5} tone="faint" align="center" lineHeight={19}>
+            تفتح المحادثة والرسالة مكتوبة — اضغط «إرسال» ليصل الطبيب خبر موعدك فوراً.
+          </T>
+        </View>
+      ) : null}
 
       <View style={{ gap: space(2) }}>
         <Button label="مواعيدي" full onPress={onOpenBookings} />

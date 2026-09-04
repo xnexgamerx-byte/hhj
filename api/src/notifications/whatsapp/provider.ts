@@ -18,6 +18,14 @@ export type SendResult =
 
 export interface WhatsAppProvider {
   readonly name: string;
+  /**
+   * هل تصل الرسالة الطبيبَ من تلقاء نفسها؟
+   *
+   * المزوّد الاحتياطيّ «ينجح» وهو يطبع فقط، فلا يكفي نجاح الإرسال دليلاً على
+   * وصول شيء. هذه الراية تميّز الحالتين، فيعرف الحجزُ متى يعرض للمريض زرّ
+   * «أبلغ الطبيب بالواتساب» ومتى يكون الزرّ رسالةً ثانيةً لا داعي لها.
+   */
+  readonly automatic: boolean;
   send(to: string, message: WhatsAppMessage): Promise<SendResult>;
 }
 
@@ -26,6 +34,7 @@ const GRAPH_VERSION = "v21.0";
 /** الإرسال الحقيقي عبر واجهة ميتا الرسمية. */
 export class CloudApiProvider implements WhatsAppProvider {
   readonly name = "whatsapp-cloud-api";
+  readonly automatic = true;
 
   constructor(
     private readonly token: string,
@@ -86,6 +95,7 @@ export class CloudApiProvider implements WhatsAppProvider {
  */
 export class ConsoleProvider implements WhatsAppProvider {
   readonly name = "console";
+  readonly automatic = false;
   readonly sent: { to: string; message: WhatsAppMessage }[] = [];
 
   constructor(private readonly log: (line: string) => void = console.log) {}

@@ -53,6 +53,8 @@ function check(name: string, passed: boolean, detail = "") {
 }
 
 class Recorder implements WhatsAppProvider {
+  /** يحاكي مزوّداً حقيقياً: نجاحه يعني وصول الرسالة فعلاً */
+  readonly automatic = true;
   readonly name = "recorder";
   readonly sent: { to: string; message: WhatsAppMessage }[] = [];
   async send(to: string, message: WhatsAppMessage): Promise<SendResult> {

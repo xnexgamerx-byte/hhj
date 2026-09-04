@@ -55,7 +55,11 @@ export type CreateBookingResult = {
   serviceDate: string;
   slotStart: Date;
   status: string;
-  whatsapp: { queued: boolean; delivered: boolean; reason?: string };
+  /**
+   * `link` رابط wa.me يفتح واتساب المريض ومعه رسالة الطبيب جاهزة. يأتي حين
+   * لا تصل الرسالة تلقائياً، فتُعرض للمريض ضغطةُ «إرسال» تُبلّغ الطبيب.
+   */
+  whatsapp: { queued: boolean; delivered: boolean; reason?: string; link?: string };
 };
 
 

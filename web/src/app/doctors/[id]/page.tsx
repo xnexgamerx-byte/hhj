@@ -447,7 +447,7 @@ function BookingPanel({
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [done, setDone] = useState<{ reference: string; queueNumber: number } | null>(null);
+  const [done, setDone] = useState<{ reference: string; queueNumber: number; whatsapp?: { link?: string } } | null>(null);
 
   // بيانات المريض: الاسم والهاتف نفساهما يفتحان الحساب أيضاً، بلا رمز تحقق
   const [phone, setPhone] = useState("");
@@ -496,7 +496,7 @@ function BookingPanel({
         setPatientId(activePatientId);
       }
 
-      const result = await api.post<{ reference: string; queueNumber: number }>("/bookings", {
+      const result = await api.post<{ reference: string; queueNumber: number; whatsapp?: { link?: string } }>("/bookings", {
         doctorClinicId: practiceId,
         patientId: activePatientId,
         startAt: chosen.startAt,
@@ -556,6 +556,20 @@ function BookingPanel({
             {done.queueNumber > 0 && (
               <p className="text-[15px] font-semibold mt-3">دورك رقم {toArabic(done.queueNumber)}</p>
             )}
+            {/* الطبيب يُبلَّغ من واتساب المريض نفسه حين لا يصله إشعارٌ تلقائي */}
+            {done.whatsapp?.link && (
+              <div className="grid gap-1.5 mt-5">
+                <a href={done.whatsapp.link} target="_blank" rel="noopener noreferrer">
+                  <Button variant="accent" size="lg" full>
+                    أبلغ الطبيب بالواتساب
+                  </Button>
+                </a>
+                <p className="text-[12.5px]" style={{ color: "var(--faint)" }}>
+                  تفتح المحادثة والرسالة مكتوبة — اضغط «إرسال» ليصل الطبيب خبر موعدك فوراً.
+                </p>
+              </div>
+            )}
+
             <div className="grid gap-2 mt-5">
               <Link href="/my">
                 <Button full>حجوزاتي</Button>
