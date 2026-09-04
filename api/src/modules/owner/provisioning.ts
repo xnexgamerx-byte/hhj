@@ -1,7 +1,9 @@
 /**
  * تسجيل الأطباء — لا يوجد تسجيل ذاتي.
  *
- * المالك وحده ينشئ حساب كل طبيب ويولّد له إيميلاً وباسووردًا أولياً.
+ * المالك وحده ينشئ حساب كل طبيب: رقم هاتفه وباسوورد أوليّ. الرقم لا الإيميل
+ * لأنّ طبيب العيادة في العراق يحمل هاتفه ولا يفتح بريده — وحسابٌ مفتاحه شيء
+ * لا يستعمله صاحبه حسابٌ لا يُدخل إليه.
  * الباسوورد النصي يظهر **مرة واحدة فقط** في ردّ هذه الدالة ليسلّمه المالك للطبيب،
  * ولا يُخزَّن ولا يُكتب في أي سجل. بعدها يُلزَم الطبيب بتغييره أول دخول.
  */
@@ -15,10 +17,16 @@ const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 
 export type CreateDoctorInput = {
   fullName: string;
-  email: string;
-  /** رقم واتساب الطبيب الذي تصله تفاصيل الحجوزات */
+  /** رقمه الذي يدخل به — وهو هويّة الحساب بدل الإيميل */
+  phone: string;
+  /**
+   * رقم واتساب الطبيب الذي تصله تفاصيل الحجوزات. يُترك فارغاً في الغالب
+   * فيصير رقم دخوله نفسه: هو رقمه الذي يحمله، وسؤاله مرّتين عن رقمٍ واحد
+   * يدعو إلى الخطأ في أحدهما.
+   */
   whatsappNumber?: string | null;
-  phone?: string | null;
+  /** اختياريّ تماماً — يبقى للمالك ولمن يريده، ولا يُطلب من الطبيب */
+  email?: string | null;
   title?: string;
   bio?: string | null;
   yearsOfExperience?: number | null;
@@ -33,7 +41,8 @@ export type CreatedDoctor = {
   doctorId: string;
   userId: string;
   fullName: string;
-  email: string;
+  /** ما يدخل به: رقم هاتفه */
+  phone: string;
   /** يُعرض للمالك مرة واحدة ثم يختفي — غير مخزَّن في أي مكان */
   temporaryPassword: string;
 };
@@ -49,18 +58,25 @@ export async function createDoctorAccount(
   input: CreateDoctorInput,
   client: PrismaClient = defaultPrisma,
 ): Promise<CreatedDoctor> {
-  const email = normalizeEmail(input.email);
   const fullName = input.fullName.trim();
   if (fullName.length < 3) throw badRequest("INVALID_NAME", "اسم الطبيب قصير جداً");
 
-  const whatsappNumber = input.whatsappNumber ? normalizeIraqiPhone(input.whatsappNumber) : null;
-  const phone = input.phone ? normalizeIraqiPhone(input.phone) : null;
+  const phone = normalizeIraqiPhone(input.phone);
+  // بلا رقم واتساب منفصل: رقم دخوله هو رقمه
+  const whatsappNumber = input.whatsappNumber ? normalizeIraqiPhone(input.whatsappNumber) : phone;
+  const email = input.email?.trim() ? normalizeEmail(input.email) : null;
 
-  if (await client.user.findUnique({ where: { email }, select: { id: true } })) {
-    throw conflict("EMAIL_TAKEN", "هذا الإيميل مستعمل لحساب آخر");
+  if (await client.user.findUnique({ where: { phone }, select: { id: true } })) {
+    // يقع هذا حين يكون الطبيب قد استعمل التطبيق مريضاً برقمه نفسه — ولا
+    // نحوّل حسابه بأثرٍ رجعيّ: مواعيده كمريض تبقى له، والرسالة تقول للمالك
+    // ما يفعل بدل أن تتركه أمام خطأٍ مبهم
+    throw conflict(
+      "PHONE_TAKEN",
+      "هذا الرقم مسجَّل بحسابٍ آخر في التطبيق. استعمل رقماً آخر للطبيب، أو احذف الحساب القديم أولاً",
+    );
   }
-  if (phone && (await client.user.findUnique({ where: { phone }, select: { id: true } }))) {
-    throw conflict("PHONE_TAKEN", "رقم الهاتف مستعمل لحساب آخر");
+  if (email && (await client.user.findUnique({ where: { email }, select: { id: true } }))) {
+    throw conflict("EMAIL_TAKEN", "هذا الإيميل مستعمل لحساب آخر");
   }
 
   const temporaryPassword = input.temporaryPassword?.trim() || generateTemporaryPassword();
@@ -101,7 +117,7 @@ export async function createDoctorAccount(
     });
 
     await writeAudit(tx, ownerId, "DOCTOR_CREATED", "Doctor", created.id, {
-      email,
+      phone,
       fullName,
       whatsappNumber,
     });
@@ -113,7 +129,7 @@ export async function createDoctorAccount(
     doctorId: doctor.created.id,
     userId: doctor.user.id,
     fullName,
-    email,
+    phone,
     temporaryPassword,
   };
 }
@@ -123,12 +139,12 @@ export async function resetDoctorPassword(
   ownerId: string,
   doctorId: string,
   client: PrismaClient = defaultPrisma,
-): Promise<{ email: string; temporaryPassword: string }> {
+): Promise<{ phone: string; temporaryPassword: string }> {
   const doctor = await client.doctor.findUnique({
     where: { id: doctorId },
-    select: { userId: true, user: { select: { email: true } } },
+    select: { userId: true, user: { select: { phone: true } } },
   });
-  if (!doctor?.user.email) throw notFound("DOCTOR_NOT_FOUND", "الطبيب غير موجود");
+  if (!doctor?.user.phone) throw notFound("DOCTOR_NOT_FOUND", "الطبيب غير موجود");
 
   const temporaryPassword = generateTemporaryPassword();
   const passwordHash = await hashPassword(temporaryPassword);
@@ -146,7 +162,7 @@ export async function resetDoctorPassword(
     await writeAudit(tx, ownerId, "DOCTOR_PASSWORD_RESET", "Doctor", doctorId, null);
   });
 
-  return { email: doctor.user.email, temporaryPassword };
+  return { phone: doctor.user.phone, temporaryPassword };
 }
 
 /** إيقاف طبيب أو إعادة تفعيله — يخفيه من البحث ويمنع دخوله. */

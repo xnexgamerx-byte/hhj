@@ -25,6 +25,12 @@ export function toLatinDigits(input: string): string {
  * والرقم الوطني تسع خانات بعدها.
  */
 export function normalizeIraqiPhone(raw: string): string {
+  // الرقم يصل من JSON لا من TypeScript، فقد يغيب أصلاً حين يُرسل نموذجٌ ناقص.
+  // وبلا هذا الحارس ينهار الطلب بـ500 مبهم بدل أن يقول للمستخدم ما ينقصه
+  if (typeof raw !== "string" || raw.trim() === "") {
+    throw badRequest("INVALID_PHONE", "رقم الهاتف مطلوب. مثال: ٠٧٧٠١٢٣٤٥٦٧");
+  }
+
   let digits = toLatinDigits(raw).replace(/[\s()\-.]/g, "");
 
   if (digits.startsWith("+")) digits = digits.slice(1);

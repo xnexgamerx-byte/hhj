@@ -37,7 +37,7 @@ type DoctorRow = {
   whatsappNumber: string | null;
   whatsappEnabled: boolean;
   registeredAt: string;
-  user: { fullName: string; email: string | null; lastLoginAt: string | null; mustChangePassword: boolean };
+  user: { fullName: string; phone: string | null; lastLoginAt: string | null; mustChangePassword: boolean };
   specialties: { specialty: { nameAr: string }; isPrimary: boolean }[];
   _count: { practices: number };
 };
@@ -331,7 +331,7 @@ function DoctorsTab() {
   const [error, setError] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
   const [linking, setLinking] = useState<DoctorRow | null>(null);
-  const [created, setCreated] = useState<{ fullName: string; email: string; temporaryPassword: string } | null>(null);
+  const [created, setCreated] = useState<{ fullName: string; phone: string; temporaryPassword: string } | null>(null);
 
   const load = useCallback(() => {
     api
@@ -345,7 +345,7 @@ function DoctorsTab() {
   async function resetPassword(id: string, name: string) {
     if (!confirm(`إنشاء باسوورد جديد لـ${name}؟ سيُقطع دخوله الحالي.`)) return;
     try {
-      const result = await api.post<{ email: string; temporaryPassword: string }>(`/owner/doctors/${id}/reset-password`, {});
+      const result = await api.post<{ phone: string; temporaryPassword: string }>(`/owner/doctors/${id}/reset-password`, {});
       setCreated({ fullName: name, ...result });
       load();
     } catch (e) {
@@ -401,7 +401,7 @@ function DoctorsTab() {
                   {row.title} {row.user.fullName}
                 </p>
                 <p className="text-[13px] mt-0.5" dir="ltr" style={{ color: "var(--muted)", textAlign: "start" }}>
-                  {row.user.email}
+                  {row.user.phone}
                 </p>
                 <p className="text-[13px] mt-0.5" style={{ color: "var(--primary)" }}>
                   {row.specialties.map((s) => s.specialty.nameAr).join(" · ") || "بلا تخصص"}
@@ -895,7 +895,7 @@ function CredentialsCard({
   created,
   onClose,
 }: {
-  created: { fullName: string; email: string; temporaryPassword: string };
+  created: { fullName: string; phone: string; temporaryPassword: string };
   onClose: () => void;
 }) {
   return (
@@ -907,7 +907,7 @@ function CredentialsCard({
         سلّمها للطبيب الآن — لن تظهر مرة أخرى. سيُطلب منه تغيير الباسوورد أول دخول.
       </p>
       <div className="grid gap-2">
-        <CopyRow label="الإيميل" value={created.email} />
+        <CopyRow label="رقم الهاتف" value={created.phone} />
         <CopyRow label="الباسوورد" value={created.temporaryPassword} />
       </div>
       <div className="mt-4">
@@ -952,10 +952,10 @@ function AddDoctorDialog({
   onCreated,
 }: {
   onClose: () => void;
-  onCreated: (result: { fullName: string; email: string; temporaryPassword: string }) => void;
+  onCreated: (result: { fullName: string; phone: string; temporaryPassword: string }) => void;
 }) {
   const [fullName, setFullName] = useState("");
-  const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
   const [whatsappNumber, setWhatsapp] = useState("");
   const [title, setTitle] = useState("د.");
   const [specialtyId, setSpecialtyId] = useState("");
@@ -972,9 +972,9 @@ function AddDoctorDialog({
     setBusy(true);
     setError(null);
     try {
-      const result = await api.post<{ fullName: string; email: string; temporaryPassword: string }>("/owner/doctors", {
+      const result = await api.post<{ fullName: string; phone: string; temporaryPassword: string }>("/owner/doctors", {
         fullName,
-        email,
+        phone,
         whatsappNumber: whatsappNumber || undefined,
         title,
         yearsOfExperience: yearsOfExperience ? Number(yearsOfExperience) : undefined,
@@ -1024,11 +1024,11 @@ function AddDoctorDialog({
             </Field>
           </div>
 
-          <Field label="الإيميل" hint="يدخل به الطبيب للوحته">
-            <Input value={email} onChange={(e) => setEmail(e.target.value)} type="email" dir="ltr" placeholder="doctor@clinic.iq" />
+          <Field label="رقم هاتف الطبيب" hint="يدخل به للوحته — يقبل ٠٧٧٠ أو ‎+964">
+            <Input value={phone} onChange={(e) => setPhone(e.target.value)} inputMode="tel" placeholder="07701234567" />
           </Field>
 
-          <Field label="رقم الواتساب" hint="تصله تفاصيل كل حجز — يقبل ٠٧٧٠ أو ‎+964">
+          <Field label="رقم الواتساب" hint="اتركه فارغاً ليكون رقم هاتفه نفسه — تصله تفاصيل كل حجز">
             <Input value={whatsappNumber} onChange={(e) => setWhatsapp(e.target.value)} inputMode="tel" placeholder="07701234567" />
           </Field>
 
@@ -1047,7 +1047,7 @@ function AddDoctorDialog({
             <Input value={yearsOfExperience} onChange={(e) => setYears(e.target.value)} type="number" min={0} max={60} className="tnum" />
           </Field>
 
-          <Button size="lg" full loading={busy} onClick={submit} disabled={!fullName || !email}>
+          <Button size="lg" full loading={busy} onClick={submit} disabled={!fullName || !phone}>
             إنشاء الحساب
           </Button>
           <Button variant="ghost" full onClick={onClose}>
@@ -1064,7 +1064,7 @@ function AddDoctorDialog({
 type StaffRow = {
   id: string;
   fullName: string;
-  email: string | null;
+  phone: string | null;
   isActive: boolean;
   mustChangePassword: boolean;
   canManageSchedule: boolean;
@@ -1085,7 +1085,7 @@ function StaffTab() {
   const [rows, setRows] = useState<StaffRow[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
-  const [created, setCreated] = useState<{ fullName: string; email: string; temporaryPassword: string } | null>(null);
+  const [created, setCreated] = useState<{ fullName: string; phone: string; temporaryPassword: string } | null>(null);
 
   const load = useCallback(() => {
     api.get<StaffRow[]>("/owner/staff").then(setRows).catch((e) => setError(e.message));
@@ -1140,7 +1140,7 @@ function StaffTab() {
               <div className="min-w-0">
                 <p className="text-[15.5px] font-bold">{row.fullName}</p>
                 <p className="text-[13px] mt-0.5" dir="ltr" style={{ color: "var(--muted)", textAlign: "start" }}>
-                  {row.email}
+                  {row.phone}
                 </p>
                 <p className="text-[13px] mt-0.5" style={{ color: "var(--primary)" }}>
                   {row.scope}
@@ -1184,10 +1184,9 @@ function AddStaffDialog({
   onCreated,
 }: {
   onClose: () => void;
-  onCreated: (result: { fullName: string; email: string; temporaryPassword: string }) => void;
+  onCreated: (result: { fullName: string; phone: string; temporaryPassword: string }) => void;
 }) {
   const [fullName, setFullName] = useState("");
-  const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [clinicId, setClinicId] = useState("");
   const [canManageSchedule, setCanManageSchedule] = useState(false);
@@ -1203,10 +1202,9 @@ function AddStaffDialog({
     setBusy(true);
     setError(null);
     try {
-      const result = await api.post<{ fullName: string; email: string; temporaryPassword: string }>("/owner/staff", {
+      const result = await api.post<{ fullName: string; phone: string; temporaryPassword: string }>("/owner/staff", {
         fullName,
-        email,
-        phone: phone || undefined,
+        phone,
         clinicId,
         canManageSchedule,
       });
@@ -1233,11 +1231,8 @@ function AddStaffDialog({
         <Field label="الاسم">
           <Input value={fullName} onChange={(e) => setFullName(e.target.value)} placeholder="الاسم الثلاثي" />
         </Field>
-        <Field label="الإيميل" hint="يدخل به للوحة">
-          <Input value={email} onChange={(e) => setEmail(e.target.value)} type="email" dir="ltr" placeholder="staff@clinic.iq" />
-        </Field>
-        <Field label="رقم الهاتف" hint="اختياري">
-          <Input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="07701234567" />
+        <Field label="رقم الهاتف" hint="يدخل به للوحة">
+          <Input value={phone} onChange={(e) => setPhone(e.target.value)} inputMode="tel" placeholder="07701234567" />
         </Field>
         <Field label="العيادة" hint="يرى حجوزات أطباء هذه العيادة فقط">
           <Select value={clinicId} onChange={(e) => setClinicId(e.target.value)}>
@@ -1253,7 +1248,7 @@ function AddStaffDialog({
           <input type="checkbox" checked={canManageSchedule} onChange={(e) => setCanManageSchedule(e.target.checked)} />
           يستطيع تعديل جدول الدوام أيضاً
         </label>
-        <Button size="lg" full loading={busy} disabled={!fullName || !email || !clinicId} onClick={submit}>
+        <Button size="lg" full loading={busy} disabled={!fullName || !phone || !clinicId} onClick={submit}>
           إنشاء الحساب
         </Button>
         <Button variant="ghost" full onClick={onClose}>

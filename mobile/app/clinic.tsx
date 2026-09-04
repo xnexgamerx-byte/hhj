@@ -86,7 +86,7 @@ export default function ClinicScreen() {
             <EmptyState
               icon={(c, s) => <Icon.user size={s} color={c} />}
               title="هذه الشاشة للأطباء والسكرتيرين"
-              hint="ادخل بالإيميل والباسوورد اللذين أنشأهما لك المالك."
+              hint="ادخل برقم هاتفك والباسوورد الذي أنشأه لك المالك."
               action={<Button label="دخول العيادة" onPress={() => router.replace("/staff-login")} />}
             />
           </Card>

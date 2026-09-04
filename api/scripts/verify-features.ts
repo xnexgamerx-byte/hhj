@@ -4,6 +4,7 @@
  */
 import { PrismaClient } from "@prisma/client";
 import { hashPassword } from "../src/lib/password.js";
+import { normalizeIraqiPhone } from "../src/lib/phone.js";
 import { AppError } from "../src/lib/errors.js";
 import { cancelBooking, createBooking } from "../src/modules/booking/booking.service.js";
 import { getMyPatients, updatePatient } from "../src/modules/discovery/discovery.service.js";
@@ -257,15 +258,16 @@ async function main() {
     const mine = await buildClinic(`s${suffix}`);
     const other = await buildClinic(`o${suffix}`);
 
+    const staffPhone = `078${suffix}`;
     const staff = await createStaffAccount(
       owner.id,
-      { fullName: "زينب السكرتيرة", email: `st.${suffix}@clinic.iq`, clinicId: mine.clinic.id },
+      { fullName: "زينب السكرتيرة", phone: staffPhone, clinicId: mine.clinic.id },
       prisma,
     );
     check(
-      "المالك ينشئ حساب سكرتير بباسوورد أولي",
-      !!staff.temporaryPassword && staff.email === `st.${suffix}@clinic.iq`,
-      `الباسوورد المولَّد: ${staff.temporaryPassword}`,
+      "المالك ينشئ حساب سكرتير برقم هاتفه وباسوورد أولي",
+      !!staff.temporaryPassword && staff.phone === normalizeIraqiPhone(staffPhone),
+      `يدخل بـ${staff.phone} — والباسوورد المولَّد: ${staff.temporaryPassword}`,
     );
 
     // حجز يدوي لمريض بلا تطبيق
@@ -313,7 +315,7 @@ async function main() {
     try {
       await createWalkInBooking(
         staff.userId,
-        { doctorClinicId: other.practice.id, fullName: "شخص", phone: `078${suffix}`, startAt: slotIn(5).toISOString() },
+        { doctorClinicId: other.practice.id, fullName: "شخص", phone: `075${suffix}`, startAt: slotIn(5).toISOString() },
         prisma,
       );
     } catch (error) {
@@ -345,7 +347,7 @@ async function main() {
     const { account, patient } = await buildPatient(`5${suffix.slice(1)}`);
     const staff = await createStaffAccount(
       owner.id,
-      { fullName: "سكرتير العمولات", email: `cs.${suffix}@clinic.iq`, clinicId: clinic.id },
+      { fullName: "سكرتير العمولات", phone: `078${Date.now().toString().slice(-8)}`, clinicId: clinic.id },
       prisma,
     );
 

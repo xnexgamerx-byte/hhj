@@ -62,7 +62,9 @@ const doctor = await callApi("/owner/doctors", {
   token: owner.accessToken,
   body: {
     fullName: `طبيبة الاختبار ${stamp}`,
-    email: `e2e.${stamp}@clinic.iq`,
+    // بادئة تخالف بادئة المريض أدناه: الرقم هوية الحساب، فتشاركهما يجعل
+    // الطبيبة والمريض حساباً واحداً
+    phone: `078${stamp}`,
     whatsappNumber: "٠٧٧٠١٢٣٤٥٦٧",
     specialtyIds: [specialties[0].id],
   },
@@ -94,7 +96,7 @@ const doctorPage = await browser.newPage({ viewport: { width: 1280, height: 950 
 doctorPage.on("pageerror", (e) => pageErrors.push(`doctor: ${e.message}`));
 
 await doctorPage.goto(`${WEB}/login`, { waitUntil: "networkidle" });
-await doctorPage.getByLabel("الإيميل").fill(doctor.email);
+await doctorPage.getByLabel("رقم الهاتف").fill(doctor.phone);
 await doctorPage.getByLabel("الباسوورد").fill(doctor.temporaryPassword);
 await doctorPage.getByRole("button", { name: "دخول" }).click();
 await doctorPage.waitForTimeout(1200);

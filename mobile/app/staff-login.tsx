@@ -15,18 +15,22 @@ type LoginResponse = {
 };
 
 /**
- * دخول الطبيب والسكرتير — بإيميل وباسوورد لا برمز تحقّق.
+ * دخول الطبيب والسكرتير — برقم الهاتف وباسوورد، لا برمز تحقّق.
  *
  * مسارٌ منفصل عن دخول المريض لأن المسارين مختلفان في جوهرهما: المريض يسجّل
  * نفسه برقمه بلا كلمة مرور، والطبيب حسابٌ ينشئه المالك ويسلّمه باسووردَه.
  * وخلطهما في شاشةٍ واحدة يجعل تسعة وتسعين بالمئة من المستخدمين يمرّون على
  * حقلٍ لا يخصّهم.
+ *
+ * والهوية هنا رقمُ الهاتف لا الإيميل: الطبيب يحفظ رقمه ولا يحفظ إيميلاً
+ * أنشأه له غيره. (الخادم يقبل الاثنين في الحقل نفسه، فيبقى دخول المالك
+ * بإيميله من لوحة الويب سليماً.)
  */
 export default function StaffLoginScreen() {
   const palette = usePalette();
   const router = useRouter();
 
-  const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [mustChange, setMustChange] = useState(false);
@@ -37,7 +41,10 @@ export default function StaffLoginScreen() {
     setBusy(true);
     setError(null);
     try {
-      const session = await api.post<LoginResponse>("/auth/login", { email: email.trim(), password });
+      const session = await api.post<LoginResponse>("/auth/login", {
+        identifier: phone.trim(),
+        password,
+      });
       // الباسوورد الأولي يعرفه المالك أيضاً، فلا متابعة قبل تغييره
       if (session.mustChangePassword) {
         setMustChange(true);
@@ -58,7 +65,10 @@ export default function StaffLoginScreen() {
     try {
       await api.post("/auth/password/change", { currentPassword: password, newPassword });
       // الجلسة القديمة تُبطل مع التغيير، فندخل من جديد بالباسوورد الجديد
-      const session = await api.post<LoginResponse>("/auth/login", { email: email.trim(), password: newPassword });
+      const session = await api.post<LoginResponse>("/auth/login", {
+        identifier: phone.trim(),
+        password: newPassword,
+      });
       await saveSession(session);
       router.replace("/clinic");
     } catch (e) {
@@ -86,7 +96,7 @@ export default function StaffLoginScreen() {
             <T size={13} tone="muted" align="center" lineHeight={20}>
               {mustChange
                 ? "الباسوورد الذي سلّمك إياه المالك يعرفه هو أيضاً. اختر واحداً يخصّك."
-                : "بالإيميل والباسوورد اللذين أنشأهما لك المالك."}
+                : "برقم هاتفك والباسوورد الذي أنشأه لك المالك."}
             </T>
           </Card>
 
@@ -108,12 +118,12 @@ export default function StaffLoginScreen() {
             </View>
           ) : (
             <View style={{ gap: space(3) }}>
-              <Field label="الإيميل">
+              <Field label="رقم الهاتف">
                 <Input
-                  value={email}
-                  onChangeText={setEmail}
-                  placeholder="doctor@clinic.iq"
-                  keyboardType="email-address"
+                  value={phone}
+                  onChangeText={setPhone}
+                  placeholder="07701234567"
+                  keyboardType="phone-pad"
                   autoCapitalize="none"
                   autoComplete="username"
                   style={{ textAlign: "left" }}
@@ -134,7 +144,7 @@ export default function StaffLoginScreen() {
                 size="lg"
                 full
                 loading={busy}
-                disabled={!email.trim() || !password}
+                disabled={!phone.trim() || !password}
                 onPress={submit}
               />
             </View>

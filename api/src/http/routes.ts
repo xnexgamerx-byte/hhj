@@ -127,12 +127,18 @@ export async function registerRoutes(app: FastifyInstance) {
   );
 
   // ── دخول الطبيب والسكرتير والمالك ─────────────────────────────
-  app.post<{ Body: { email: string; password: string } }>("/auth/login", gate, async (request) => {
-    return loginWithPassword(
-      requireText(request.body?.email, "الإيميل"),
-      requireText(request.body?.password, "الباسوورد"),
-    );
-  });
+  // الطبيب والسكرتير يدخلان برقم هاتفهما، والمالك بإيميله — حقلٌ واحد يقبل
+  // الاثنين. ويبقى `email` مقبولاً اسماً للحقل كي لا ينكسر عميلٌ قديم لم يُحدَّث
+  app.post<{ Body: { identifier?: string; email?: string; password: string } }>(
+    "/auth/login",
+    gate,
+    async (request) => {
+      return loginWithPassword(
+        requireText(request.body?.identifier ?? request.body?.email, "رقم الهاتف"),
+        requireText(request.body?.password, "الباسوورد"),
+      );
+    },
+  );
 
   app.post<{ Body: { refreshToken: string } }>("/auth/refresh", async (request) => {
     return refreshSession(requireText(request.body?.refreshToken, "رمز التجديد"));
@@ -222,7 +228,7 @@ export async function registerRoutes(app: FastifyInstance) {
         whatsappNumber: true,
         whatsappEnabled: true,
         registeredAt: true,
-        user: { select: { fullName: true, email: true, lastLoginAt: true, mustChangePassword: true } },
+        user: { select: { fullName: true, phone: true, lastLoginAt: true, mustChangePassword: true } },
         specialties: { select: { specialty: { select: { nameAr: true } }, isPrimary: true } },
         _count: { select: { practices: true } },
       },
@@ -407,8 +413,8 @@ export async function registerRoutes(app: FastifyInstance) {
   app.post<{
     Body: {
       fullName: string;
-      email: string;
-      phone?: string;
+      phone: string;
+      email?: string;
       clinicId?: string;
       doctorClinicId?: string;
       canManageSchedule?: boolean;

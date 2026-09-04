@@ -1,7 +1,7 @@
 /**
  * مساران للدخول:
  *   المريض  → رقم هاتف فقط، بلا رمز تحقق ولا باسوورد
- *   الطبيب والسكرتير والمالك → إيميل + باسوورد أنشأهما المالك
+ *   الطبيب والسكرتير والمالك → رقم هاتف (أو إيميل) + باسوورد أنشأهما المالك
  */
 import type { PrismaClient, UserRole } from "@prisma/client";
 import { prisma as defaultPrisma } from "../../lib/prisma.js";
@@ -53,16 +53,35 @@ async function issueSession(
 
 // ── دخول الطبيب والسكرتير والمالك ────────────────────────────────
 
+/**
+ * حقلٌ واحد يقبل الاثنين: رقم هاتف الطبيب والسكرتير، وإيميل المالك.
+ *
+ * الطبيب يدخل برقمه لأنه ما يحمله ويحفظه، والمالك أُنشئ حسابه بإيميلٍ في
+ * إعدادات الاستضافة قبل هذا فيبقى له. وحقلان في شاشة الدخول يجعلان الداخل
+ * يسأل نفسه أيّهما له — والجواب يُستنتج من صيغة ما كتب بلا أن يُسأل.
+ */
+async function findByIdentifier(raw: string, client: PrismaClient) {
+  const value = raw.trim();
+  let phone: string | null = null;
+  try {
+    phone = normalizeIraqiPhone(value);
+  } catch {
+    phone = null; // ليس رقماً عراقياً، فهو إيميل
+  }
+  return phone
+    ? client.user.findUnique({ where: { phone } })
+    : client.user.findUnique({ where: { email: value.toLowerCase() } });
+}
+
 export async function loginWithPassword(
-  rawEmail: string,
+  identifier: string,
   password: string,
   client: PrismaClient = defaultPrisma,
 ): Promise<Session> {
-  const email = rawEmail.trim().toLowerCase();
-  const user = await client.user.findUnique({ where: { email } });
+  const user = await findByIdentifier(identifier, client);
 
-  // رسالة واحدة للإيميل الخاطئ وللباسوورد الخاطئ، حتى لا يُستدل على الحسابات الموجودة
-  const invalid = unauthorized("INVALID_CREDENTIALS", "الإيميل أو الباسوورد غير صحيح");
+  // رسالة واحدة للهوية الخاطئة وللباسوورد الخاطئ، حتى لا يُستدل على الحسابات الموجودة
+  const invalid = unauthorized("INVALID_CREDENTIALS", "رقم الهاتف أو الباسوورد غير صحيح");
   if (!user || !user.passwordHash) throw invalid;
 
   if (user.lockedUntil && user.lockedUntil > new Date()) {

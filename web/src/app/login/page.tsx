@@ -15,7 +15,8 @@ type LoginResponse = {
 
 export default function LoginPage() {
   const router = useRouter();
-  const [email, setEmail] = useState("");
+  /** رقم الطبيب والسكرتير، أو إيميل المالك — الخادم يميّزهما بصيغتهما */
+  const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -32,7 +33,7 @@ export default function LoginPage() {
     setBusy(true);
     setError(null);
     try {
-      const session = await api.post<LoginResponse>("/auth/login", { email, password });
+      const session = await api.post<LoginResponse>("/auth/login", { identifier, password });
       saveSession(session);
       setRole(session.user.role);
       // الباسوورد الأولي يعرفه المالك أيضاً، فلا يُسمح بالمتابعة قبل تغييره
@@ -55,7 +56,7 @@ export default function LoginPage() {
     try {
       await api.post("/auth/password/change", { currentPassword: password, newPassword });
       // الجلسة القديمة تُبطل مع تغيير الباسوورد، فندخل من جديد بالباسوورد الجديد
-      const session = await api.post<LoginResponse>("/auth/login", { email, password: newPassword });
+      const session = await api.post<LoginResponse>("/auth/login", { identifier, password: newPassword });
       saveSession(session);
       goHome(session.user.role);
     } catch (e) {
@@ -93,14 +94,13 @@ export default function LoginPage() {
                 submit();
               }}
             >
-              <Field label="الإيميل">
+              <Field label="رقم الهاتف" hint="الطبيب والسكرتير يدخلان برقمهما — والمالك بإيميله">
                 <Input
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  type="email"
+                  value={identifier}
+                  onChange={(e) => setIdentifier(e.target.value)}
                   autoComplete="username"
                   dir="ltr"
-                  placeholder="doctor@clinic.iq"
+                  placeholder="07701234567"
                 />
               </Field>
               <Field label="الباسوورد">
@@ -112,7 +112,7 @@ export default function LoginPage() {
                   dir="ltr"
                 />
               </Field>
-              <Button type="submit" size="lg" full loading={busy} disabled={!email || !password}>
+              <Button type="submit" size="lg" full loading={busy} disabled={!identifier || !password}>
                 دخول
               </Button>
             </form>

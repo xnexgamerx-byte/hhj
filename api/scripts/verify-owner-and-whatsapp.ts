@@ -1,6 +1,6 @@
 /**
  * التحقق من المسارين الجديدين:
- *   ١. المالك يسجّل الطبيب وينشئ له إيميلاً وباسووردًا
+ *   ١. المالك يسجّل الطبيب وينشئ له حساباً برقمه وباسوورد أوليّ
  *   ٢. تفاصيل الحجز تتحول لواتساب الطبيب
  *
  * التشغيل: npx tsx scripts/verify-owner-and-whatsapp.ts
@@ -102,9 +102,10 @@ async function main() {
 
   // ── ٢. المالك يسجّل الطبيب ──────────────────────────────────────
   const specialty = await prisma.specialty.findFirstOrThrow({ where: { slug: "pediatrics" } });
+  const doctorPhone = `077${suffix}`;
   const created = await createDoctorAccount(owner.id, {
     fullName: "أحمد الجبوري",
-    email: `Ahmed.${suffix}@Clinic.IQ`,
+    phone: doctorPhone,
     whatsappNumber: "٠٧٧٠١٢٣٤٥٦٧",
     title: "د.",
     specialtyIds: [specialty.id],
@@ -115,12 +116,12 @@ async function main() {
     include: { user: true },
   });
   check(
-    "المالك ينشئ حساب الطبيب بإيميل وباسوورد أولي",
-    storedDoctor.user.email === `ahmed.${suffix}@clinic.iq` &&
+    "المالك ينشئ حساب الطبيب برقم هاتفه وباسوورد أولي",
+    storedDoctor.user.phone === normalizeIraqiPhone(doctorPhone) &&
       storedDoctor.user.mustChangePassword &&
       storedDoctor.registeredByUserId === owner.id &&
       storedDoctor.whatsappNumber === "+9647701234567",
-    `الإيميل طُبِّع لحروف صغيرة، وواتساب ${storedDoctor.whatsappNumber}، وعليه تغيير الباسوورد أول دخول`,
+    `يدخل بـ${storedDoctor.user.phone} بلا إيميل، وواتساب ${storedDoctor.whatsappNumber}، وعليه تغيير الباسوورد أول دخول`,
   );
 
   check(
@@ -132,7 +133,7 @@ async function main() {
   );
 
   // ── ٣. دخول الطبيب وإلزامه بتغيير الباسوورد ────────────────────
-  const session = await loginWithPassword(created.email, created.temporaryPassword, prisma);
+  const session = await loginWithPassword(created.phone, created.temporaryPassword, prisma);
   check(
     "الطبيب يدخل بالباسوورد الأولي ويُطلب منه تغييره",
     session.mustChangePassword && session.user.role === "DOCTOR",
@@ -140,11 +141,11 @@ async function main() {
   );
 
   await changePassword(session.user.id, created.temporaryPassword, "Jubouri2026", prisma);
-  const afterChange = await loginWithPassword(created.email, "Jubouri2026", prisma);
+  const afterChange = await loginWithPassword(created.phone, "Jubouri2026", prisma);
   check(
     "بعد التغيير يدخل بالباسوورد الجديد ولا يعمل القديم",
     !afterChange.mustChangePassword &&
-      !(await loginWithPassword(created.email, created.temporaryPassword, prisma).then(() => true).catch(() => false)),
+      !(await loginWithPassword(created.phone, created.temporaryPassword, prisma).then(() => true).catch(() => false)),
     "الباسوورد الأولي بطل، والجلسات القديمة أُبطلت مع التغيير",
   );
 
@@ -152,7 +153,7 @@ async function main() {
   let lockedMessage = "";
   for (let i = 0; i < 6; i++) {
     try {
-      await loginWithPassword(created.email, "خطأ-متكرر", prisma);
+      await loginWithPassword(created.phone, "خطأ-متكرر", prisma);
     } catch (error) {
       if (error instanceof AppError) lockedMessage = error.code;
     }
@@ -165,7 +166,7 @@ async function main() {
 
   // إعادة تعيين الباسوورد من المالك تفك القفل
   const reset = await resetDoctorPassword(owner.id, created.doctorId, prisma);
-  const afterReset = await loginWithPassword(reset.email, reset.temporaryPassword, prisma);
+  const afterReset = await loginWithPassword(reset.phone, reset.temporaryPassword, prisma);
   check(
     "إعادة تعيين الباسوورد من المالك تفك القفل وتُلزم بتغيير جديد",
     afterReset.mustChangePassword,
@@ -198,8 +199,10 @@ async function main() {
     },
   });
 
-  // يمر عبر التطبيع نفسه الذي يمر به تسجيل المريض الحقيقي، وإلا اختبرنا بيانات مستحيلة
-  const localPhone = `077${suffix}`;
+  // يمر عبر التطبيع نفسه الذي يمر به تسجيل المريض الحقيقي، وإلا اختبرنا بيانات مستحيلة.
+  // وبادئةٌ غير بادئة الطبيب (078 لا 077): الرقم صار هوية حساب الطبيب أيضاً،
+  // فلو تشاركا اللاحقة نفسها اصطدما على قيد التفرّد
+  const localPhone = `078${suffix}`;
   const patientPhone = normalizeIraqiPhone(localPhone);
   const account = await prisma.user.create({
     data: { phone: patientPhone, fullName: "علي حسن", role: "PATIENT" },

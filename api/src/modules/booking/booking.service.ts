@@ -330,8 +330,12 @@ export async function cancelBooking(
   if (appointment.lockKey === null) throw conflict("ALREADY_CANCELLED", "هذا الحجز ملغى أصلاً");
 
   if (cancelledBy === "PATIENT") {
+    // المهلة تُقاس من وقت الموعد نفسه لا من بداية الدوام — وهذا ما تَعِد به
+    // الشاشة: «يمكنك الإلغاء حتى ساعتين قبل الموعد». والفرق ليس نظرياً: عيادةٌ
+    // دوامها يبدأ الثامنة صباحاً ترفض إلغاء موعدِ الظهر منذ السادسة صباحاً.
+    // وفي نمط الدور يساوي slotStart بداية الدوام أصلاً، فالقاعدة واحدة للنمطين.
     const cutoff = new Date(
-      appointment.sessionStart.getTime() - appointment.doctorClinic.cancelCutoffMinutes * 60_000,
+      appointment.slotStart.getTime() - appointment.doctorClinic.cancelCutoffMinutes * 60_000,
     );
     if (new Date() > cutoff) {
       throw forbidden("CANCEL_TOO_LATE", "انتهت مهلة الإلغاء. اتصل بالعيادة");

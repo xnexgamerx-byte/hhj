@@ -61,7 +61,7 @@ const doctor = await callApi("/owner/doctors", {
   token: owner.accessToken,
   body: {
     fullName: `طبيبة الاختبار ${stamp}`,
-    email: `m2e.${stamp}@clinic.iq`,
+    phone: `078${stamp}`,
     whatsappNumber: "٠٧٧٠١٢٣٤٥٦٧",
     yearsOfExperience: 12,
     specialtyIds: [specialties[0].id],
@@ -219,7 +219,7 @@ await shot("m6-bookings");
 // ── التقييم: نُنهي الزيارة عبر الخادم ثم نقيّمها من التطبيق ──
 const doctorSession = await callApi("/auth/login", {
   method: "POST",
-  body: { email: doctor.email, password: doctor.temporaryPassword },
+  body: { identifier: doctor.phone, password: doctor.temporaryPassword },
 });
 if (doctorSession.mustChangePassword) {
   await callApi("/auth/password/change", {
@@ -230,7 +230,7 @@ if (doctorSession.mustChangePassword) {
 }
 const doctorLogin = await callApi("/auth/login", {
   method: "POST",
-  body: { email: doctor.email, password: "E2ePass2026" },
+  body: { identifier: doctor.phone, password: "E2ePass2026" },
 });
 // الموعد قد يقع في اليوم البغدادي التالي إن حُجز قرب منتصف الليل،
 // فنبحث في اليوم وما بعده بدل افتراض «اليوم»

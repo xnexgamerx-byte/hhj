@@ -24,26 +24,33 @@ export async function createStaffAccount(
   ownerId: string,
   input: {
     fullName: string;
-    email: string;
-    phone?: string | null;
+    /** رقمه الذي يدخل به — كالطبيب، السكرتير عنده هاتف لا بريد */
+    phone: string;
+    email?: string | null;
     clinicId?: string | null;
     doctorClinicId?: string | null;
     canManageSchedule?: boolean;
   },
   client: PrismaClient = defaultPrisma,
 ) {
-  const email = input.email.trim().toLowerCase();
-  if (!EMAIL_PATTERN.test(email)) throw badRequest("INVALID_EMAIL", "صيغة الإيميل غير صحيحة");
   if (input.fullName.trim().length < 3) throw badRequest("INVALID_NAME", "الاسم قصير جداً");
   if (!input.clinicId && !input.doctorClinicId) {
     throw badRequest("SCOPE_REQUIRED", "حدّد العيادة أو الطبيب الذي يتبعه السكرتير");
   }
 
-  if (await client.user.findUnique({ where: { email }, select: { id: true } })) {
+  const phone = normalizeIraqiPhone(input.phone);
+  const email = input.email?.trim() ? input.email.trim().toLowerCase() : null;
+  if (email && !EMAIL_PATTERN.test(email)) throw badRequest("INVALID_EMAIL", "صيغة الإيميل غير صحيحة");
+
+  if (await client.user.findUnique({ where: { phone }, select: { id: true } })) {
+    throw conflict(
+      "PHONE_TAKEN",
+      "هذا الرقم مسجَّل بحسابٍ آخر في التطبيق. استعمل رقماً آخر للسكرتير، أو احذف الحساب القديم أولاً",
+    );
+  }
+  if (email && (await client.user.findUnique({ where: { email }, select: { id: true } }))) {
     throw conflict("EMAIL_TAKEN", "هذا الإيميل مستعمل لحساب آخر");
   }
-
-  const phone = input.phone ? normalizeIraqiPhone(input.phone) : null;
   const temporaryPassword = generateTemporaryPassword();
   const passwordHash = await hashPassword(temporaryPassword);
 
@@ -72,20 +79,20 @@ export async function createStaffAccount(
     });
 
     await tx.auditLog.create({
-      data: { actorUserId: ownerId, action: "STAFF_CREATED", entity: "StaffMember", entityId: staff.id, after: { email } },
+      data: { actorUserId: ownerId, action: "STAFF_CREATED", entity: "StaffMember", entityId: staff.id, after: { phone } },
     });
 
     return { staffId: staff.id, userId: user.id };
   });
 
-  return { ...created, fullName: input.fullName.trim(), email, temporaryPassword };
+  return { ...created, fullName: input.fullName.trim(), phone, temporaryPassword };
 }
 
 export async function listStaff(client: PrismaClient = defaultPrisma) {
   const rows = await client.staffMember.findMany({
     orderBy: { createdAt: "desc" },
     include: {
-      user: { select: { fullName: true, email: true, isActive: true, mustChangePassword: true, lastLoginAt: true } },
+      user: { select: { fullName: true, phone: true, isActive: true, mustChangePassword: true, lastLoginAt: true } },
       clinic: { select: { nameAr: true } },
       doctorClinic: { include: { clinic: { select: { nameAr: true } }, doctor: { include: { user: { select: { fullName: true } } } } } },
     },
@@ -94,7 +101,7 @@ export async function listStaff(client: PrismaClient = defaultPrisma) {
   return rows.map((row) => ({
     id: row.id,
     fullName: row.user.fullName,
-    email: row.user.email,
+    phone: row.user.phone,
     isActive: row.isActive && row.user.isActive,
     mustChangePassword: row.user.mustChangePassword,
     lastLoginAt: row.user.lastLoginAt?.toISOString() ?? null,
