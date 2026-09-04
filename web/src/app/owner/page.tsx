@@ -1552,36 +1552,56 @@ function BannerDialog({
     }
   }
 
-  const currentImage = banner ? mediaUrl(banner.imageUrl) : null;
+  /** ما يُعرض في مساحة الاختيار: ما اختاره الآن، وإلا صورة اللافتة الحالية */
+  const shownImage = preview ?? (banner ? mediaUrl(banner.imageUrl) : null);
 
   return (
     <Dialog title={banner ? "تعديل اللافتة" : "لافتة جديدة"} onClose={onClose}>
       {error && <Alert>{error}</Alert>}
 
-      <Field
-        label="الصورة"
-        hint={
-          banner
-            ? "اختر ملفاً فقط إن أردت استبدال الصورة الحالية"
-            : "PNG أو JPG أو WEBP · حتى ٤ ميغابايت · الأفضل بعرض ١٢٠٠×٤٢٠"
-        }
-      >
+      {/* حقل الملفّات الخام يظهر بهيئة المتصفّح: «Choose File» بالإنكليزية،
+          بلا شكل زرٍّ، سطراً باهتاً في واجهةٍ عربية داكنة — فلا يُدرَك أصلاً
+          أنه يُضغط. رأيتُ المالك يعجز عن إضافة صورةٍ لهذا السبب وحده. فنخفيه
+          خلف مساحةٍ بحجم اللافتة تقول بالعربية ما تفعل، وتعرض ما اختير فيها */}
+      <Field label="الصورة" hint="PNG أو JPG أو WEBP · حتى ٤ ميغابايت · الأفضل بعرض ١٢٠٠×٤٢٠">
+        <label
+          htmlFor="banner-image"
+          className="block w-full h-[120px] rounded-[12px] overflow-hidden cursor-pointer relative grid place-items-center text-center"
+          style={{
+            background: "var(--surface-2)",
+            border: `1.5px ${shownImage ? "solid" : "dashed"} var(--line)`,
+          }}
+        >
+          {shownImage ? (
+            <>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={shownImage} alt="" className="absolute inset-0 w-full h-full object-cover" />
+              <span
+                className="relative text-[12.5px] font-semibold px-3 py-1.5 rounded-full"
+                style={{ background: "rgba(0,0,0,.62)", color: "#fff" }}
+              >
+                اضغط لاستبدال الصورة
+              </span>
+            </>
+          ) : (
+            <span className="text-[14px] font-semibold" style={{ color: "var(--primary)" }}>
+              اضغط لاختيار صورة من جهازك
+            </span>
+          )}
+        </label>
         <input
+          id="banner-image"
           type="file"
           accept="image/png,image/jpeg,image/webp"
+          className="hidden"
           onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-          className="w-full text-[13px]"
         />
       </Field>
 
-      {(preview ?? currentImage) && (
-        <div
-          className="w-full h-[120px] rounded-[10px] overflow-hidden"
-          style={{ border: "1px solid var(--line)" }}
-        >
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={preview ?? currentImage ?? ""} alt="" className="w-full h-full object-cover" />
-        </div>
+      {file && (
+        <p className="text-[12.5px] -mt-1" style={{ color: "var(--muted)" }}>
+          اخترت: {file.name}
+        </p>
       )}
 
       <Field label="العنوان" hint="اختياري — اتركه فارغاً إن كان النصّ داخل الصورة">
