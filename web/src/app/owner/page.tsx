@@ -73,7 +73,14 @@ export default function OwnerDashboard() {
     <>
       <Header subtitle="لوحة المالك" />
       <main className="max-w-5xl mx-auto px-4 pb-20 pt-6">
-        <nav className="flex gap-1 mb-5 p-1 rounded-[12px] w-fit" style={{ background: "var(--surface-2)" }}>
+        {/* ثمانية تبويبات في سطرٍ واحد تفرض على الصفحة عرض ٦٦٥ بكسل، فتُدفع
+            كلّها جانباً على هاتفٍ عرضه ٣٩٠ ويصير كل شيء وراء تمريرٍ أفقي.
+            تلتفّ هنا في سطرين على الهاتف — والالتفاف أحسن من شريطٍ ينزلق:
+            المالك يرى تبويباته كلّها فلا يبحث عمّا اختفى منها */}
+        <nav
+          className="flex flex-wrap gap-1 mb-5 p-1 rounded-[12px] w-fit max-w-full"
+          style={{ background: "var(--surface-2)" }}
+        >
           {(
             [
               ["overview", "نظرة عامة"],
@@ -89,7 +96,7 @@ export default function OwnerDashboard() {
             <button
               key={key}
               onClick={() => setTab(key)}
-              className="px-4 py-2 rounded-[9px] text-[14px] font-semibold transition-colors"
+              className="px-3 sm:px-4 py-2 rounded-[9px] text-[13px] sm:text-[14px] font-semibold transition-colors whitespace-nowrap"
               style={{
                 background: tab === key ? "var(--surface)" : "transparent",
                 color: tab === key ? "var(--ink)" : "var(--muted)",
@@ -182,14 +189,17 @@ function OverviewTab() {
         <StatTile label="حجوزات اليوم" value={statNumber(summary.bookings.today)} tone="accent" sub={`${toArabic(summary.bookings.week)} هذا الأسبوع`} />
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-3 mb-5">
+      {/* min-w-0 على الأبناء: عنصر الشبكة لا ينكمش تحت عرض محتواه الأصغر
+          افتراضياً، فمنحنى أربعة عشر عموداً كان يوسّع البطاقة سبعة عشر
+          بكسلاً فوق الشاشة — ويصير للوحة كلّها تمريرٌ أفقي على الهاتف */}
+      <div className="grid gap-4 lg:grid-cols-3 mb-5 [&>*]:min-w-0">
         <Card className="lg:col-span-2">
           <SectionTitle>الحجوزات في آخر أسبوعين</SectionTitle>
           {summary.dailyBookings.every((d) => d.count === 0) ? (
             <EmptyState title="لا توجد حجوزات بعد" />
           ) : (
             <div className="flex items-end gap-1.5 h-32 mt-2" role="img" aria-label="منحنى الحجوزات اليومية">
-              {summary.dailyBookings.map((day) => (
+              {summary.dailyBookings.map((day, i) => (
                 <div key={day.date} className="flex-1 flex flex-col items-center gap-1.5 min-w-0">
                   <span className="text-[11px] tnum" style={{ color: "var(--muted)" }}>
                     {day.count > 0 ? toArabic(day.count) : ""}
@@ -202,7 +212,13 @@ function OverviewTab() {
                     }}
                     title={`${day.weekdayName} ${day.date}: ${day.count}`}
                   />
-                  <span className="text-[10px] truncate w-full text-center" style={{ color: "var(--faint)" }}>
+                  {/* أربعة عشر اسماً على عرض هاتف تخرج كلها «س...» و«إثن...»
+                      فلا تُقرأ: نعرض واحداً بين اثنين على الضيّق، وكلّها على
+                      الواسع — والعدد فوق العمود يبقى ظاهراً في الحالين */}
+                  <span
+                    className={`text-[10px] truncate w-full text-center ${i % 2 ? "hidden sm:block" : ""}`}
+                    style={{ color: "var(--faint)" }}
+                  >
                     {day.shortName}
                   </span>
                 </div>
