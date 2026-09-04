@@ -117,6 +117,22 @@ const DAY_END = timeToMinutes("23:59");
  * منتصف الليل والمحرّك يستبعدها. نتخطّاها إلى أول فترة في اليوم التالي كي لا
  * تتعلّق نتيجة الاختبار بالساعة التي شُغّل فيها.
  */
+/**
+ * فترةٌ ظهر اليوم الفلانيّ بتوقيت بغداد (٠٩:٠٠ عالميّاً = ١٢:٠٠ بغداد).
+ *
+ * الترقيم يوميّ، ويومُه يوم العيادة لا يوم الخادم. فاختيار فترةٍ بـ«من الآن
+ * زائد كذا ساعة» يجعل ساعتها تتبع ساعة تشغيل الاختبار: شغّلناه ظهراً فوقعت
+ * الفترة ١١:٢٠ ليلاً، ووقعت شقيقتها بعدها بأربعين دقيقة في اليوم التالي —
+ * فأخذ كلٌّ منهما الرقم ١ عن يومه، وهو الصواب، بينما ينتظر الاختبار ١ و٢.
+ * ساعةٌ ثابتة بعيدة عن منتصف الليل تُخرج الوقتَ من الحساب.
+ */
+function slotOnDay(daysAhead: number): Date {
+  const at = new Date();
+  at.setUTCDate(at.getUTCDate() + daysAhead);
+  at.setUTCHours(9, 0, 0, 0);
+  return at;
+}
+
 function slotIn(hours: number): Date {
   const at = new Date(Date.now() + hours * 3_600_000);
   at.setUTCMinutes(Math.ceil(at.getUTCMinutes() / SLOT_MINUTES) * SLOT_MINUTES, 0, 0);
@@ -420,8 +436,8 @@ async function main() {
     const a = await buildPatient(`7${suffix.slice(1)}`, "سارة كاظم");
     const b = await buildPatient(`6${suffix.slice(1)}`, "حسن جبار");
 
-    // كلا الموعدين في يوم واحد كي يتقاسما ترقيمه
-    const morning = slotIn(30);
+    // كلا الموعدين في يوم واحد كي يتقاسما ترقيمه — وظهراً كي يبقيا فيه
+    const morning = slotOnDay(1);
     const later = new Date(morning.getTime() + 40 * 60_000);
 
     const first = await createBooking(
@@ -469,7 +485,7 @@ async function main() {
 
     // اليوم التالي يبدأ من واحد: الترقيم يومي لا تراكمي
     const tomorrow = await createBooking(
-      { doctorClinicId: practice.id, patientId: a.patient.id, bookedByUserId: a.account.id, startAt: slotIn(30 + 24) },
+      { doctorClinicId: practice.id, patientId: a.patient.id, bookedByUserId: a.account.id, startAt: slotOnDay(2) },
       prisma,
     );
     check(
