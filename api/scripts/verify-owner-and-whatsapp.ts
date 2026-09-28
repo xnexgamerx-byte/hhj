@@ -10,9 +10,9 @@ import { hashPassword } from "../src/lib/password.js";
 import { formatIraqiPhoneForDisplay, normalizeIraqiPhone, toLatinDigits } from "../src/lib/phone.js";
 import { templateSpecs } from "../src/notifications/whatsapp/templates.js";
 import { AppError } from "../src/lib/errors.js";
-import { createDoctorAccount, resetDoctorPassword } from "../src/modules/owner/provisioning.js";
-import { changePassword, loginByPhone, loginWithPassword } from "../src/modules/auth/auth.service.js";
-import { getMyPatients, updatePatient } from "../src/modules/discovery/discovery.service.js";
+import { createDoctorAccount, resetDoctorPassword, updateDoctorProfile } from "../src/modules/owner/provisioning.js";
+import { changePassword, loginByPhone, loginWithPassword, refreshSession } from "../src/modules/auth/auth.service.js";
+import { getDoctorProfile, getMyPatients, updatePatient } from "../src/modules/discovery/discovery.service.js";
 import { createBooking } from "../src/modules/booking/booking.service.js";
 import { flushPending, setWhatsAppProvider } from "../src/notifications/dispatch.js";
 import { ConsoleProvider, type SendResult, type WhatsAppProvider } from "../src/notifications/whatsapp/provider.js";
@@ -173,6 +173,160 @@ async function main() {
     "المالك يستطيع إنقاذ طبيب نسي باسووردهُ دون معرفة القديم",
   );
   await changePassword(afterReset.user.id, reset.temporaryPassword, "Jubouri2026", prisma);
+
+  // ── ٤.١ تعديل بيانات الطبيب بعد تسجيله ─────────────────────────
+  //
+  // ما يُكتب يوم التسجيل ليس نهائياً: يُكتب الاسم خطأً، ويبدّل الطبيب رقمه،
+  // ويُضاف تخصصه الدقيق بعد شهر. وبلا تعديلٍ لا مخرج إلا حذف الحساب وتسجيله
+  // من جديد — حسابٌ جديد بلا مواعيده ولا تقييماته.
+  {
+    const subspecialty = await prisma.specialty.findFirstOrThrow({ where: { slug: { not: "pediatrics" } } });
+    const firstPhone = `079${suffix}`;
+    const editable = await createDoctorAccount(
+      owner.id,
+      { fullName: "سارة الخفاجى", phone: firstPhone, specialtyIds: [specialty.id] },
+      prisma,
+    );
+    const openSession = await loginWithPassword(firstPhone, editable.temporaryPassword, prisma);
+
+    await updateDoctorProfile(
+      owner.id,
+      editable.doctorId,
+      {
+        title: "أ.د.",
+        fullName: "سارة الخفاجي",
+        specialtyIds: [subspecialty.id, specialty.id],
+        yearsOfExperience: 12,
+        bio: "  استشارية طب الأطفال، بورد عربي  ",
+      },
+      prisma,
+    );
+    const profile = await getDoctorProfile(editable.doctorId, prisma);
+    const primary = await prisma.doctorSpecialty.findFirst({ where: { doctorId: editable.doctorId, isPrimary: true } });
+    check(
+      "المالك يعدّل الاسم واللقب والتخصص والخبرة والنبذة، ويراها المريض فوراً",
+      profile.fullName === "سارة الخفاجي" &&
+        profile.title === "أ.د." &&
+        profile.yearsOfExperience === 12 &&
+        profile.bio === "استشارية طب الأطفال، بورد عربي" &&
+        profile.specialties.length === 2 &&
+        primary?.specialtyId === subspecialty.id,
+      `${profile.title} ${profile.fullName} — ${profile.specialties.join(" · ")}`,
+    );
+
+    await updateDoctorProfile(owner.id, editable.doctorId, { fullName: "سارة عبد الله الخفاجي" }, prisma);
+    const renamed = await getDoctorProfile(editable.doctorId, prisma);
+    check(
+      "الحقل الغائب من الطلب يبقى كما هو",
+      renamed.fullName === "سارة عبد الله الخفاجي" &&
+        renamed.title === "أ.د." &&
+        renamed.bio === profile.bio &&
+        renamed.yearsOfExperience === 12 &&
+        renamed.specialties.length === 2,
+      "تعديل الاسم وحده لا يمحو التخصص ولا النبذة",
+    );
+
+    const newPhone = `075${suffix}`;
+    const moved = await updateDoctorProfile(owner.id, editable.doctorId, { phone: newPhone, whatsappNumber: "" }, prisma);
+    const opens = (phone: string) =>
+      loginWithPassword(phone, editable.temporaryPassword, prisma).then(() => true, () => false);
+    const resumed = await refreshSession(openSession.refreshToken, prisma).then((s) => s.user.phone, () => null);
+    check(
+      "تغيير رقم الهاتف يغيّر رقم الدخول ويُبقي الباسوورد والجلسة القائمة",
+      (await opens(newPhone)) && !(await opens(firstPhone)) && resumed === normalizeIraqiPhone(newPhone),
+      `يدخل الآن بـ${moved.phone} وبالباسوورد نفسه، والرقم القديم لا يفتح الحساب`,
+    );
+    check(
+      "الواتساب المتروك فارغاً ينتقل مع الرقم الجديد",
+      moved.whatsappNumber === normalizeIraqiPhone(newPhone),
+      `كان ${normalizeIraqiPhone(firstPhone)} وصار ${moved.whatsappNumber}`,
+    );
+
+    await updateDoctorProfile(
+      owner.id,
+      editable.doctorId,
+      { whatsappNumber: "٠٧٧٠١٢٣٤٥٦٧", whatsappEnabled: false },
+      prisma,
+    );
+    const whatsapp = await prisma.doctor.findUniqueOrThrow({
+      where: { id: editable.doctorId },
+      select: { whatsappNumber: true, whatsappEnabled: true },
+    });
+    check(
+      "رقم واتساب منفصل يُحفظ، وإيقاف الإرسال لا يمحو الرقم",
+      whatsapp.whatsappNumber === "+9647701234567" && !whatsapp.whatsappEnabled,
+      `${whatsapp.whatsappNumber} موقوف — يعود بتفعيله بلا إعادة كتابته`,
+    );
+
+    const failure = (input: Parameters<typeof updateDoctorProfile>[2]) =>
+      updateDoctorProfile(owner.id, editable.doctorId, input, prisma).then(
+        () => "قُبل",
+        (error) => (error instanceof AppError ? error.code : String(error)),
+      );
+
+    // رقم الطبيب الأول: حسابٌ قائم، والاسم معه يجب ألّا يُحفظ نصفَ تعديل
+    const taken = await failure({ fullName: "اسم لن يُحفظ", phone: created.phone });
+    const kept = await prisma.user.findUniqueOrThrow({ where: { id: editable.userId } });
+    check(
+      "رقمٌ يحمله حسابٌ آخر يُرفض ولا يُحفظ معه شيء",
+      taken === "PHONE_TAKEN" && kept.fullName === "سارة عبد الله الخفاجي" && kept.phone === normalizeIraqiPhone(newPhone),
+      `${taken} — والاسم المرسل معه لم يُحفظ`,
+    );
+
+    const rejected: string[] = [];
+    for (const input of [
+      { fullName: "س" },
+      { yearsOfExperience: -1 },
+      { yearsOfExperience: 2.5 },
+      { specialtyIds: [999_999] },
+      { bio: "ن".repeat(601) },
+    ]) {
+      rejected.push(await failure(input));
+    }
+    check(
+      "القيم غير المعقولة تُرفض برسالةٍ لا بخطأ خادم",
+      rejected.join() === "INVALID_NAME,INVALID_EXPERIENCE,INVALID_EXPERIENCE,INVALID_SPECIALTY,BIO_TOO_LONG",
+      rejected.join(" · "),
+    );
+
+    const audits = await prisma.auditLog.findMany({
+      where: { entityId: editable.doctorId, action: "DOCTOR_UPDATED" },
+      select: { actorUserId: true },
+    });
+    check(
+      "كل تعديلٍ ناجح يُسجَّل باسم المالك، والمرفوض لا يُسجَّل",
+      audits.length === 4 && audits.every((a) => a.actorUserId === owner.id),
+      `${audits.length} قيود في سجل التدقيق`,
+    );
+
+    // من سُجّل قبل الدخول بالرقم له إيميلٌ ولا رقم: التعديل لا يشترط الرقم،
+    // وإضافته تفتح له الدخول به
+    const legacy = await prisma.user.create({
+      data: {
+        email: `d.legacy.${suffix}@clinic.iq`,
+        fullName: "طبيب بالإيميل",
+        role: "DOCTOR",
+        passwordHash: await hashPassword("Legacy2026x"),
+        doctor: { create: { registeredByUserId: owner.id } },
+      },
+      include: { doctor: true },
+    });
+    await updateDoctorProfile(owner.id, legacy.doctor!.id, { fullName: "طبيب بالإيميل وحده" }, prisma);
+    const stillEmailOnly = await prisma.user.findUniqueOrThrow({ where: { id: legacy.id } });
+    const legacyPhone = `076${suffix}`;
+    await updateDoctorProfile(owner.id, legacy.doctor!.id, { phone: legacyPhone }, prisma);
+    check(
+      "طبيبٌ سُجّل بإيميله يُعدَّل بلا رقم، ثم يُضاف له رقمٌ فيدخل به",
+      stillEmailOnly.phone === null &&
+        stillEmailOnly.fullName === "طبيب بالإيميل وحده" &&
+        (await loginWithPassword(legacyPhone, "Legacy2026x", prisma).then(() => true, () => false)) &&
+        (await loginWithPassword(legacy.email!, "Legacy2026x", prisma).then(() => true, () => false)),
+      "يدخل بالرقم الجديد، ويبقى إيميله يعمل كما كان",
+    );
+
+    // حسابٌ بلا إيميل لا يطاله منظّف الثوابت، فيُحذف هنا — ومعه حساب الإيميل
+    await prisma.user.deleteMany({ where: { id: { in: [editable.userId, legacy.id] } } });
+  }
 
   // ── ٥. الحجز يحوّل التفاصيل لواتساب الطبيب ─────────────────────
   const district = await prisma.district.findFirstOrThrow({

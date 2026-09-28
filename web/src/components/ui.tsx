@@ -1,6 +1,12 @@
 "use client";
 
-import type { ButtonHTMLAttributes, InputHTMLAttributes, ReactNode, SelectHTMLAttributes } from "react";
+import type {
+  ButtonHTMLAttributes,
+  InputHTMLAttributes,
+  ReactNode,
+  SelectHTMLAttributes,
+  TextareaHTMLAttributes,
+} from "react";
 
 /* ── الأزرار ─────────────────────────────────────────────────── */
 
@@ -177,6 +183,10 @@ export function Input(props: InputHTMLAttributes<HTMLInputElement>) {
 
 export function Select(props: SelectHTMLAttributes<HTMLSelectElement>) {
   return <select {...props} style={fieldStyle} className={`${FIELD_CLASS} ${props.className ?? ""}`} />;
+}
+
+export function Textarea(props: TextareaHTMLAttributes<HTMLTextAreaElement>) {
+  return <textarea {...props} style={fieldStyle} className={`${FIELD_CLASS} resize-y ${props.className ?? ""}`} />;
 }
 
 /* ── الحالات ─────────────────────────────────────────────────── */
