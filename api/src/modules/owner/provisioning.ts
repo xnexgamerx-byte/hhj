@@ -7,13 +7,43 @@
  * الباسوورد النصي يظهر **مرة واحدة فقط** في ردّ هذه الدالة ليسلّمه المالك للطبيب،
  * ولا يُخزَّن ولا يُكتب في أي سجل. بعدها يُلزَم الطبيب بتغييره أول دخول.
  */
-import type { Gender, Prisma, PrismaClient } from "@prisma/client";
+import { Prisma, type Gender, type PrismaClient } from "@prisma/client";
 import { prisma as defaultPrisma } from "../../lib/prisma.js";
 import { generateTemporaryPassword, hashPassword } from "../../lib/password.js";
 import { normalizeIraqiPhone } from "../../lib/phone.js";
 import { badRequest, conflict, notFound } from "../../lib/errors.js";
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+
+/** صفحة الطبيب على الهاتف تعرض النبذة كاملةً، ونصٌّ طويل يُلصق بالخطأ يدفع مواعيده إلى الأسفل */
+const BIO_MAX = 600;
+const EXPERIENCE_MAX = 60;
+
+/**
+ * يقع هذا حين يكون الطبيب قد استعمل التطبيق مريضاً برقمه نفسه — ولا
+ * نحوّل حسابه بأثرٍ رجعيّ: مواعيده كمريض تبقى له، والرسالة تقول للمالك
+ * ما يفعل بدل أن تتركه أمام خطأٍ مبهم
+ */
+const phoneTaken = () =>
+  conflict(
+    "PHONE_TAKEN",
+    "هذا الرقم مسجَّل بحسابٍ آخر في التطبيق. استعمل رقماً آخر للطبيب، أو احذف الحساب القديم أولاً",
+  );
+
+function cleanBio(raw: string | null | undefined): string | null {
+  const bio = raw?.trim() || null;
+  if (bio && bio.length > BIO_MAX) {
+    throw badRequest("BIO_TOO_LONG", `النبذة أطول من ${BIO_MAX} حرف — اختصرها`);
+  }
+  return bio;
+}
+
+function checkExperience(years: number | null | undefined) {
+  if (years === undefined || years === null) return;
+  if (!Number.isInteger(years) || years < 0 || years > EXPERIENCE_MAX) {
+    throw badRequest("INVALID_EXPERIENCE", `سنوات الخبرة رقمٌ بين 0 و${EXPERIENCE_MAX}`);
+  }
+}
 
 export type CreateDoctorInput = {
   fullName: string;
@@ -65,16 +95,10 @@ export async function createDoctorAccount(
   // بلا رقم واتساب منفصل: رقم دخوله هو رقمه
   const whatsappNumber = input.whatsappNumber ? normalizeIraqiPhone(input.whatsappNumber) : phone;
   const email = input.email?.trim() ? normalizeEmail(input.email) : null;
+  const bio = cleanBio(input.bio);
+  checkExperience(input.yearsOfExperience);
 
-  if (await client.user.findUnique({ where: { phone }, select: { id: true } })) {
-    // يقع هذا حين يكون الطبيب قد استعمل التطبيق مريضاً برقمه نفسه — ولا
-    // نحوّل حسابه بأثرٍ رجعيّ: مواعيده كمريض تبقى له، والرسالة تقول للمالك
-    // ما يفعل بدل أن تتركه أمام خطأٍ مبهم
-    throw conflict(
-      "PHONE_TAKEN",
-      "هذا الرقم مسجَّل بحسابٍ آخر في التطبيق. استعمل رقماً آخر للطبيب، أو احذف الحساب القديم أولاً",
-    );
-  }
+  if (await client.user.findUnique({ where: { phone }, select: { id: true } })) throw phoneTaken();
   if (email && (await client.user.findUnique({ where: { email }, select: { id: true } }))) {
     throw conflict("EMAIL_TAKEN", "هذا الإيميل مستعمل لحساب آخر");
   }
@@ -99,7 +123,7 @@ export async function createDoctorAccount(
       data: {
         userId: user.id,
         title: input.title?.trim() || "د.",
-        bio: input.bio ?? null,
+        bio,
         yearsOfExperience: input.yearsOfExperience ?? null,
         gender: input.gender ?? null,
         licenseNumber: input.licenseNumber ?? null,
@@ -132,6 +156,115 @@ export async function createDoctorAccount(
     phone,
     temporaryPassword,
   };
+}
+
+export type UpdateDoctorInput = {
+  title?: string;
+  fullName?: string;
+  /**
+   * رقم الدخول. تغييره لا يمسّ الباسوورد ولا يقطع جلسات الطبيب: الرقم ما
+   * يُعرَّف به، والباسوورد سرّه — وتغيير الأول لا يعني أنّ الثاني تسرّب.
+   */
+  phone?: string;
+  /** فارغٌ يعني رقم هاتفه نفسه — القاعدة نفسها التي في التسجيل */
+  whatsappNumber?: string | null;
+  whatsappEnabled?: boolean;
+  specialtyIds?: number[];
+  yearsOfExperience?: number | null;
+  /** تظهر للمرضى في صفحة الطبيب */
+  bio?: string | null;
+};
+
+/**
+ * تعديل بيانات الطبيب بعد تسجيله: ما يراه المرضى، ورقم دخوله، وواتساب حجوزاته.
+ *
+ * الحقل الغائب لا يُمسّ — كتعديل بيانات المريض — فطلبٌ يغيّر الاسم وحده لا
+ * يمحو التخصص ولا النبذة. والتخصصات إن أُرسلت تُستبدل كلّها، والأول رئيسيّها.
+ */
+export async function updateDoctorProfile(
+  ownerId: string,
+  doctorId: string,
+  input: UpdateDoctorInput,
+  client: PrismaClient = defaultPrisma,
+): Promise<{ doctorId: string; fullName: string; phone: string | null; whatsappNumber: string | null }> {
+  const doctor = await client.doctor.findUnique({
+    where: { id: doctorId },
+    select: { userId: true, user: { select: { phone: true } } },
+  });
+  if (!doctor) throw notFound("DOCTOR_NOT_FOUND", "الطبيب غير موجود");
+
+  const fullName = input.fullName?.trim();
+  if (fullName !== undefined && fullName.length < 3) throw badRequest("INVALID_NAME", "اسم الطبيب قصير جداً");
+
+  const phone = input.phone === undefined ? undefined : normalizeIraqiPhone(input.phone);
+  if (
+    phone !== undefined &&
+    phone !== doctor.user.phone &&
+    (await client.user.findUnique({ where: { phone }, select: { id: true } }))
+  ) {
+    throw phoneTaken();
+  }
+
+  // الرقم الجديد إن تغيّر: واتسابٌ يتبع الهاتف ينتقل معه ولا يبقى على رقمٍ تركه الطبيب
+  const whatsappNumber =
+    input.whatsappNumber === undefined
+      ? undefined
+      : input.whatsappNumber?.trim()
+        ? normalizeIraqiPhone(input.whatsappNumber)
+        : (phone ?? doctor.user.phone);
+
+  const bio = input.bio === undefined ? undefined : cleanBio(input.bio);
+  checkExperience(input.yearsOfExperience);
+
+  const specialtyIds = input.specialtyIds === undefined ? undefined : [...new Set(input.specialtyIds)];
+  if (specialtyIds?.length) {
+    const known = await client.specialty.count({ where: { id: { in: specialtyIds } } });
+    if (known !== specialtyIds.length) throw badRequest("INVALID_SPECIALTY", "تخصص غير معروف");
+  }
+
+  const changes = {
+    title: input.title === undefined ? undefined : input.title?.trim() || "د.",
+    bio,
+    yearsOfExperience: input.yearsOfExperience,
+    whatsappNumber,
+    whatsappEnabled: input.whatsappEnabled,
+  };
+
+  try {
+    return await client.$transaction(async (tx) => {
+      if (fullName !== undefined || phone !== undefined) {
+        await tx.user.update({ where: { id: doctor.userId }, data: { fullName, phone } });
+      }
+      if (specialtyIds !== undefined) {
+        await tx.doctorSpecialty.deleteMany({ where: { doctorId } });
+        await tx.doctorSpecialty.createMany({
+          data: specialtyIds.map((specialtyId, index) => ({ doctorId, specialtyId, isPrimary: index === 0 })),
+        });
+      }
+      const updated = await tx.doctor.update({
+        where: { id: doctorId },
+        data: changes,
+        select: { whatsappNumber: true, user: { select: { fullName: true, phone: true } } },
+      });
+
+      const after = Object.fromEntries(
+        Object.entries({ ...changes, fullName, phone, specialtyIds }).filter(([, value]) => value !== undefined),
+      );
+      await writeAudit(tx, ownerId, "DOCTOR_UPDATED", "Doctor", doctorId, after);
+
+      return { doctorId, ...updated.user, whatsappNumber: updated.whatsappNumber };
+    });
+  } catch (error) {
+    // الفحص أعلاه يسبق الكتابة، فحسابٌ يُنشأ بالرقم نفسه بينهما يصطدم بالقيد هنا
+    if (
+      error instanceof Prisma.PrismaClientKnownRequestError &&
+      error.code === "P2002" &&
+      String(error.meta?.target ?? "").includes("phone")
+    ) {
+      throw phoneTaken();
+    }
+    throw error;
+  }
 }
 
 /** يولّد باسووردًا جديداً ويبطل كل جلسات الطبيب القائمة. */

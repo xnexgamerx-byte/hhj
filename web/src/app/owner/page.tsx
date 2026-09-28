@@ -3,7 +3,21 @@
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Header } from "@/components/Header";
-import { Alert, Badge, Button, Card, Dialog, EmptyState, Field, Input, Loading, SectionTitle, Select, StatTile } from "@/components/ui";
+import {
+  Alert,
+  Badge,
+  Button,
+  Card,
+  Dialog,
+  EmptyState,
+  Field,
+  Input,
+  Loading,
+  SectionTitle,
+  Select,
+  StatTile,
+  Textarea,
+} from "@/components/ui";
 import { api, getSession, mediaUrl, uploadFile } from "@/lib/api";
 import { countLabel, formatClock, formatDay, formatFee, statNumber, toArabic, WEEKDAYS } from "@/lib/format";
 
@@ -36,9 +50,11 @@ type DoctorRow = {
   photoUrl: string | null;
   whatsappNumber: string | null;
   whatsappEnabled: boolean;
+  bio: string | null;
+  yearsOfExperience: number | null;
   registeredAt: string;
   user: { fullName: string; phone: string | null; lastLoginAt: string | null; mustChangePassword: boolean };
-  specialties: { specialty: { nameAr: string }; isPrimary: boolean }[];
+  specialties: { specialtyId: number; specialty: { nameAr: string }; isPrimary: boolean }[];
   _count: { practices: number };
 };
 
@@ -330,6 +346,7 @@ function DoctorsTab() {
   const [rows, setRows] = useState<DoctorRow[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
+  const [editing, setEditing] = useState<DoctorRow | null>(null);
   const [linking, setLinking] = useState<DoctorRow | null>(null);
   const [created, setCreated] = useState<{ fullName: string; phone: string; temporaryPassword: string } | null>(null);
 
@@ -413,6 +430,7 @@ function DoctorsTab() {
                 {row.user.mustChangePassword && <Badge tone="warn">لم يدخل بعد</Badge>}
                 {row._count.practices === 0 && <Badge tone="warn">بلا عيادة</Badge>}
                 {!row.whatsappNumber && <Badge tone="warn">بلا واتساب</Badge>}
+                {row.whatsappNumber && !row.whatsappEnabled && <Badge tone="warn">واتساب موقوف</Badge>}
                 {row.whatsappNumber && row.whatsappEnabled && <Badge tone="ok">واتساب مفعّل</Badge>}
               </div>
             </div>
@@ -420,6 +438,9 @@ function DoctorsTab() {
             <div className="flex gap-2 mt-3 flex-wrap">
               <Button variant="accent" size="sm" onClick={() => setLinking(row)}>
                 {row._count.practices === 0 ? "إعداد العيادة" : "+ عيادة أخرى"}
+              </Button>
+              <Button variant="outline" size="sm" onClick={() => setEditing(row)}>
+                تعديل البيانات
               </Button>
               <Button variant="outline" size="sm" onClick={() => resetPassword(row.id, row.user.fullName)}>
                 باسوورد جديد
@@ -437,11 +458,22 @@ function DoctorsTab() {
       </div>
 
       {adding && (
-        <AddDoctorDialog
+        <DoctorDialog
           onClose={() => setAdding(false)}
-          onCreated={(result) => {
+          onDone={(result) => {
             setAdding(false);
-            setCreated(result);
+            if (result) setCreated(result);
+            load();
+          }}
+        />
+      )}
+
+      {editing && (
+        <DoctorDialog
+          doctor={editing}
+          onClose={() => setEditing(null)}
+          onDone={() => {
+            setEditing(null);
             load();
           }}
         />
@@ -947,19 +979,54 @@ function CopyRow({ label, value }: { label: string; value: string }) {
   );
 }
 
-function AddDoctorDialog({
+const TITLES = ["د.", "أ.د.", "أ.م.د."];
+
+/** ‎+9647701234567 ⇐ 07701234567 — بالصيغة التي يكتبها المالك، والخادم يقبل الاثنتين */
+function localPhone(phone: string | null): string {
+  return phone?.replace(/^\+964/, "0") ?? "";
+}
+
+/**
+ * نافذة الطبيب: تسجيلٌ وتعديلٌ معاً — الفرق تمريرُ `doctor` أو لا، كنافذة اللافتة.
+ *
+ * في التعديل تُفتح معبّأةً بما سُجّل، والحقول نفسها في الحالتين إلا مفتاح
+ * إيقاف الواتساب: لا معنى له قبل أن يوجد الطبيب. والباسوورد لا يُمسّ هنا —
+ * تغيير الرقم يغيّر ما يدخل به الطبيب لا سرّه.
+ */
+function DoctorDialog({
+  doctor,
   onClose,
-  onCreated,
+  onDone,
 }: {
+  doctor?: DoctorRow;
   onClose: () => void;
-  onCreated: (result: { fullName: string; phone: string; temporaryPassword: string }) => void;
+  /** في التسجيل تصل بيانات الدخول لتُعرض للمالك مرّةً واحدة */
+  onDone: (created?: { fullName: string; phone: string; temporaryPassword: string }) => void;
 }) {
-  const [fullName, setFullName] = useState("");
-  const [phone, setPhone] = useState("");
-  const [whatsappNumber, setWhatsapp] = useState("");
-  const [title, setTitle] = useState("د.");
-  const [specialtyId, setSpecialtyId] = useState("");
-  const [yearsOfExperience, setYears] = useState("");
+  const primary = doctor?.specialties.find((s) => s.isPrimary) ?? doctor?.specialties[0];
+  const initialSpecialty = primary ? String(primary.specialtyId) : "";
+  // لقبٌ كُتب من خارج القائمة يبقى ظاهراً بدل أن تعرض القائمة غيره
+  const titles = doctor && !TITLES.includes(doctor.title) ? [doctor.title, ...TITLES] : TITLES;
+  // من سُجّل قبل الدخول بالرقم يدخل بإيميله ولا رقم له: يُعدَّل بلا رقمٍ حتى
+  // يُضاف له واحد. أمّا من له رقم فلا يُمحى — هو ما يدخل به
+  const hadPhone = !doctor || Boolean(doctor.user.phone);
+  const phoneHint = !doctor
+    ? "يدخل به للوحته — يقبل ٠٧٧٠ أو ‎+964"
+    : hadPhone
+      ? "يدخل به للوحته — إن غيّرته فأخبره أن يدخل بالرقم الجديد"
+      : "يدخل الآن بإيميله — أضف رقمه ليدخل به";
+
+  const [fullName, setFullName] = useState(doctor?.user.fullName ?? "");
+  const [phone, setPhone] = useState(localPhone(doctor?.user.phone ?? null));
+  // واتسابٌ هو رقم الهاتف نفسه يظهر فارغاً كما تُرك يوم التسجيل، فيتبع الهاتف إن تغيّر
+  const [whatsappNumber, setWhatsapp] = useState(
+    doctor && doctor.whatsappNumber !== doctor.user.phone ? localPhone(doctor.whatsappNumber) : "",
+  );
+  const [whatsappEnabled, setWhatsappEnabled] = useState(doctor?.whatsappEnabled ?? true);
+  const [title, setTitle] = useState(doctor?.title ?? "د.");
+  const [specialtyId, setSpecialtyId] = useState(initialSpecialty);
+  const [yearsOfExperience, setYears] = useState(doctor?.yearsOfExperience?.toString() ?? "");
+  const [bio, setBio] = useState(doctor?.bio ?? "");
   const [specialties, setSpecialties] = useState<{ id: number; nameAr: string }[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -971,16 +1038,34 @@ function AddDoctorDialog({
   async function submit() {
     setBusy(true);
     setError(null);
+    // الفارغ يعني الشيء نفسه في الحالتين: الواتساب رقمُ هاتفه، ولا خبرة ولا نبذة
+    const fields = {
+      title,
+      fullName,
+      phone: phone.trim() || undefined,
+      whatsappNumber,
+      yearsOfExperience: yearsOfExperience ? Number(yearsOfExperience) : null,
+      bio: bio.trim() || null,
+    };
+    const specialtyIds = specialtyId ? [Number(specialtyId)] : [];
     try {
-      const result = await api.post<{ fullName: string; phone: string; temporaryPassword: string }>("/owner/doctors", {
-        fullName,
-        phone,
-        whatsappNumber: whatsappNumber || undefined,
-        title,
-        yearsOfExperience: yearsOfExperience ? Number(yearsOfExperience) : undefined,
-        specialtyIds: specialtyId ? [Number(specialtyId)] : [],
-      });
-      onCreated(result);
+      if (doctor) {
+        await api.patch(`/owner/doctors/${doctor.id}`, {
+          ...fields,
+          whatsappEnabled,
+          // التخصص يُرسل إن تغيّر وحده: النافذة تعرض واحداً والخادم يستبدل
+          // القائمة كلّها، فطبيبٌ له تخصّصان لا يفقد ثانيهما بتصحيح اسمه
+          ...(specialtyId !== initialSpecialty ? { specialtyIds } : {}),
+        });
+        onDone();
+      } else {
+        onDone(
+          await api.post<{ fullName: string; phone: string; temporaryPassword: string }>("/owner/doctors", {
+            ...fields,
+            specialtyIds,
+          }),
+        );
+      }
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -989,73 +1074,91 @@ function AddDoctorDialog({
   }
 
   return (
-    <div className="fixed inset-0 z-40 flex items-end sm:items-center justify-center" role="dialog" aria-modal="true">
-      <button className="absolute inset-0 bg-black/40" onClick={onClose} aria-label="إغلاق النافذة بالنقر خارجها" />
-      <div
-        className="relative w-full sm:max-w-md max-h-[88vh] overflow-y-auto rounded-t-[20px] sm:rounded-[18px] p-5"
-        style={{ background: "var(--surface)", boxShadow: "var(--shadow-lg)" }}
-      >
-        <h2 className="text-[18px] font-bold mb-1" style={{ fontFamily: "var(--font-display)" }}>
-          تسجيل طبيب
-        </h2>
-        <p className="text-[13px] mb-4" style={{ color: "var(--muted)" }}>
-          يُنشأ الحساب بباسوورد أولي يظهر لك مرة واحدة لتسلّمه للطبيب.
-        </p>
+    <Dialog
+      title={doctor ? `تعديل بيانات ${doctor.title} ${doctor.user.fullName}` : "تسجيل طبيب"}
+      hint={
+        doctor
+          ? "ما تغيّره هنا يراه المرضى فوراً، وباسوورد الطبيب يبقى كما هو."
+          : "يُنشأ الحساب بباسوورد أولي يظهر لك مرة واحدة لتسلّمه للطبيب."
+      }
+      onClose={onClose}
+    >
+      {error && (
+        <div className="mb-3">
+          <Alert>{error}</Alert>
+        </div>
+      )}
 
-        {error && (
-          <div className="mb-3">
-            <Alert>{error}</Alert>
-          </div>
-        )}
-
-        <div className="grid gap-3">
-          <div className="grid grid-cols-[80px_1fr] gap-2">
-            <Field label="اللقب">
-              <Select value={title} onChange={(e) => setTitle(e.target.value)}>
-                {["د.", "أ.د.", "أ.م.د."].map((t) => (
-                  <option key={t} value={t}>
-                    {t}
-                  </option>
-                ))}
-              </Select>
-            </Field>
-            <Field label="اسم الطبيب">
-              <Input value={fullName} onChange={(e) => setFullName(e.target.value)} placeholder="الاسم الثلاثي" />
-            </Field>
-          </div>
-
-          <Field label="رقم هاتف الطبيب" hint="يدخل به للوحته — يقبل ٠٧٧٠ أو ‎+964">
-            <Input value={phone} onChange={(e) => setPhone(e.target.value)} inputMode="tel" placeholder="07701234567" />
-          </Field>
-
-          <Field label="رقم الواتساب" hint="اتركه فارغاً ليكون رقم هاتفه نفسه — تصله تفاصيل كل حجز">
-            <Input value={whatsappNumber} onChange={(e) => setWhatsapp(e.target.value)} inputMode="tel" placeholder="07701234567" />
-          </Field>
-
-          <Field label="التخصص">
-            <Select value={specialtyId} onChange={(e) => setSpecialtyId(e.target.value)}>
-              <option value="">اختر التخصص</option>
-              {specialties.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.nameAr}
+      <div className="grid gap-3">
+        <div className="grid grid-cols-[80px_1fr] gap-2">
+          <Field label="اللقب">
+            <Select value={title} onChange={(e) => setTitle(e.target.value)}>
+              {titles.map((t) => (
+                <option key={t} value={t}>
+                  {t}
                 </option>
               ))}
             </Select>
           </Field>
-
-          <Field label="سنوات الخبرة" hint="اختياري">
-            <Input value={yearsOfExperience} onChange={(e) => setYears(e.target.value)} type="number" min={0} max={60} className="tnum" />
+          <Field label="اسم الطبيب">
+            <Input value={fullName} onChange={(e) => setFullName(e.target.value)} placeholder="الاسم الثلاثي" />
           </Field>
-
-          <Button size="lg" full loading={busy} onClick={submit} disabled={!fullName || !phone}>
-            إنشاء الحساب
-          </Button>
-          <Button variant="ghost" full onClick={onClose}>
-            إلغاء
-          </Button>
         </div>
+
+        <Field label="رقم هاتف الطبيب" hint={phoneHint}>
+          <Input value={phone} onChange={(e) => setPhone(e.target.value)} inputMode="tel" placeholder="07701234567" />
+        </Field>
+
+        <Field label="رقم الواتساب" hint="اتركه فارغاً ليكون رقم هاتفه نفسه — تصله تفاصيل كل حجز">
+          {/* الفارغ يظهر برقم الهاتف باهتاً — ما سيُستعمل فعلاً، لا مثالاً يُقرأ رقماً محفوظاً */}
+          <Input
+            value={whatsappNumber}
+            onChange={(e) => setWhatsapp(e.target.value)}
+            inputMode="tel"
+            placeholder={phone || "07701234567"}
+          />
+        </Field>
+
+        {doctor && (
+          <label className="flex items-center gap-2 text-[14px] cursor-pointer">
+            <input type="checkbox" checked={whatsappEnabled} onChange={(e) => setWhatsappEnabled(e.target.checked)} />
+            تصله تفاصيل الحجوزات على الواتساب
+          </label>
+        )}
+
+        <Field label="التخصص">
+          <Select value={specialtyId} onChange={(e) => setSpecialtyId(e.target.value)}>
+            <option value="">اختر التخصص</option>
+            {specialties.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.nameAr}
+              </option>
+            ))}
+          </Select>
+        </Field>
+
+        <Field label="سنوات الخبرة" hint="اختياري">
+          <Input value={yearsOfExperience} onChange={(e) => setYears(e.target.value)} type="number" min={0} max={60} className="tnum" />
+        </Field>
+
+        <Field label="نبذة عن الطبيب" hint="اختياري — تظهر للمرضى في صفحته">
+          <Textarea
+            value={bio}
+            onChange={(e) => setBio(e.target.value)}
+            rows={3}
+            maxLength={600}
+            placeholder="استشاري طب الأطفال، بورد عربي"
+          />
+        </Field>
+
+        <Button size="lg" full loading={busy} onClick={submit} disabled={!fullName.trim() || (hadPhone && !phone.trim())}>
+          {doctor ? "حفظ التعديلات" : "إنشاء الحساب"}
+        </Button>
+        <Button variant="ghost" full onClick={onClose}>
+          إلغاء
+        </Button>
       </div>
-    </div>
+    </Dialog>
   );
 }
 

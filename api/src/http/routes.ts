@@ -13,6 +13,8 @@ import {
   resetDoctorPassword,
   setDoctorActive,
   setDoctorWhatsApp,
+  updateDoctorProfile,
+  type UpdateDoctorInput,
 } from "../modules/owner/provisioning.js";
 import { cancelBooking, createBooking } from "../modules/booking/booking.service.js";
 import { flushPending } from "../notifications/dispatch.js";
@@ -227,13 +229,23 @@ export async function registerRoutes(app: FastifyInstance) {
         photoUrl: true,
         whatsappNumber: true,
         whatsappEnabled: true,
+        // تفتح بها نافذة التعديل معبّأةً بما سُجّل
+        bio: true,
+        yearsOfExperience: true,
         registeredAt: true,
         user: { select: { fullName: true, phone: true, lastLoginAt: true, mustChangePassword: true } },
-        specialties: { select: { specialty: { select: { nameAr: true } }, isPrimary: true } },
+        specialties: { select: { specialtyId: true, specialty: { select: { nameAr: true } }, isPrimary: true } },
         _count: { select: { practices: true } },
       },
     });
   });
+
+  /** تعديل بيانات الطبيب بعد تسجيله — الحقل الغائب يبقى كما هو */
+  app.patch<{ Params: { id: string }; Body: UpdateDoctorInput }>(
+    "/owner/doctors/:id",
+    ownerOnly,
+    async (request) => updateDoctorProfile(request.auth!.sub, request.params.id, request.body ?? {}),
+  );
 
   app.post<{ Params: { id: string } }>(
     "/owner/doctors/:id/reset-password",
