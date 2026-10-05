@@ -7,7 +7,9 @@ import { hashPassword } from "../src/lib/password.js";
 import { normalizeIraqiPhone } from "../src/lib/phone.js";
 import { AppError } from "../src/lib/errors.js";
 import { cancelBooking, createBooking } from "../src/modules/booking/booking.service.js";
-import { getMyPatients, updatePatient } from "../src/modules/discovery/discovery.service.js";
+import { getDoctorProfile, getMyPatients, updatePatient } from "../src/modules/discovery/discovery.service.js";
+import { updateBookingSettings } from "../src/modules/doctor/schedule.service.js";
+import { updatePracticePricing } from "../src/modules/owner/provisioning.js";
 import {
   createBanner,
   deleteBanner,
@@ -429,6 +431,92 @@ async function main() {
       if (error instanceof AppError) nothingDue = error.code;
     }
     check("لا يُسجَّل تحصيل على عيادة بلا مستحقات", nothingDue === "NOTHING_DUE", `رُفض بالرمز ${nothingDue}`);
+  }
+
+  // ═══ تعديل الكشفية والعمولة من لوحة المالك ═════════════════════
+  //
+  // الطبيب يرفع أجرته، والاتفاق مع العيادة يتغيّر — والمالك يعدّلهما بعد
+  // الإعداد. والعمولة تُحفظ مع الزيارة لحظة الحضور، فتعديلها لا يمسّ ما سُجّل.
+  {
+    const owner = await prisma.user.create({
+      data: { email: `own.fee${suffix}@doctorsehti.iq`, fullName: "مالك الكشفية", role: "OWNER", passwordHash: await hashPassword("Owner12345") },
+    });
+    const { doctorUser, doctor, practice } = await buildClinic(`f${suffix}`, 5000);
+    const { account, patient } = await buildPatient(`4${suffix.slice(1)}`);
+    const attend = async (hours: number) => {
+      const visit = await createBooking(
+        { doctorClinicId: practice.id, patientId: patient.id, bookedByUserId: account.id, startAt: slotIn(hours) },
+        prisma,
+      );
+      await setScopedAppointmentStatus(doctorUser.id, visit.appointmentId, "CONFIRMED", prisma);
+      return prisma.commission.findFirst({ where: { appointmentId: visit.appointmentId } });
+    };
+
+    const earlier = await attend(2);
+    const priced = await updatePracticePricing(owner.id, practice.id, { feeAmount: 30000, commissionAmount: 3000 }, prisma);
+    const profile = await getDoctorProfile(doctor.id, prisma);
+    check(
+      "المالك يعدّل الكشفية فيراها المريض بسعرها الجديد فوراً",
+      priced.feeAmount === 30000 && profile.practices[0]?.feeAmount === 30000,
+      `25000 ⇐ ${profile.practices[0]?.feeAmount} دينار في صفحة الطبيب`,
+    );
+
+    const later = await attend(3);
+    const earlierNow = await prisma.commission.findUniqueOrThrow({ where: { id: earlier!.id } });
+    check(
+      "العمولة الجديدة تسري على من يحضر بعد التعديل، وما سُجّل قبله يبقى بمبلغه",
+      earlierNow.amount === 5000 && later?.amount === 3000,
+      `زيارةٌ قبل التعديل بـ${earlierNow.amount} وبعده بـ${later?.amount}`,
+    );
+
+    await updatePracticePricing(owner.id, practice.id, { commissionAmount: 0 }, prisma);
+    const partial = await prisma.doctorClinic.findUniqueOrThrow({ where: { id: practice.id } });
+    check(
+      "تعديل العمولة وحدها لا يمسّ الكشفية",
+      partial.feeAmount === 30000 && partial.commissionAmount === 0,
+      `الكشفية ${partial.feeAmount} والعمولة ${partial.commissionAmount}`,
+    );
+
+    const rejected: string[] = [];
+    for (const input of [{ feeAmount: -1 }, { feeAmount: 2.5 }, { feeAmount: 5_000_000 }, { commissionAmount: -500 }]) {
+      rejected.push(
+        await updatePracticePricing(owner.id, practice.id, input, prisma).then(
+          () => "قُبل",
+          (error) => (error instanceof AppError ? error.code : String(error)),
+        ),
+      );
+    }
+    check(
+      "المبالغ غير المعقولة تُرفض برسالةٍ لا بخطأ خادم",
+      rejected.length === 4 && rejected.every((code) => code === "INVALID_AMOUNT"),
+      rejected.join(" · "),
+    );
+
+    const audits = await prisma.auditLog.findMany({
+      where: { entityId: practice.id, action: "PRACTICE_PRICING_UPDATED" },
+    });
+    const first = audits.find((row) => (row.after as { commissionAmount?: number } | null)?.commissionAmount === 3000);
+    check(
+      "سجل التدقيق يحفظ السعر قبل التعديل وبعده ومن عدّله",
+      audits.length === 2 &&
+        first?.actorUserId === owner.id &&
+        JSON.stringify(first.before) === JSON.stringify({ feeAmount: 25000, commissionAmount: 5000 }),
+      `${audits.length} قيد — الأول من ${JSON.stringify(first?.before)} إلى ${JSON.stringify(first?.after)}`,
+    );
+
+    // جسمٌ كما يصل من الطبيب: الأنواع لا تُفحص وقت التشغيل، فيصل فيه ما ليس من إعداداته
+    const sneaky = { slotMinutes: 30, commissionAmount: 9999 } as Parameters<typeof updateBookingSettings>[2];
+    await updateBookingSettings(doctorUser.id, practice.id, sneaky, prisma);
+    const afterDoctor = await prisma.doctorClinic.findUniqueOrThrow({ where: { id: practice.id } });
+    const negativeFee = await updateBookingSettings(doctorUser.id, practice.id, { feeAmount: -7 }, prisma).then(
+      () => "قُبل",
+      (error) => (error instanceof AppError ? error.code : String(error)),
+    );
+    check(
+      "الطبيب لا يغيّر عمولة المنصة من إعدادات حجزه",
+      afterDoctor.slotMinutes === 30 && afterDoctor.commissionAmount === 0 && negativeFee === "INVALID_AMOUNT",
+      "مدة الكشف حُفظت، والعمولة المرسلة معها أُهملت، والكشفية السالبة رُفضت",
+    );
   }
 
   // ═══ الرقم اليومي وبيانات المريض ══════════════════════════════

@@ -55,6 +55,7 @@ type DoctorRow = {
   registeredAt: string;
   user: { fullName: string; phone: string | null; lastLoginAt: string | null; mustChangePassword: boolean };
   specialties: { specialtyId: number; specialty: { nameAr: string }; isPrimary: boolean }[];
+  practices: { id: string; feeAmount: number; commissionAmount: number; clinic: { nameAr: string } }[];
   _count: { practices: number };
 };
 
@@ -347,6 +348,7 @@ function DoctorsTab() {
   const [error, setError] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
   const [editing, setEditing] = useState<DoctorRow | null>(null);
+  const [pricing, setPricing] = useState<{ doctor: DoctorRow; practice: DoctorRow["practices"][number] } | null>(null);
   const [linking, setLinking] = useState<DoctorRow | null>(null);
   const [created, setCreated] = useState<{ fullName: string; phone: string; temporaryPassword: string } | null>(null);
 
@@ -435,6 +437,39 @@ function DoctorsTab() {
               </div>
             </div>
 
+            {/* كشفية كل عيادة وعمولتك عليها: تُرى هنا وتُعدَّل من هنا بعد الإعداد.
+                و«بلا عمولة» تلوَّن تنبيهاً — تبويب العمولات يعدّها ولا يسمّيها */}
+            {row.practices.length > 0 && (
+              <div className="grid gap-1.5 mt-3">
+                {row.practices.map((practice) => (
+                  <div
+                    key={practice.id}
+                    className="flex items-center justify-between gap-x-3 gap-y-1 flex-wrap px-3 py-2 rounded-[9px] text-[13px]"
+                    style={{ background: "var(--surface-2)" }}
+                  >
+                    <span className="font-semibold min-w-0">{practice.clinic.nameAr}</span>
+                    <span className="flex items-center gap-x-3 gap-y-1 flex-wrap">
+                      <span className="tnum">الكشفية {formatFee(practice.feeAmount)}</span>
+                      <span
+                        className="tnum"
+                        style={{ color: practice.commissionAmount > 0 ? "var(--muted)" : "var(--warn)" }}
+                      >
+                        {practice.commissionAmount > 0 ? `عمولتك ${formatFee(practice.commissionAmount)}` : "بلا عمولة"}
+                      </span>
+                      <button
+                        type="button"
+                        className="font-semibold"
+                        style={{ color: "var(--primary)" }}
+                        onClick={() => setPricing({ doctor: row, practice })}
+                      >
+                        تعديل الكشفية
+                      </button>
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+
             <div className="flex gap-2 mt-3 flex-wrap">
               <Button variant="accent" size="sm" onClick={() => setLinking(row)}>
                 {row._count.practices === 0 ? "إعداد العيادة" : "+ عيادة أخرى"}
@@ -474,6 +509,18 @@ function DoctorsTab() {
           onClose={() => setEditing(null)}
           onDone={() => {
             setEditing(null);
+            load();
+          }}
+        />
+      )}
+
+      {pricing && (
+        <PricingDialog
+          doctor={pricing.doctor}
+          practice={pricing.practice}
+          onClose={() => setPricing(null)}
+          onDone={() => {
+            setPricing(null);
             load();
           }}
         />
@@ -913,6 +960,88 @@ function SetupClinicDialog({
           onClick={submit}
         >
           حفظ العيادة
+        </Button>
+        <Button variant="ghost" full onClick={onClose}>
+          إلغاء
+        </Button>
+      </div>
+    </Dialog>
+  );
+}
+
+/**
+ * الكشفية وعمولتك عليها في عيادةٍ واحدة من عيادات الطبيب — بعد إعدادها.
+ *
+ * الأجرة الجديدة يراها المرضى فوراً. والعمولة تُحفظ مع كل زيارة لحظة الحضور،
+ * فالجديدة تسري على من يحضر بعد الحفظ وما سُجّل قبله يبقى بمبلغه.
+ */
+function PricingDialog({
+  doctor,
+  practice,
+  onClose,
+  onDone,
+}: {
+  doctor: DoctorRow;
+  practice: DoctorRow["practices"][number];
+  onClose: () => void;
+  onDone: () => void;
+}) {
+  const [feeAmount, setFeeAmount] = useState(String(practice.feeAmount));
+  const [commissionAmount, setCommissionAmount] = useState(String(practice.commissionAmount));
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function submit() {
+    setBusy(true);
+    setError(null);
+    try {
+      await api.patch(`/owner/practices/${practice.id}`, {
+        feeAmount: Number(feeAmount),
+        commissionAmount: Number(commissionAmount),
+      });
+      onDone();
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Dialog
+      title={`كشفية ${doctor.title} ${doctor.user.fullName}`}
+      hint={`${practice.clinic.nameAr} — الأجرة الجديدة يراها المرضى فوراً.`}
+      onClose={onClose}
+    >
+      {error && (
+        <div className="mb-3">
+          <Alert>{error}</Alert>
+        </div>
+      )}
+
+      <div className="grid gap-3">
+        <div className="grid grid-cols-2 gap-2">
+          <Field label="أجرة الكشف" hint="يدفعها المريض للعيادة">
+            <Input value={feeAmount} onChange={(e) => setFeeAmount(e.target.value)} type="number" min={0} className="tnum" />
+          </Field>
+          <Field label="عمولتك لكل مريض" hint="صفرٌ يعني بلا عمولة">
+            <Input
+              value={commissionAmount}
+              onChange={(e) => setCommissionAmount(e.target.value)}
+              type="number"
+              min={0}
+              className="tnum"
+            />
+          </Field>
+        </div>
+
+        <p className="text-[12.5px]" style={{ color: "var(--muted)" }}>
+          العمولة الجديدة تُحسب على من يحضر بعد الحفظ، وما سُجّل قبله يبقى بمبلغه.
+        </p>
+
+        {/* حقلٌ فارغ يصير صفراً لو أُرسل — كشفيةً مجانية لم يقصدها أحد */}
+        <Button size="lg" full loading={busy} disabled={feeAmount === "" || commissionAmount === ""} onClick={submit}>
+          حفظ التعديلات
         </Button>
         <Button variant="ghost" full onClick={onClose}>
           إلغاء
