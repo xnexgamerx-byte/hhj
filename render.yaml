@@ -80,8 +80,9 @@ services:
       - key: WHATSAPP_PHONE_NUMBER_ID
         sync: false
 
-  # ── لوحة الويب (web/) — Next.js عادي، يحتاج خادم Node لا موقعاً ثابتاً:
-  # فيه مسارٌ ديناميكي (‎/doctors/[id]‎) لا يُصدَّر ثابتاً بلا إعادة هيكلة ──
+  # ── لوحة الويب (web/) — خادم Next.js هنا، ومعه تحويل روابط صفحة الطبيب
+  # القديمة (‎next.config.ts‎). أمّا على Cloudflare Pages فتُبنى ملفّاتٍ ثابتة
+  # بـ‎npm run build:static‎ — انظر docs/railway-cloudflare.md ──
   - type: web
     name: doctorsehti-web
     runtime: node

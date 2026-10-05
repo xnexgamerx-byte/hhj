@@ -20,7 +20,7 @@ jobs:
         working-directory: mobile
     env:
       # العنوان يُخبَز داخل الحزمة، فالتطبيق المُثبَّت يعرف خادمه دون إعدادٍ من
-      # صاحبه. ويُختار هنا لا في الشفرة: بعد الانتقال إلى Hetzner يُعيَّن
+      # صاحبه. ويُختار هنا لا في الشفرة: بعد الانتقال إلى Railway يُعيَّن
       # متغيّر المستودع API_URL مرّة (Settings ← Variables ← Actions)، وتخرج
       # كل نسخةٍ بعده بالعنوان الجديد. وبلا تعيينه يبقى خادم Render كما كان
       EXPO_PUBLIC_API_URL: ${{ inputs.api_url || vars.API_URL || 'https://doctorsehti-api.onrender.com' }}

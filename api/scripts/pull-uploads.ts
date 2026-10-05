@@ -1,6 +1,7 @@
 /**
  * ينقل الصور المرفوعة من خادمٍ قديم إلى قرص هذا الخادم — يُستعمل عند الانتقال
- * من Render إلى Hetzner (‎deploy/hetzner/import-from-render.sh‎):
+ * من Render إلى Railway: الحاوية تشغّله عند كل إقلاعٍ ما دام ‎UPLOADS_SOURCE‎
+ * معيَّناً (‎scripts/container-start.sh‎). ويدوياً:
  *
  *   npm run uploads:pull -- https://doctorsehti-api.onrender.com
  *
