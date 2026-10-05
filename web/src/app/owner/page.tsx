@@ -462,7 +462,7 @@ function DoctorsTab() {
                         style={{ color: "var(--primary)" }}
                         onClick={() => setPricing({ doctor: row, practice })}
                       >
-                        تعديل الكشفية
+                        تعديل الكشفية والعمولة
                       </button>
                     </span>
                   </div>
@@ -1009,7 +1009,7 @@ function PricingDialog({
 
   return (
     <Dialog
-      title={`كشفية ${doctor.title} ${doctor.user.fullName}`}
+      title={`كشفية وعمولة ${doctor.title} ${doctor.user.fullName}`}
       hint={`${practice.clinic.nameAr} — الأجرة الجديدة يراها المرضى فوراً.`}
       onClose={onClose}
     >
@@ -1904,6 +1904,8 @@ function CommissionsTab() {
         />
       </div>
 
+      <CommissionRates onChanged={load} />
+
       <SectionTitle>المستحق على كل عيادة</SectionTitle>
       {data.dues.length === 0 ? (
         <Card>
@@ -1991,6 +1993,121 @@ function CommissionsTab() {
           onSettled={() => {
             setDetail(null);
             load();
+          }}
+        />
+      )}
+    </>
+  );
+}
+
+/**
+ * عمولتك على كل طبيب في كل عيادة، في مكانٍ واحد مع المستحقات — لا مخبّأةً
+ * داخل بطاقات الأطباء وحدها. «بلا عمولة» أولاً: ما لن يُحتسب له شيء.
+ * والتعديل بالنافذة نفسها التي في بطاقة الطبيب، فلا يختلف المكانان.
+ */
+function CommissionRates({ onChanged }: { onChanged: () => void }) {
+  const [doctors, setDoctors] = useState<DoctorRow[] | null>(null);
+  const [query, setQuery] = useState("");
+  const [pricing, setPricing] = useState<{ doctor: DoctorRow; practice: DoctorRow["practices"][number] } | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const load = useCallback(() => {
+    api
+      .get<DoctorRow[]>("/owner/doctors")
+      .then(setDoctors)
+      .catch((e) => setError(e.message));
+  }, []);
+
+  useEffect(load, [load]);
+
+  const all = (doctors ?? []).flatMap((doctor) => doctor.practices.map((practice) => ({ doctor, practice })));
+  const term = query.trim();
+  const rows = all
+    .filter(({ doctor, practice }) => !term || doctor.user.fullName.includes(term) || practice.clinic.nameAr.includes(term))
+    .sort(
+      (a, b) =>
+        Number(a.practice.commissionAmount > 0) - Number(b.practice.commissionAmount > 0) ||
+        a.practice.clinic.nameAr.localeCompare(b.practice.clinic.nameAr, "ar"),
+    );
+
+  return (
+    <>
+      <SectionTitle>عمولتك على كل طبيب</SectionTitle>
+      {error && (
+        <div className="mb-3">
+          <Alert>{error}</Alert>
+        </div>
+      )}
+
+      {doctors === null && !error && <Loading />}
+      {doctors !== null && all.length === 0 && (
+        <Card>
+          <EmptyState title="لا أطباء في عيادات بعد" hint="تُحدَّد العمولة عند إعداد عيادة الطبيب من تبويب «الأطباء»." />
+        </Card>
+      )}
+
+      {all.length > 0 && (
+        <Card>
+          <p className="text-[13px] mb-3" style={{ color: "var(--muted)" }}>
+            مبلغٌ ثابت عن كل مريض يحضر فعلاً، لكل طبيب في كل عيادة.
+          </p>
+          <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="ابحث باسم الطبيب أو العيادة" />
+
+          <div className="grid gap-1.5 mt-3 max-h-[26rem] overflow-y-auto -mx-1 px-1">
+            {rows.length === 0 && (
+              <p className="text-[13px] py-2" style={{ color: "var(--muted)" }}>
+                لا طبيب ولا عيادة بهذا الاسم
+              </p>
+            )}
+            {rows.map(({ doctor, practice }) => (
+              <div
+                key={practice.id}
+                className="flex items-center justify-between gap-x-3 gap-y-1 flex-wrap px-3 py-2 rounded-[9px] text-[13px]"
+                style={{ background: "var(--surface-2)" }}
+              >
+                <span className="min-w-0">
+                  <span className="font-semibold">{practice.clinic.nameAr}</span>
+                  <span style={{ color: "var(--muted)" }}>
+                    {" "}
+                    · {doctor.title} {doctor.user.fullName}
+                  </span>
+                </span>
+                <span className="flex items-center gap-x-3 gap-y-1 flex-wrap">
+                  <span className="tnum" style={{ color: "var(--muted)" }}>
+                    الكشفية {formatFee(practice.feeAmount)}
+                  </span>
+                  <span
+                    className="tnum font-semibold"
+                    style={{ color: practice.commissionAmount > 0 ? "var(--ink)" : "var(--warn)" }}
+                  >
+                    {practice.commissionAmount > 0 ? `عمولتك ${formatFee(practice.commissionAmount)}` : "بلا عمولة"}
+                  </span>
+                  <button
+                    type="button"
+                    className="font-semibold"
+                    style={{ color: "var(--primary)" }}
+                    onClick={() => setPricing({ doctor, practice })}
+                  >
+                    تعديل
+                  </button>
+                </span>
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
+
+      <div className="mb-8" />
+
+      {pricing && (
+        <PricingDialog
+          doctor={pricing.doctor}
+          practice={pricing.practice}
+          onClose={() => setPricing(null)}
+          onDone={() => {
+            setPricing(null);
+            load();
+            onChanged();
           }}
         />
       )}
