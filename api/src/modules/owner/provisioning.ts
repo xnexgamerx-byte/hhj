@@ -12,6 +12,7 @@ import { prisma as defaultPrisma } from "../../lib/prisma.js";
 import { generateTemporaryPassword, hashPassword } from "../../lib/password.js";
 import { normalizeIraqiPhone } from "../../lib/phone.js";
 import { badRequest, conflict, notFound } from "../../lib/errors.js";
+import { checkAmount } from "../../lib/money.js";
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 
@@ -347,6 +348,51 @@ export async function setDoctorWhatsApp(
   return { whatsappNumber: normalized };
 }
 
+/**
+ * الكشفية وعمولة المنصة عليها — يضعهما المالك عند إعداد العيادة، ويعدّلهما هنا
+ * حين يرفع الطبيب أجرته أو يتغيّر الاتفاق مع العيادة.
+ *
+ * العمولة تُقرأ لحظة تأشير الحضور وتُحفظ مع الزيارة، فالجديدة تسري على من يحضر
+ * بعد الحفظ، وما سُجّل قبله يبقى بمبلغه: العيادة لا تُطالَب بأثرٍ رجعيّ.
+ */
+export async function updatePracticePricing(
+  ownerId: string,
+  practiceId: string,
+  input: { feeAmount?: number; commissionAmount?: number },
+  client: PrismaClient = defaultPrisma,
+): Promise<{ id: string; feeAmount: number; commissionAmount: number }> {
+  const practice = await client.doctorClinic.findUnique({
+    where: { id: practiceId },
+    select: { feeAmount: true, commissionAmount: true },
+  });
+  if (!practice) throw notFound("PRACTICE_NOT_FOUND", "العيادة غير موجودة");
+
+  const changes = {
+    feeAmount: input.feeAmount === undefined ? undefined : checkAmount(input.feeAmount, "أجرة الكشف"),
+    commissionAmount:
+      input.commissionAmount === undefined ? undefined : checkAmount(input.commissionAmount, "العمولة"),
+  };
+
+  return client.$transaction(async (tx) => {
+    const updated = await tx.doctorClinic.update({
+      where: { id: practiceId },
+      data: changes,
+      select: { id: true, feeAmount: true, commissionAmount: true },
+    });
+    // القيمتان قبل وبعد: حين تعترض عيادةٌ على مبلغٍ طولبت به يُعرف متى تغيّر ومن غيّره
+    await writeAudit(
+      tx,
+      ownerId,
+      "PRACTICE_PRICING_UPDATED",
+      "DoctorClinic",
+      practiceId,
+      { feeAmount: updated.feeAmount, commissionAmount: updated.commissionAmount },
+      practice,
+    );
+    return updated;
+  });
+}
+
 async function writeAudit(
   tx: Prisma.TransactionClient,
   actorUserId: string,
@@ -354,8 +400,9 @@ async function writeAudit(
   entity: string,
   entityId: string,
   after: Prisma.InputJsonValue | null,
+  before?: Prisma.InputJsonValue,
 ) {
   await tx.auditLog.create({
-    data: { actorUserId, action, entity, entityId, after: after ?? undefined },
+    data: { actorUserId, action, entity, entityId, before, after: after ?? undefined },
   });
 }

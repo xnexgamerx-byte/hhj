@@ -8,6 +8,7 @@
 import type { AppointmentStatus, PrismaClient } from "@prisma/client";
 import { prisma as defaultPrisma } from "../../lib/prisma.js";
 import { badRequest, forbidden, notFound } from "../../lib/errors.js";
+import { checkAmount } from "../../lib/money.js";
 import { WEEKDAY_NAMES_AR, timeToMinutes } from "../../lib/timezone.js";
 
 const TIME_PATTERN = /^([01]\d|2[0-3]):([0-5]\d)$/;
@@ -176,7 +177,20 @@ export async function updateBookingSettings(
     throw badRequest("INVALID_CAPACITY", "عدد المرضى في الفترة يجب أن يكون واحداً على الأقل");
   }
 
-  await client.doctorClinic.update({ where: { id: practiceId }, data: settings });
+  // الحقول بأسمائها لا الجسم كلّه: الجسم يصل من الطبيب كما أرسله، ولو مُرِّر
+  // إلى القاعدة لصفّر الطبيب عمولة المنصة عليه — والعمولة للمالك وحده
+  await client.doctorClinic.update({
+    where: { id: practiceId },
+    data: {
+      bookingMode: settings.bookingMode,
+      slotMinutes: settings.slotMinutes,
+      capacityPerSession: settings.capacityPerSession,
+      autoConfirm: settings.autoConfirm,
+      cancelCutoffMinutes: settings.cancelCutoffMinutes,
+      bookingHorizonDays: settings.bookingHorizonDays,
+      feeAmount: settings.feeAmount === undefined ? undefined : checkAmount(settings.feeAmount, "أجرة الكشف"),
+    },
+  });
   return getMyPractices(userId, client);
 }
 

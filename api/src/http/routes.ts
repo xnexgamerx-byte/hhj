@@ -14,6 +14,7 @@ import {
   setDoctorActive,
   setDoctorWhatsApp,
   updateDoctorProfile,
+  updatePracticePricing,
   type UpdateDoctorInput,
 } from "../modules/owner/provisioning.js";
 import { cancelBooking, createBooking } from "../modules/booking/booking.service.js";
@@ -235,6 +236,12 @@ export async function registerRoutes(app: FastifyInstance) {
         registeredAt: true,
         user: { select: { fullName: true, phone: true, lastLoginAt: true, mustChangePassword: true } },
         specialties: { select: { specialtyId: true, specialty: { select: { nameAr: true } }, isPrimary: true } },
+        // كشفية كل عيادة وعمولتك عليها — تُعرض على البطاقة وتُعدَّل منها
+        practices: {
+          where: { isActive: true },
+          orderBy: { createdAt: "asc" },
+          select: { id: true, feeAmount: true, commissionAmount: true, clinic: { select: { nameAr: true } } },
+        },
         _count: { select: { practices: true } },
       },
     });
@@ -371,6 +378,13 @@ export async function registerRoutes(app: FastifyInstance) {
     });
     return reply.status(201).send(practice);
   });
+
+  /** الكشفية وعمولتك عليها بعد إعداد العيادة — الحقل الغائب يبقى كما هو */
+  app.patch<{ Params: { id: string }; Body: { feeAmount?: number; commissionAmount?: number } }>(
+    "/owner/practices/:id",
+    ownerOnly,
+    async (request) => updatePracticePricing(request.auth!.sub, request.params.id, request.body ?? {}),
+  );
 
   /** ملخص لوحة المالك */
   app.get("/owner/summary", ownerOnly, async () => getOwnerSummary());
