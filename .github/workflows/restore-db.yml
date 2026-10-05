@@ -1,0 +1,115 @@
+name: إرجاع نسخة احتياطية
+
+# يضع نسخةً احتياطية (من «نسخة احتياطية للقاعدة») مكان ما في قاعدة Railway.
+# Actions ← هذه المهمة ← Run workflow ← رقم تشغيل النسخة و«نعم».
+#
+# قبل المحو يأخذ نسخةً مما في Railway الآن ويحفظها مع هذا التشغيل باسم db
+# كالنسخ الليلية — فالإرجاع نفسه يُتراجع عنه بإرجاع رقم هذا التشغيل. والمحو
+# والإحلال معاملةٌ واحدة: إن فشل شيءٌ بقيت القاعدة كما كانت.
+#
+# الصور لا تُرجَع من هنا: هي على قرص الخادم في Railway، ولا يصله GitHub.
+on:
+  workflow_dispatch:
+    inputs:
+      run:
+        description: رقم تشغيل النسخة — آخر رابط صفحتها (…/actions/runs/الرقم)
+        required: true
+        type: string
+      confirm:
+        description: سيُمحى ما في قاعدة Railway الآن ويحلّ محلّه ما في النسخة. اكتب «نعم» للمتابعة
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  # لتنزيل ملفّ النسخة من تشغيلٍ آخر
+  actions: read
+
+concurrency:
+  group: restore-db
+  cancel-in-progress: false
+
+defaults:
+  run:
+    # ‎-eo pipefail‎: خطأٌ في أي طرفٍ من أنبوبٍ يوقف الخطوة
+    shell: bash
+
+jobs:
+  restore:
+    name: إرجاع النسخة إلى Railway
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      DATABASE: ${{ secrets.BACKUP_DATABASE_URL }}
+      PASSPHRASE: ${{ secrets.BACKUP_PASSPHRASE }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: التحقق قبل البدء
+        id: check
+        env:
+          CONFIRM: ${{ inputs.confirm }}
+          RUN: ${{ inputs.run }}
+        run: |
+          source .github/scripts/pg.sh
+          if [ "$CONFIRM" != "نعم" ]; then
+            echo "::error::لم يُكتب «نعم» في خانة التأكيد — أُلغي الإرجاع ولم يُمسّ شيء"
+            exit 1
+          fi
+          if ! [[ $RUN =~ ^[0-9]+$ ]]; then
+            echo "::error::رقم التشغيل أرقامٌ وحدها — آخر رابط صفحة النسخة (…/actions/runs/الرقم)"
+            exit 1
+          fi
+          fail=0
+          check_url BACKUP_DATABASE_URL "$DATABASE" || fail=1
+          check_passphrase || fail=1
+          if [ "$fail" = 1 ]; then exit 1; fi
+          if ! major=$(pg_major "$DATABASE"); then
+            echo "::error::تعذّر الاتصال بقاعدة Railway — راجع BACKUP_DATABASE_URL، وأن خدمة Postgres تعمل"
+            exit 1
+          fi
+          echo "major=$major" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: db
+          run-id: ${{ inputs.run }}
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/backup
+
+      - name: فتح النسخة
+        run: |
+          source .github/scripts/pg.sh
+          if ! decrypt < "$RUNNER_TEMP/backup/db.sql.gz.gpg" | gunzip > "$RUNNER_TEMP/restore.sql"; then
+            echo "::error::لم تُفتح النسخة — كلمة السرّ في BACKUP_PASSPHRASE غير التي شُفّرت بها. لم يُمسّ شيء"
+            exit 1
+          fi
+
+      - name: نسخة مما في Railway الآن
+        env:
+          SERVER_MAJOR: ${{ steps.check.outputs.major }}
+        run: |
+          source .github/scripts/pg.sh
+          mkdir -p "$RUNNER_TEMP/before"
+          pg_dump_public "$SERVER_MAJOR" "$DATABASE" | gzip -9 | encrypt > "$RUNNER_TEMP/before/db.sql.gz.gpg"
+
+      # تُرفع قبل المحو: إن ندمت على الإرجاع فأرجِع رقم هذا التشغيل
+      - uses: actions/upload-artifact@v4
+        with:
+          name: db
+          path: ${{ runner.temp }}/before/db.sql.gz.gpg
+          retention-days: 90
+          compression-level: 0
+          if-no-files-found: error
+
+      - name: الإحلال
+        env:
+          SERVER_MAJOR: ${{ steps.check.outputs.major }}
+        run: |
+          source .github/scripts/pg.sh
+          if ! pg_replace "$SERVER_MAJOR" "$DATABASE" "$RUNNER_TEMP/restore.sql"; then
+            echo "::error::توقّف الإحلال عند الخطأ أعلاه، وقاعدة Railway بقيت كما كانت"
+            exit 1
+          fi
+          echo "أُرجعت النسخة. أعد تشغيل الخادم في Railway (Deployments ← ⋮ ← Restart)."
+          echo "وللتراجع عن هذا الإرجاع: شغّل هذه المهمة برقم هذا التشغيل ($GITHUB_RUN_ID)."
