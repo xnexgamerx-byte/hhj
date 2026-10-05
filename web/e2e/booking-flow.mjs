@@ -128,7 +128,7 @@ check(
 const patient = await browser.newPage({ viewport: { width: 430, height: 940 }, locale: "ar-IQ" });
 patient.on("pageerror", (e) => pageErrors.push(`patient: ${e.message}`));
 
-await patient.goto(`${WEB}/doctors/${doctor.doctorId}`, { waitUntil: "networkidle" });
+await patient.goto(`${WEB}/doctors/profile?id=${doctor.doctorId}`, { waitUntil: "networkidle" });
 await patient.waitForTimeout(2200);
 
 // العدد المتوقّع من الخادم لا رقماً ثابتاً: لو صادف التشغيل يوم دوام داخل

@@ -14,3 +14,6 @@ api/uploads/
 # يولّدهما خادم Next.js عند التشغيل، لا نحن
 web/AGENTS.md
 web/CLAUDE.md
+
+# النسخ الاحتياطية على خادم Hetzner — بيانات تشغيل لا مصدر
+deploy/hetzner/backups/

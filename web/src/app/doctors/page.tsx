@@ -140,7 +140,7 @@ function DoctorsInner() {
             return (
               <Link
                 key={doctor.id}
-                href={`/doctors/${doctor.id}`}
+                href={`/doctors/profile?id=${doctor.id}`}
                 className="block rounded-[14px] p-4 transition-shadow hover:shadow-[var(--shadow)]"
                 style={{ background: "var(--surface)", border: "1px solid var(--line)" }}
               >

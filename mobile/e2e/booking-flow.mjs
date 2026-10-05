@@ -116,7 +116,10 @@ check(
 );
 
 const meta = await page.evaluate(() => {
-  const el = [...document.querySelectorAll("div")].find((d) => d.textContent?.trim() === "التخصصات");
+  // العنصر الأعمق: العنوان ملفوفٌ بحاويةٍ نصُّها النصُّ نفسه وخطّها الافتراضي
+  const el = [...document.querySelectorAll("div")].find(
+    (d) => d.children.length === 0 && d.textContent?.trim() === "التخصصات",
+  );
   return {
     dir: document.documentElement.dir,
     lang: document.documentElement.lang,

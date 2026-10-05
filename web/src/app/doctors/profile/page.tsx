@@ -1,7 +1,7 @@
 "use client";
 
-import { useParams } from "next/navigation";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
+import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { Header } from "@/components/Header";
 import { Alert, Badge, Button, Card, EmptyState, Field, Input, Loading, Select } from "@/components/ui";
@@ -58,8 +58,31 @@ type Patient = { id: string; fullName: string; isSelf: boolean };
 
 type Review = { id: string; rating: number; comment: string | null; createdAt: string; patientName: string };
 
+/**
+ * ملف الطبيب: ‎/doctors/profile?id=…‎ لا ‎/doctors/[id]‎.
+ *
+ * المعرّف في الاستعلام لا في المسار كي تُبنى اللوحات ملفّاتٍ ثابتة تُرفع على
+ * Cloudflare Pages: المسار المتغيّر يحتاج صفحةً مولَّدة لكل طبيبٍ وقت البناء،
+ * والأطباء يُضافون كل يوم. والاستعلام لا يُعرف إلا في المتصفّح، فتلتفّ قراءته
+ * بـSuspense — وبدونها يرفض Next البناء.
+ */
 export default function DoctorProfilePage() {
-  const { id } = useParams<{ id: string }>();
+  return (
+    <Suspense
+      fallback={
+        <>
+          <Header />
+          <Loading />
+        </>
+      }
+    >
+      <DoctorProfile />
+    </Suspense>
+  );
+}
+
+function DoctorProfile() {
+  const id = useSearchParams().get("id") ?? "";
 
   const [profile, setProfile] = useState<Profile | null>(null);
   const [practiceId, setPracticeId] = useState<string | null>(null);
@@ -70,6 +93,8 @@ export default function DoctorProfilePage() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    // رابطٌ بلا معرّف لا يُسأل عنه الخادم: «/doctors/» مسار البحث لا ملفّ طبيب
+    if (!id) return;
     api
       .get<Profile>(`/doctors/${id}`)
       .then((data) => {
@@ -98,12 +123,12 @@ export default function DoctorProfilePage() {
   const practice = profile?.practices.find((p) => p.id === practiceId);
   const day = days?.find((d) => d.date === activeDate);
 
-  if (error && !profile) {
+  if ((error || !id) && !profile) {
     return (
       <>
         <Header />
         <main className="max-w-3xl mx-auto px-4 pt-10">
-          <Alert>{error}</Alert>
+          <Alert>{error ?? "الطبيب غير موجود"}</Alert>
         </main>
       </>
     );

@@ -562,11 +562,19 @@ cd ~/hhj/mobile && OWNER_EMAIL=... OWNER_PASSWORD=... npm run e2e
 وفي متصفح حقيقي (`npm run e2e`): الطبيبة تحدد أوقاتها ← المريض يرى الشاغر فقط ←
 يحجز ← الوقت يختفي ← الطبيبة ترى المريض مع ملاحظته.
 
+## الاستضافة
+
+الآن على Render بملفّ `render.yaml`. والانتقال إلى Cloudflare (الدومين واللوحات
+ونسخة التطبيق للويب) وHetzner (الخادم والقاعدة والصور) مجهَّزٌ في المستودع، ويعمل
+بجانب Render حتى لحظة التحويل — الخطوات في [docs/hetzner-cloudflare.md](docs/hetzner-cloudflare.md).
+
 ## البنية
 
 ```
 setup.sh                        تهيئة المشروع كاملاً بأمر واحد
 docker-compose.yml              قاعدة البيانات للتطوير
+render.yaml                     الاستضافة الحالية على Render
+deploy/hetzner/                 خادم Hetzner: Docker وCaddy والنسخ الاحتياطي ونقل البيانات من Render
 api/
   prisma/schema.prisma          نموذج البيانات
   prisma/migrations/            تاريخ الترحيل — npm run db:migrate:deploy في الإنتاج
@@ -604,6 +612,7 @@ mobile/                         تطبيق المريض — Expo + React Native
   scripts/sync-specialty-icons.mjs  ينسخ أشكال التخصصات إلى الويب
   e2e/                          اختبار المسار الكامل
 docs/project-study.md           الدراسة: الميزات، المخاطر، خطة التنفيذ
+docs/hetzner-cloudflare.md      دليل الانتقال إلى Cloudflare وHetzner خطوةً بخطوة
 ```
 
 ## ملاحظات
