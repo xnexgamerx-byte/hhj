@@ -5,7 +5,12 @@ name: بناء نسخة أندرويد للتجربة
 # هنا حيث الشبكة مفتوحة. النتيجة APK قابل للتثبيت مباشرة — كافٍ لتجربة
 # العميل، وإن أردنا لاحقاً رفعه للمتجر فتلك خطوة توقيعٍ منفصلة عبر EAS.
 on:
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      api_url:
+        description: "عنوان الخادم داخل التطبيق — فارغاً يُؤخذ من متغيّر المستودع API_URL، وإلا Render"
+        required: false
+        default: ""
 
 jobs:
   build:
@@ -13,6 +18,12 @@ jobs:
     defaults:
       run:
         working-directory: mobile
+    env:
+      # العنوان يُخبَز داخل الحزمة، فالتطبيق المُثبَّت يعرف خادمه دون إعدادٍ من
+      # صاحبه. ويُختار هنا لا في الشفرة: بعد الانتقال إلى Railway يُعيَّن
+      # متغيّر المستودع API_URL مرّة (Settings ← Variables ← Actions)، وتخرج
+      # كل نسخةٍ بعده بالعنوان الجديد. وبلا تعيينه يبقى خادم Render كما كان
+      EXPO_PUBLIC_API_URL: ${{ inputs.api_url || vars.API_URL || 'https://doctorsehti-api.onrender.com' }}
     steps:
       - uses: actions/checkout@v4
 
@@ -33,17 +44,13 @@ jobs:
         run: npm ci
 
       - name: توليد مشروع أندرويد الأصلي
-        run: npx expo prebuild --platform android --no-install
-        env:
-          # الرابط الحقيقي المنشور على Render — يُخبَز داخل الحزمة الآن،
-          # فالتطبيق المُثبَّت على هاتف العميل يعرف أين خادمه دون إعدادٍ منه
-          EXPO_PUBLIC_API_URL: https://doctorsehti-api.onrender.com
+        run: |
+          echo "الخادم داخل التطبيق: $EXPO_PUBLIC_API_URL"
+          npx expo prebuild --platform android --no-install
 
       - name: بناء APK
         working-directory: mobile/android
         run: ./gradlew assembleDebug
-        env:
-          EXPO_PUBLIC_API_URL: https://doctorsehti-api.onrender.com
 
       - uses: actions/upload-artifact@v4
         with:

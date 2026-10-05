@@ -1,0 +1,190 @@
+name: نقل قاعدة البيانات إلى Railway
+
+# ينسخ قاعدة Render كاملةً إلى Railway بضغطة زر، بلا تثبيت شيءٍ على جهازك.
+# الخطوات في docs/railway-cloudflare.md، وخلاصتها:
+#   ١. Settings ← Secrets and variables ← Actions ← Secrets:
+#        SOURCE_DATABASE_URL  رابط قاعدة Render الخارجي (External Database URL)
+#        TARGET_DATABASE_URL  رابط قاعدة Railway العام (DATABASE_PUBLIC_URL)
+#   ٢. Actions ← «نقل قاعدة البيانات إلى Railway» ← Run workflow ← «نعم».
+#
+# يمحو ما في قاعدة Railway ويضع مكانه ما في Render الآن، ولا يكتب في Render
+# شيئاً. والمحو والإحلال معاملةٌ واحدة: إن فشل شيءٌ في منتصفها بقيت قاعدة
+# Railway كما كانت. فتكراره آمن — الأول تجربة، والأخير لحظة التحويل.
+#
+# المستودع عامّ وسجلّ كل تشغيلٍ يقرؤه أيّ أحد، فلا يُطبع فيه شيءٌ من البيانات:
+# لا صفوف ولا أعداد، والأخطاء بلا تفاصيلها (قد تحمل قيمة)، وعنوانا القاعدتين
+# محجوبان. والنسخة لا تُرفع ملفّاً مرفقاً: تبقى على جهاز التشغيل المؤقّت
+# وتفنى معه.
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: سيُمحى ما في قاعدة Railway ويحلّ محلّه ما في Render الآن. اكتب «نعم» للمتابعة
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+# تشغيلان معاً يتسابقان على قاعدةٍ واحدة
+concurrency:
+  group: migrate-db
+  cancel-in-progress: false
+
+defaults:
+  run:
+    # ‎-eo pipefail‎: خطأٌ في أي طرفٍ من أنبوبٍ يوقف الخطوة
+    shell: bash
+
+jobs:
+  migrate:
+    name: نسخ Render إلى Railway
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      SOURCE: ${{ secrets.SOURCE_DATABASE_URL }}
+      TARGET: ${{ secrets.TARGET_DATABASE_URL }}
+    steps:
+      - name: التحقق قبل البدء
+        env:
+          CONFIRM: ${{ inputs.confirm }}
+        run: |
+          if [ "$CONFIRM" != "نعم" ]; then
+            echo "::error::لم يُكتب «نعم» في خانة التأكيد — أُلغي النقل ولم يُمسّ شيء"
+            exit 1
+          fi
+
+          fail=0
+          for side in SOURCE TARGET; do
+            url=${!side}
+            secret=${side}_DATABASE_URL
+            if [ -z "$url" ]; then
+              echo "::error::السرّ $secret غير معيَّن — أضفه من Settings ← Secrets and variables ← Actions"
+              fail=1
+              continue
+            fi
+            case "$url" in
+              postgres://*@* | postgresql://*@*) ;;
+              *)
+                echo "::error::$secret ليس رابط قاعدة بيانات: يبدأ بـpostgresql:// وفيه @"
+                fail=1
+                continue
+                ;;
+            esac
+            # العنوان يُحجب من السجلّ العامّ — رسائل الأخطاء تذكره
+            host=${url##*@}
+            host=${host%%[:/?]*}
+            echo "::add-mask::$host"
+            # الرابطان الداخليان لا يصلهما إلا ما يعمل داخل منصّتهما
+            case "$host" in
+              *.railway.internal) echo "::error::$secret رابط Railway الداخلي — انسخ DATABASE_PUBLIC_URL بدله"; fail=1 ;;
+              *.*) ;;
+              *) echo "::error::$secret رابط Render الداخلي — انسخ External Database URL بدله"; fail=1 ;;
+            esac
+          done
+          if [ "$fail" = 0 ] && [ "$SOURCE" = "$TARGET" ]; then
+            echo "::error::الرابطان لقاعدةٍ واحدة — المصدر Render والهدف Railway"
+            fail=1
+          fi
+          exit "$fail"
+
+      - name: إصدار القاعدتين
+        id: versions
+        run: |
+          # الإصدار الرئيسي من ‎server_version_num‎: ‏180001 ← 18
+          major() {
+            DB_URL=$1 docker run --rm -e DB_URL postgres:18-alpine \
+              sh -c 'exec psql -X -At -v ON_ERROR_STOP=1 -d "$DB_URL" -c "show server_version_num"' \
+              | awk '{ print int($1 / 10000) }'
+          }
+          if ! source_major=$(major "$SOURCE"); then
+            echo "::error::تعذّر الاتصال بقاعدة Render — راجع SOURCE_DATABASE_URL، وأن القاعدة تقبل الاتصال من الخارج (صفحتها في Render ← Networking)"
+            exit 1
+          fi
+          if ! target_major=$(major "$TARGET"); then
+            echo "::error::تعذّر الاتصال بقاعدة Railway — راجع TARGET_DATABASE_URL، وأن خدمة Postgres تعمل"
+            exit 1
+          fi
+          echo "Render: PostgreSQL $source_major · Railway: PostgreSQL $target_major"
+          # الأدوات بالإصدار الأحدث منهما: pg_dump لا يقرأ قاعدةً أحدث منه
+          tools=$(( source_major > target_major ? source_major : target_major ))
+          {
+            echo "tools=$tools"
+            echo "downgrade=$(( source_major > target_major ))"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: نسخة من Render
+        env:
+          TOOLS: ${{ steps.versions.outputs.tools }}
+        run: |
+          # مخطّط public وحده — فيه جداول التطبيق كلّها، وهو ما يُمحى في
+          # Railway فيُستبدل بمثله تماماً. بلا مالكين ولا صلاحيات: القاعدة
+          # الجديدة لها مستخدمها. ولا إحصاءات المحسِّن (يعرفها الإصدار ١٨
+          # فما فوق): تُحسب من جديد بعد الإحلال
+          extra=()
+          if [ "$TOOLS" -ge 18 ]; then extra+=(--no-statistics); fi
+          if ! DB_URL=$SOURCE docker run --rm -e DB_URL "postgres:$TOOLS-alpine" \
+            sh -c 'exec pg_dump -d "$DB_URL" --schema=public --no-owner --no-acl --no-comments --no-publications --no-subscriptions "$@"' \
+            pg_dump "${extra[@]}" > "$RUNNER_TEMP/render.sql"
+          then
+            echo "::error::تعذّر أخذ النسخة من Render — الخطأ أعلاه. لم يُمسّ شيءٌ في Railway"
+            exit 1
+          fi
+
+      - name: إحلالها مكان قاعدة Railway
+        env:
+          TOOLS: ${{ steps.versions.outputs.tools }}
+          DOWNGRADE: ${{ steps.versions.outputs.downgrade }}
+        run: |
+          # النسخة تنشئ مخطّط public بنفسها حين يُطلب بالاسم، كما في خطوتها.
+          # وإن لم تفعل في إصدارٍ ما أُنشئ هنا، فلا يتوقف الإحلال على ذلك
+          create='CREATE SCHEMA public;'
+          if grep -qx 'CREATE SCHEMA public;' "$RUNNER_TEMP/render.sql"; then create=''; fi
+
+          # معاملةٌ واحدة (‎-1‎) تقف عند أول خطأ: إمّا القاعدة كاملة، وإمّا
+          # Railway كما كانت. والمخرجات إلى العدم لأنها أعداد صفوف، والأخطاء
+          # مختصرة (‎terse‎) لأن تفاصيلها قد تحمل قيمةً من البيانات
+          if ! {
+            echo 'SET client_min_messages = warning;'
+            echo 'DROP SCHEMA IF EXISTS public CASCADE;'
+            echo "$create"
+            cat "$RUNNER_TEMP/render.sql"
+            echo 'ANALYZE;'
+          } | DB_URL=$TARGET docker run --rm -i -e DB_URL "postgres:$TOOLS-alpine" \
+            sh -c 'exec psql -X -q -1 -v ON_ERROR_STOP=1 -v VERBOSITY=terse -d "$DB_URL" -f -' > /dev/null
+          then
+            if [ "$DOWNGRADE" = 1 ]; then
+              echo "::error::قاعدة Railway أقدم إصداراً من Render (انظر خطوة الإصدار)، فلم تقبل النسخة. أنشئ قاعدة Railway بإصدار Render أو أحدث ثم أعد التشغيل — قاعدة Railway لم تُمسّ"
+            else
+              echo "::error::توقّف الإحلال عند الخطأ أعلاه، وقاعدة Railway بقيت كما كانت"
+            fi
+            exit 1
+          fi
+          echo "أُحلّت النسخة في Railway"
+
+      - name: مطابقة الجداول
+        env:
+          TOOLS: ${{ steps.versions.outputs.tools }}
+        run: |
+          # عدد صفوف كل جدولٍ في الطرفين — يُقارن هنا ولا يُطبع. استعلامٌ
+          # يكتب استعلاماً لكل جدول، و‎\gexec‎ ينفّذها واحداً واحداً
+          counts() {
+            DB_URL=$1 docker run --rm -i -e DB_URL "postgres:$TOOLS-alpine" \
+              sh -c 'exec psql -X -At -v ON_ERROR_STOP=1 -d "$DB_URL" -f -' <<'SQL'
+          select format('select %L || '' '' || count(*) from public.%I', table_name, table_name)
+          from information_schema.tables
+          where table_schema = 'public' and table_type = 'BASE TABLE'
+          order by table_name
+          \gexec
+          SQL
+          }
+          counts "$SOURCE" > "$RUNNER_TEMP/source.txt"
+          counts "$TARGET" > "$RUNNER_TEMP/target.txt"
+
+          if cmp -s "$RUNNER_TEMP/source.txt" "$RUNNER_TEMP/target.txt"; then
+            echo "✔ تطابقت الجداول كلّها ($(wc -l < "$RUNNER_TEMP/target.txt")) بين Render وRailway"
+          else
+            # ‎diff‎ يخرج بـ١ حين يجد فرقاً — وهو المتوقَّع هنا لا خطأ
+            changed=$({ diff "$RUNNER_TEMP/source.txt" "$RUNNER_TEMP/target.txt" || true; } | awk '/^[<>]/ { print $2 }' | sort -u | paste -sd ' ' -)
+            echo "::warning::تغيّر في Render أثناء النقل: $changed. طبيعيٌّ في التجربة وRender يعمل. أمّا لحظة التحويل، وخادم Render موقوف، فأعد التشغيل حتى تتطابق"
+          fi

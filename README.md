@@ -562,12 +562,21 @@ cd ~/hhj/mobile && OWNER_EMAIL=... OWNER_PASSWORD=... npm run e2e
 وفي متصفح حقيقي (`npm run e2e`): الطبيبة تحدد أوقاتها ← المريض يرى الشاغر فقط ←
 يحجز ← الوقت يختفي ← الطبيبة ترى المريض مع ملاحظته.
 
+## الاستضافة
+
+الآن على Render بملفّ `render.yaml`. والانتقال إلى Cloudflare (الدومين واللوحات
+ونسخة التطبيق للويب) وRailway (الخادم والقاعدة والصور) مجهَّزٌ في المستودع، ويعمل
+بجانب Render حتى لحظة التحويل — الخطوات في [docs/railway-cloudflare.md](docs/railway-cloudflare.md).
+
 ## البنية
 
 ```
 setup.sh                        تهيئة المشروع كاملاً بأمر واحد
 docker-compose.yml              قاعدة البيانات للتطوير
+render.yaml                     الاستضافة الحالية على Render
+.github/workflows/              بناء APK للتجربة، ونقل القاعدة من Render إلى Railway
 api/
+  Dockerfile                    صورة الخادم على Railway — إقلاعها في scripts/container-start.sh
   prisma/schema.prisma          نموذج البيانات
   prisma/migrations/            تاريخ الترحيل — npm run db:migrate:deploy في الإنتاج
   prisma/seed/                  بيانات العراق والتخصصات وحساب المالك الأول
@@ -604,6 +613,7 @@ mobile/                         تطبيق المريض — Expo + React Native
   scripts/sync-specialty-icons.mjs  ينسخ أشكال التخصصات إلى الويب
   e2e/                          اختبار المسار الكامل
 docs/project-study.md           الدراسة: الميزات، المخاطر، خطة التنفيذ
+docs/railway-cloudflare.md      دليل الانتقال إلى Railway وCloudflare خطوةً بخطوة
 ```
 
 ## ملاحظات

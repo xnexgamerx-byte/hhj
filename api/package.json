@@ -27,6 +27,7 @@
     "verify:availability": "tsx scripts/verify-availability.ts",
     "verify:features": "tsx scripts/verify-features.ts",
     "owner:reset": "tsx scripts/reset-owner.ts",
+    "uploads:pull": "tsx scripts/pull-uploads.ts",
     "env:fix": "node scripts/setup-env.mjs",
     "check:phone": "node scripts/check-phone-reach.mjs",
     "whatsapp": "tsx scripts/whatsapp-setup.ts",
