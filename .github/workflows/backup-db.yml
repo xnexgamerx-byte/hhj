@@ -1,0 +1,139 @@
+name: نسخة احتياطية للقاعدة
+
+# كل ليلة ٣:٣٠ بتوقيت بغداد: نسخةٌ من قاعدة Railway وصورها، مشفّرةٌ بكلمة
+# سرٍّ لا يعرفها غيرك، ومحفوظةٌ مع التشغيل نفسه: القاعدة ٩٠ يوماً والصور ١٤.
+# بديلٌ مجاني عن نسخ Railway، وهي لخطة Pro وحدها. والإرجاع من «إرجاع نسخة
+# احتياطية» (restore-db.yml). الخطوات في docs/railway-cloudflare.md.
+#
+# الأسرار (Settings ← Secrets and variables ← Actions ← Secrets):
+#   BACKUP_DATABASE_URL  رابط قاعدة Railway العام (DATABASE_PUBLIC_URL)
+#   BACKUP_PASSPHRASE    كلمة سرٍّ عشوائية من ٣٢ خانة فأكثر. احفظها خارج GitHub
+#                        كذلك: بدونها لا تُفتح نسخة
+# والصور تُنزَّل من الخادم نفسه بروابطها العامة، وعنوانه في متغيّر المستودع
+# API_URL (نفسه لبناء APK).
+#
+# المستودع عامّ، والملفّات المرفقة بتشغيلاته ينزّلها أيّ أحد — لذلك تُشفَّر قبل
+# الرفع (AES-256)، وبلا كلمة السرّ لا تعني شيئاً. ولا يُطبع في السجلّ شيءٌ من البيانات.
+on:
+  schedule:
+    - cron: "30 0 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: backup-db
+  cancel-in-progress: false
+
+defaults:
+  run:
+    # ‎-eo pipefail‎: خطأٌ في أي طرفٍ من أنبوبٍ يوقف الخطوة
+    shell: bash
+
+jobs:
+  backup:
+    name: نسخ القاعدة والصور
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      DATABASE: ${{ secrets.BACKUP_DATABASE_URL }}
+      PASSPHRASE: ${{ secrets.BACKUP_PASSPHRASE }}
+      API_URL: ${{ vars.API_URL }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: التحقق قبل البدء
+        id: check
+        run: |
+          source .github/scripts/pg.sh
+          # قبل إعداده لا يُعدّ التشغيل الليلي فاشلاً — لا شيء يُنسخ بعد
+          if [ -z "$DATABASE" ] && [ -z "$PASSPHRASE" ]; then
+            echo "::notice::النسخ الاحتياطي غير مُعَدّ بعد — الخطوات في docs/railway-cloudflare.md"
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          fail=0
+          check_url BACKUP_DATABASE_URL "$DATABASE" || fail=1
+          check_passphrase || fail=1
+          if [ "$fail" = 1 ]; then exit 1; fi
+          if ! major=$(pg_major "$DATABASE"); then
+            echo "::error::تعذّر الاتصال بقاعدة Railway — راجع BACKUP_DATABASE_URL، وأن خدمة Postgres تعمل"
+            exit 1
+          fi
+          {
+            echo "ready=true"
+            echo "major=$major"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: نسخة القاعدة
+        if: steps.check.outputs.ready == 'true'
+        env:
+          SERVER_MAJOR: ${{ steps.check.outputs.major }}
+        run: |
+          source .github/scripts/pg.sh
+          mkdir -p "$RUNNER_TEMP/db"
+          pg_dump_public "$SERVER_MAJOR" "$DATABASE" | gzip -9 | encrypt > "$RUNNER_TEMP/db/db.sql.gz.gpg"
+
+      # تُرفع قبل الصور: تعثّر الصور لا يُضيّع نسخة القاعدة. والملفّات
+      # مشفّرةٌ ومضغوطة أصلاً، فلا يُعاد ضغطها
+      - uses: actions/upload-artifact@v4
+        if: steps.check.outputs.ready == 'true'
+        with:
+          name: db
+          path: ${{ runner.temp }}/db/db.sql.gz.gpg
+          retention-days: 90
+          compression-level: 0
+          if-no-files-found: error
+
+      - name: نسخة الصور
+        id: uploads
+        if: steps.check.outputs.ready == 'true'
+        env:
+          SERVER_MAJOR: ${{ steps.check.outputs.major }}
+        run: |
+          source .github/scripts/pg.sh
+          if [ -z "$API_URL" ]; then
+            echo "::warning::متغيّر المستودع API_URL غير معيَّن، فنُسخت القاعدة بلا صورها"
+            exit 0
+          fi
+          dir=$RUNNER_TEMP/images
+          mkdir -p "$dir" "$RUNNER_TEMP/uploads"
+          pg_uploads "$SERVER_MAJOR" "$DATABASE" > "$RUNNER_TEMP/uploads.txt"
+
+          # اسم كل صورةٍ بصمةُ محتواها (‎api/src/lib/uploads.ts‎): ما نزل ولا
+          # يطابق اسمه لا يُحفظ. والمسار يُقبل اسماً وحده بلا ‎..‎ ولا مجلّدات
+          failed=0
+          while read -r path; do
+            name=${path#/uploads/}
+            if ! [[ $path =~ ^/uploads/[A-Za-z0-9_-]+\.(png|jpg|webp)$ ]]; then
+              failed=$((failed + 1))
+              continue
+            fi
+            if ! curl -fsS --max-time 30 -o "$dir/$name" "${API_URL%/}$path"; then
+              # ما انقطع في منتصفه لا يدخل النسخة
+              rm -f "$dir/$name"
+              failed=$((failed + 1))
+              continue
+            fi
+            if [[ $name =~ ^([0-9a-f]{32})\. ]] \
+              && [ "$(sha256sum "$dir/$name" | cut -c1-32)" != "${BASH_REMATCH[1]}" ]; then
+              rm -f "$dir/$name"
+              failed=$((failed + 1))
+            fi
+          done < "$RUNNER_TEMP/uploads.txt"
+
+          tar -C "$dir" -cf - . | gzip -1 | encrypt > "$RUNNER_TEMP/uploads/uploads.tar.gz.gpg"
+          if [ "$failed" -gt 0 ]; then
+            echo "::warning::تعذّر نسخ $failed من الصور — الخادم لم يعطها أو لم تطابق بصمتها. نُسخ الباقي"
+          fi
+          echo "ready=true" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/upload-artifact@v4
+        if: steps.uploads.outputs.ready == 'true'
+        with:
+          name: uploads
+          path: ${{ runner.temp }}/uploads/uploads.tar.gz.gpg
+          retention-days: 14
+          compression-level: 0
+          if-no-files-found: error

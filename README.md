@@ -574,7 +574,8 @@ cd ~/hhj/mobile && OWNER_EMAIL=... OWNER_PASSWORD=... npm run e2e
 setup.sh                        تهيئة المشروع كاملاً بأمر واحد
 docker-compose.yml              قاعدة البيانات للتطوير
 render.yaml                     الاستضافة الحالية على Render
-.github/workflows/              بناء APK للتجربة، ونقل القاعدة من Render إلى Railway
+.github/workflows/              بناء APK للتجربة، ونقل القاعدة من Render إلى Railway، ونسخها الاحتياطي كل ليلة وإرجاعه
+.github/scripts/pg.sh           أدوات Postgres المشتركة بين مهامّ النقل والنسخ والإرجاع
 api/
   Dockerfile                    صورة الخادم على Railway — إقلاعها في scripts/container-start.sh
   prisma/schema.prisma          نموذج البيانات
